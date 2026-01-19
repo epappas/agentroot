@@ -14,16 +14,25 @@ pub struct CollectionInfo {
     pub document_count: usize,
     pub created_at: String,
     pub updated_at: String,
+    pub provider_type: String,
+    pub provider_config: Option<String>,
 }
 
 impl Database {
     /// Add a new collection
-    pub fn add_collection(&self, name: &str, path: &str, pattern: &str) -> Result<()> {
+    pub fn add_collection(
+        &self,
+        name: &str,
+        path: &str,
+        pattern: &str,
+        provider_type: &str,
+        provider_config: Option<&str>,
+    ) -> Result<()> {
         let now = Utc::now().to_rfc3339();
         self.conn.execute(
-            "INSERT INTO collections (name, path, pattern, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?4)",
-            params![name, path, pattern, now],
+            "INSERT INTO collections (name, path, pattern, created_at, updated_at, provider_type, provider_config)
+             VALUES (?1, ?2, ?3, ?4, ?4, ?5, ?6)",
+            params![name, path, pattern, now, provider_type, provider_config],
         )?;
         Ok(())
     }
@@ -67,7 +76,8 @@ impl Database {
     pub fn list_collections(&self) -> Result<Vec<CollectionInfo>> {
         let mut stmt = self.conn.prepare(
             "SELECT c.name, c.path, c.pattern, c.created_at, c.updated_at,
-                    (SELECT COUNT(*) FROM documents d WHERE d.collection = c.name AND d.active = 1)
+                    (SELECT COUNT(*) FROM documents d WHERE d.collection = c.name AND d.active = 1),
+                    c.provider_type, c.provider_config
              FROM collections c
              ORDER BY c.name",
         )?;
@@ -81,6 +91,8 @@ impl Database {
                     created_at: row.get(3)?,
                     updated_at: row.get(4)?,
                     document_count: row.get::<_, i64>(5)? as usize,
+                    provider_type: row.get(6)?,
+                    provider_config: row.get(7)?,
                 })
             })?
             .collect::<std::result::Result<Vec<_>, _>>()?;
@@ -92,7 +104,8 @@ impl Database {
     pub fn get_collection(&self, name: &str) -> Result<Option<CollectionInfo>> {
         let result = self.conn.query_row(
             "SELECT c.name, c.path, c.pattern, c.created_at, c.updated_at,
-                    (SELECT COUNT(*) FROM documents d WHERE d.collection = c.name AND d.active = 1)
+                    (SELECT COUNT(*) FROM documents d WHERE d.collection = c.name AND d.active = 1),
+                    c.provider_type, c.provider_config
              FROM collections c WHERE c.name = ?1",
             params![name],
             |row| {
@@ -103,6 +116,8 @@ impl Database {
                     created_at: row.get(3)?,
                     updated_at: row.get(4)?,
                     document_count: row.get::<_, i64>(5)? as usize,
+                    provider_type: row.get(6)?,
+                    provider_config: row.get(7)?,
                 })
             },
         );
@@ -123,36 +138,57 @@ impl Database {
         Ok(())
     }
 
-    /// Reindex a collection (scan files and update database)
+    /// Reindex a collection using the provider system
     pub fn reindex_collection(&self, name: &str) -> Result<usize> {
         let coll = self
             .get_collection(name)?
             .ok_or_else(|| crate::error::AgentRootError::CollectionNotFound(name.to_string()))?;
 
-        let path = std::path::Path::new(&coll.path);
-        let options = crate::index::ScanOptions {
-            pattern: coll.pattern.clone(),
-            ..Default::default()
-        };
+        let registry = crate::providers::ProviderRegistry::with_defaults();
+        let provider = registry.get(&coll.provider_type).ok_or_else(|| {
+            crate::error::AgentRootError::InvalidInput(format!(
+                "Unknown provider type: {}",
+                coll.provider_type
+            ))
+        })?;
 
-        let files = crate::index::scan_files(path, &options)?;
+        let mut config =
+            crate::providers::ProviderConfig::new(coll.path.clone(), coll.pattern.clone());
+
+        if let Some(provider_config) = &coll.provider_config {
+            if let Ok(config_map) =
+                serde_json::from_str::<std::collections::HashMap<String, String>>(provider_config)
+            {
+                for (key, value) in config_map {
+                    config = config.with_option(key, value);
+                }
+            }
+        }
+
+        let items = provider.list_items(&config)?;
         let mut updated = 0;
 
-        for file in files {
-            let content = std::fs::read_to_string(&file.path)?;
-            let title = crate::index::extract_title(&content, &file.relative_path);
-            let hash = crate::db::hash_content(&content);
+        for item in items {
             let now = Utc::now().to_rfc3339();
 
-            if let Some(existing) = self.find_active_document(name, &file.relative_path)? {
-                if existing.hash != hash {
-                    self.update_document(existing.id, &title, &hash, &now)?;
-                    self.insert_content(&hash, &content)?;
+            if let Some(existing) = self.find_active_document(name, &item.uri)? {
+                if existing.hash != item.hash {
+                    self.update_document(existing.id, &item.title, &item.hash, &now)?;
+                    self.insert_content(&item.hash, &item.content)?;
                     updated += 1;
                 }
             } else {
-                self.insert_content(&hash, &content)?;
-                self.insert_document(name, &file.relative_path, &title, &hash, &now, &now)?;
+                self.insert_content(&item.hash, &item.content)?;
+                self.insert_document(
+                    name,
+                    &item.uri,
+                    &item.title,
+                    &item.hash,
+                    &now,
+                    &now,
+                    &item.source_type,
+                    item.metadata.get("source_uri").map(|s| s.as_str()),
+                )?;
                 updated += 1;
             }
         }

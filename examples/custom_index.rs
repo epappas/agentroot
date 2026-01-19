@@ -15,7 +15,7 @@ fn main() -> agentroot_core::Result<()> {
 
     // Create collection
     println!("Creating collection...");
-    db.add_collection("custom", ".", "**/*.rs")?;
+    db.add_collection("custom", ".", "**/*.rs", "file", None)?;
 
     // Create semantic chunker for code files
     let chunker = SemanticChunker::new();
@@ -72,7 +72,16 @@ fn main() -> agentroot_core::Result<()> {
 
         // Insert document with timestamps
         let now = Utc::now().to_rfc3339();
-        db.insert_document("custom", &relative_path, title, &hash, &now, &now)?;
+        db.insert_document(
+            "custom",
+            &relative_path,
+            title,
+            &hash,
+            &now,
+            &now,
+            "file",
+            None,
+        )?;
 
         // Chunk the content
         let chunks = chunker.chunk(&content, path)?;

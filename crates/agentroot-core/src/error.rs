@@ -70,6 +70,12 @@ pub enum AgentRootError {
     #[error("Glob pattern error: {0}")]
     GlobPattern(#[from] glob::PatternError),
 
+    #[error("Invalid input: {0}")]
+    InvalidInput(String),
+
+    #[error("External service error: {0}")]
+    ExternalError(String),
+
     #[error("{0}")]
     Other(#[from] anyhow::Error),
 }

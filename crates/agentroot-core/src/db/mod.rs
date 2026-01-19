@@ -16,6 +16,7 @@ pub mod vectors;
 pub use collections::CollectionInfo;
 pub use content::{docid_from_hash, hash_content};
 pub use context::ContextInfo;
+pub use documents::DocumentInsert;
 pub use schema::Database;
 use std::path::PathBuf;
 pub use vectors::CacheLookupResult;

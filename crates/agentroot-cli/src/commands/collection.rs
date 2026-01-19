@@ -14,7 +14,13 @@ pub async fn run(args: CollectionArgs, db: &Database) -> Result<()> {
                     .to_string()
             });
             let abs_path = path.canonicalize()?;
-            db.add_collection(&collection_name, abs_path.to_str().unwrap(), &mask)?;
+            db.add_collection(
+                &collection_name,
+                abs_path.to_str().unwrap(),
+                &mask,
+                "file",
+                None,
+            )?;
             println!(
                 "Added collection '{}' at {}",
                 collection_name,

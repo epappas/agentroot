@@ -34,7 +34,7 @@ clap = { version = "4.5", features = ["derive", "env"] }
 llama-cpp-2 = "0.1"
 
 # HTTP (for model downloads)
-reqwest = { version = "0.12", features = ["rustls-tls"], default-features = false }
+reqwest = { version = "0.12", features = ["rustls-tls", "blocking", "json"], default-features = false }
 
 # AST parsing
 tree-sitter = "0.24"
@@ -59,6 +59,7 @@ regex = "1.11"
 lazy_static = "1.5"
 dirs = "5.0"
 chrono = { version = "0.4", features = ["serde"] }
+base64 = "0.22"
 
 # TUI (optional)
 ratatui = "0.29"
@@ -68,6 +69,7 @@ arboard = "3.4"
 # Testing
 proptest = "1.5"
 criterion = "0.5"
+tempfile = "3.14"
 
 # Internal crates
 agentroot-core = { path = "crates/agentroot-core" }

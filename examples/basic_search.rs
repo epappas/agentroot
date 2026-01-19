@@ -14,7 +14,7 @@ fn main() -> agentroot_core::Result<()> {
 
     // Create a test collection
     println!("Creating collection 'example'...");
-    db.add_collection("example", ".", "**/*.rs")?;
+    db.add_collection("example", ".", "**/*.rs", "file", None)?;
 
     // Insert sample content
     println!("Inserting sample documents...");
@@ -43,6 +43,8 @@ pub fn process_input(input: &str) -> Result<String, AppError> {
         &hash,
         &now,
         &now,
+        "file",
+        None,
     )?;
 
     let sample_main = r#"fn main() {
@@ -62,6 +64,8 @@ pub fn process_input(input: &str) -> Result<String, AppError> {
         &hash2,
         &now,
         &now,
+        "file",
+        None,
     )?;
 
     // Perform search

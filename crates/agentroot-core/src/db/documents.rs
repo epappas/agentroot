@@ -19,6 +19,8 @@ pub struct Document {
     pub created_at: String,
     pub modified_at: String,
     pub active: bool,
+    pub source_type: String,
+    pub source_uri: Option<String>,
 }
 
 /// Document result with content
@@ -37,7 +39,27 @@ pub struct DocumentResult {
 }
 
 impl Database {
-    /// Insert new document
+    /// Insert new document using struct parameters
+    pub fn insert_doc(&self, doc: &DocumentInsert) -> Result<i64> {
+        self.conn.execute(
+            "INSERT INTO documents (collection, path, title, hash, created_at, modified_at, active, source_type, source_uri)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1, ?7, ?8)",
+            params![
+                doc.collection,
+                doc.path,
+                doc.title,
+                doc.hash,
+                doc.created_at,
+                doc.modified_at,
+                doc.source_type,
+                doc.source_uri
+            ],
+        )?;
+        Ok(self.conn.last_insert_rowid())
+    }
+
+    /// Insert new document (legacy method)
+    #[allow(clippy::too_many_arguments)]
     pub fn insert_document(
         &self,
         collection: &str,
@@ -46,13 +68,20 @@ impl Database {
         hash: &str,
         created_at: &str,
         modified_at: &str,
+        source_type: &str,
+        source_uri: Option<&str>,
     ) -> Result<i64> {
-        self.conn.execute(
-            "INSERT INTO documents (collection, path, title, hash, created_at, modified_at, active)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1)",
-            params![collection, path, title, hash, created_at, modified_at],
-        )?;
-        Ok(self.conn.last_insert_rowid())
+        let doc = DocumentInsert {
+            collection,
+            path,
+            title,
+            hash,
+            created_at,
+            modified_at,
+            source_type,
+            source_uri,
+        };
+        self.insert_doc(&doc)
     }
 
     /// Update existing document (new content hash)
@@ -91,7 +120,7 @@ impl Database {
     /// Find active document by collection and path
     pub fn find_active_document(&self, collection: &str, path: &str) -> Result<Option<Document>> {
         let result = self.conn.query_row(
-            "SELECT id, collection, path, title, hash, created_at, modified_at, active
+            "SELECT id, collection, path, title, hash, created_at, modified_at, active, source_type, source_uri
              FROM documents WHERE collection = ?1 AND path = ?2 AND active = 1",
             params![collection, path],
             |row| {
@@ -104,6 +133,8 @@ impl Database {
                     created_at: row.get(5)?,
                     modified_at: row.get(6)?,
                     active: row.get::<_, i32>(7)? == 1,
+                    source_type: row.get(8)?,
+                    source_uri: row.get(9)?,
                 })
             },
         );
@@ -405,4 +436,52 @@ pub struct DocumentListItem {
 pub struct DocumentContent {
     pub path: String,
     pub content: String,
+}
+
+/// Document insert parameters
+#[derive(Debug, Clone)]
+pub struct DocumentInsert<'a> {
+    pub collection: &'a str,
+    pub path: &'a str,
+    pub title: &'a str,
+    pub hash: &'a str,
+    pub created_at: &'a str,
+    pub modified_at: &'a str,
+    pub source_type: &'a str,
+    pub source_uri: Option<&'a str>,
+}
+
+impl<'a> DocumentInsert<'a> {
+    /// Create new document insert parameters
+    pub fn new(
+        collection: &'a str,
+        path: &'a str,
+        title: &'a str,
+        hash: &'a str,
+        created_at: &'a str,
+        modified_at: &'a str,
+    ) -> Self {
+        Self {
+            collection,
+            path,
+            title,
+            hash,
+            created_at,
+            modified_at,
+            source_type: "file",
+            source_uri: None,
+        }
+    }
+
+    /// Set source type
+    pub fn with_source_type(mut self, source_type: &'a str) -> Self {
+        self.source_type = source_type;
+        self
+    }
+
+    /// Set source URI
+    pub fn with_source_uri(mut self, source_uri: &'a str) -> Self {
+        self.source_uri = Some(source_uri);
+        self
+    }
 }

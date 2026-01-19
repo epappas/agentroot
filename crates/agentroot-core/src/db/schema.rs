@@ -9,7 +9,7 @@ pub struct Database {
     pub(crate) conn: Connection,
 }
 
-const SCHEMA_VERSION: i32 = 2;
+const SCHEMA_VERSION: i32 = 3;
 
 const CREATE_TABLES: &str = r#"
 -- Content storage (content-addressable by SHA-256 hash)
@@ -29,6 +29,8 @@ CREATE TABLE IF NOT EXISTS documents (
     created_at TEXT NOT NULL,
     modified_at TEXT NOT NULL,
     active INTEGER NOT NULL DEFAULT 1,
+    source_type TEXT NOT NULL DEFAULT 'file',
+    source_uri TEXT,
     UNIQUE(collection, path)
 );
 
@@ -82,7 +84,9 @@ CREATE TABLE IF NOT EXISTS collections (
     path TEXT NOT NULL,
     pattern TEXT NOT NULL DEFAULT '**/*.md',
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    provider_type TEXT NOT NULL DEFAULT 'file',
+    provider_config TEXT
 );
 
 -- Context metadata (hierarchical context for paths)
@@ -207,6 +211,10 @@ impl Database {
             self.migrate_to_v2()?;
         }
 
+        if current < 3 {
+            self.migrate_to_v3()?;
+        }
+
         Ok(())
     }
 
@@ -258,6 +266,82 @@ impl Database {
         self.conn.execute(
             "INSERT OR REPLACE INTO schema_version (version) VALUES (?1)",
             params![2],
+        )?;
+
+        Ok(())
+    }
+
+    fn migrate_to_v3(&self) -> Result<()> {
+        // Add source_type column to documents if not exists
+        let has_source_type: bool = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('documents') WHERE name = 'source_type'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+
+        if !has_source_type {
+            self.conn.execute(
+                "ALTER TABLE documents ADD COLUMN source_type TEXT NOT NULL DEFAULT 'file'",
+                [],
+            )?;
+        }
+
+        // Add source_uri column to documents if not exists
+        let has_source_uri: bool = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('documents') WHERE name = 'source_uri'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+
+        if !has_source_uri {
+            self.conn
+                .execute("ALTER TABLE documents ADD COLUMN source_uri TEXT", [])?;
+        }
+
+        // Add provider_type column to collections if not exists
+        let has_provider_type: bool = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('collections') WHERE name = 'provider_type'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+
+        if !has_provider_type {
+            self.conn.execute(
+                "ALTER TABLE collections ADD COLUMN provider_type TEXT NOT NULL DEFAULT 'file'",
+                [],
+            )?;
+        }
+
+        // Add provider_config column to collections if not exists
+        let has_provider_config: bool = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('collections') WHERE name = 'provider_config'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+
+        if !has_provider_config {
+            self.conn.execute(
+                "ALTER TABLE collections ADD COLUMN provider_config TEXT",
+                [],
+            )?;
+        }
+
+        // Update schema version
+        self.conn.execute(
+            "INSERT OR REPLACE INTO schema_version (version) VALUES (?1)",
+            params![3],
         )?;
 
         Ok(())
