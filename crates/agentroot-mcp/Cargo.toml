@@ -1,0 +1,17 @@
+[package]
+name = "agentroot-mcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "MCP server for agentroot - local markdown search engine"
+
+[dependencies]
+agentroot-core.workspace = true
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
