@@ -8,6 +8,8 @@ pub enum AppMode {
     Search,
     Results,
     Preview,
+    Collections,
+    Help,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -32,6 +34,11 @@ pub struct App {
     pub preview_content: Option<String>,
     pub preview_scroll: usize,
 
+    pub collection_filter: Option<String>,
+    pub provider_filter: Option<String>,
+    pub collections: Vec<String>,
+    pub collections_selected: usize,
+
     pub status_message: Option<String>,
     pub is_loading: bool,
 
@@ -51,6 +58,10 @@ impl App {
             scroll_offset: 0,
             preview_content: None,
             preview_scroll: 0,
+            collection_filter: None,
+            provider_filter: None,
+            collections: Vec::new(),
+            collections_selected: 0,
             status_message: None,
             is_loading: false,
             should_quit: false,
@@ -67,8 +78,8 @@ impl App {
         let options = SearchOptions {
             limit: 50,
             min_score: 0.0,
-            collection: None,
-            provider: None,
+            collection: self.collection_filter.clone(),
+            provider: self.provider_filter.clone(),
             full_content: true,
         };
 
@@ -84,6 +95,35 @@ impl App {
         }
 
         self.is_loading = false;
+    }
+
+    pub fn load_collections(&mut self) {
+        match self.db.list_collections() {
+            Ok(colls) => {
+                self.collections = colls.iter().map(|c| c.name.clone()).collect();
+                self.collections_selected = 0;
+            }
+            Err(e) => {
+                self.status_message = Some(format!("Error loading collections: {}", e));
+            }
+        }
+    }
+
+    pub fn toggle_collection_filter(&mut self) {
+        if self.collections.is_empty() {
+            self.load_collections();
+        }
+
+        if let Some(coll) = self.collections.get(self.collections_selected) {
+            if self.collection_filter.as_ref() == Some(coll) {
+                self.collection_filter = None;
+                self.status_message = Some("Collection filter cleared".to_string());
+            } else {
+                self.collection_filter = Some(coll.clone());
+                self.status_message = Some(format!("Filtering by collection: {}", coll));
+            }
+            self.search();
+        }
     }
 
     pub fn select_next(&mut self) {

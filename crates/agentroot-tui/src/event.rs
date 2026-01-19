@@ -12,6 +12,8 @@ pub async fn handle_events(app: &mut App) -> Result<()> {
                 AppMode::Search => handle_search_input(app, key),
                 AppMode::Results => handle_results_input(app, key),
                 AppMode::Preview => handle_preview_input(app, key),
+                AppMode::Collections => handle_collections_input(app, key),
+                AppMode::Help => handle_help_input(app, key),
             }
         }
     }
@@ -63,6 +65,13 @@ fn handle_search_input(app: &mut App, key: KeyEvent) {
                 app.cursor_pos += 1;
             }
         }
+        KeyCode::Char('c') => {
+            app.load_collections();
+            app.mode = AppMode::Collections;
+        }
+        KeyCode::Char('?') => {
+            app.mode = AppMode::Help;
+        }
         _ => {}
     }
 }
@@ -92,6 +101,40 @@ fn handle_results_input(app: &mut App, key: KeyEvent) {
                     app.status_message = Some("Copied path to clipboard".to_string());
                 }
             }
+        }
+        KeyCode::Char('c') => {
+            app.load_collections();
+            app.mode = AppMode::Collections;
+        }
+        _ => {}
+    }
+}
+
+fn handle_collections_input(app: &mut App, key: KeyEvent) {
+    match key.code {
+        KeyCode::Esc | KeyCode::Char('q') => {
+            app.mode = AppMode::Search;
+        }
+        KeyCode::Enter => {
+            app.toggle_collection_filter();
+            app.mode = AppMode::Search;
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            if app.collections_selected < app.collections.len().saturating_sub(1) {
+                app.collections_selected += 1;
+            }
+        }
+        KeyCode::Up | KeyCode::Char('k') => {
+            app.collections_selected = app.collections_selected.saturating_sub(1);
+        }
+        _ => {}
+    }
+}
+
+fn handle_help_input(app: &mut App, key: KeyEvent) {
+    match key.code {
+        KeyCode::Esc | KeyCode::Char('q') => {
+            app.mode = AppMode::Search;
         }
         _ => {}
     }

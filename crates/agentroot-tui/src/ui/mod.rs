@@ -63,6 +63,12 @@ fn render_main(frame: &mut Frame, app: &App, area: Rect) {
             render_results(frame, app, chunks[0]);
             render_preview(frame, app, chunks[1]);
         }
+        AppMode::Collections => {
+            render_collections(frame, app, area);
+        }
+        AppMode::Help => {
+            render_help(frame, area);
+        }
     }
 }
 
@@ -142,6 +148,88 @@ fn render_preview(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(paragraph, area);
 }
 
+fn render_collections(frame: &mut Frame, app: &App, area: Rect) {
+    let items: Vec<ListItem> = app
+        .collections
+        .iter()
+        .enumerate()
+        .map(|(i, coll)| {
+            let style = if i == app.collections_selected {
+                Style::default()
+                    .bg(Color::DarkGray)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default()
+            };
+
+            let is_filtered = app.collection_filter.as_ref() == Some(coll);
+            let marker = if is_filtered { "[*] " } else { "[ ] " };
+
+            let line = Line::from(vec![
+                Span::styled(marker, Style::default().fg(Color::Yellow)),
+                Span::raw(coll),
+            ]);
+
+            ListItem::new(line).style(style)
+        })
+        .collect();
+
+    let list = List::new(items).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(" Collections (Enter to filter, Esc to close) "),
+    );
+
+    frame.render_widget(list, area);
+}
+
+fn render_help(frame: &mut Frame, area: Rect) {
+    let help_text = vec![
+        "Agentroot TUI - Keyboard Shortcuts",
+        "",
+        "Search Mode:",
+        "  Type to search",
+        "  Tab       - Cycle search mode (BM25/Vector/Hybrid)",
+        "  Enter     - View results",
+        "  c         - Collections",
+        "  ?         - This help screen",
+        "  Esc       - Clear query / Quit",
+        "",
+        "Results Mode:",
+        "  j/k       - Navigate up/down",
+        "  Enter     - Preview document",
+        "  y         - Copy file path to clipboard",
+        "  c         - Toggle collection filter",
+        "  /         - Return to search",
+        "  Esc/q     - Back to search",
+        "",
+        "Preview Mode:",
+        "  j/k       - Scroll up/down",
+        "  PgUp/PgDn - Page up/down",
+        "  Esc/q     - Back to results",
+        "",
+        "Collections Mode:",
+        "  j/k       - Navigate",
+        "  Enter     - Toggle filter",
+        "  Esc       - Close",
+    ];
+
+    let lines: Vec<Line> = help_text
+        .iter()
+        .map(|&text| Line::from(Span::raw(text)))
+        .collect();
+
+    let paragraph = Paragraph::new(lines)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Help (q/Esc to close) "),
+        )
+        .wrap(Wrap { trim: false });
+
+    frame.render_widget(paragraph, area);
+}
+
 fn render_status(frame: &mut Frame, app: &App, area: Rect) {
     let status = if app.is_loading {
         "Loading...".to_string()
@@ -149,9 +237,13 @@ fn render_status(frame: &mut Frame, app: &App, area: Rect) {
         msg.clone()
     } else {
         let mode_help = match app.mode {
-            AppMode::Search => "Enter: results | Tab: mode | Esc: clear/quit",
-            AppMode::Results => "j/k: navigate | Enter: preview | y: copy | /: search",
+            AppMode::Search => {
+                "Enter: results | Tab: mode | c: collections | ?: help | Esc: clear/quit"
+            }
+            AppMode::Results => "j/k: navigate | Enter: preview | y: copy | c: filter | /: search",
             AppMode::Preview => "j/k: scroll | q: back",
+            AppMode::Collections => "j/k: navigate | Enter: select | Esc: back",
+            AppMode::Help => "q/Esc: back",
         };
         mode_help.to_string()
     };
