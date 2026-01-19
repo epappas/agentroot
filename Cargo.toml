@@ -1,0 +1,79 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/agentroot-core",
+    "crates/agentroot-cli",
+    "crates/agentroot-mcp",
+    "crates/agentroot-tui",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/spacejar/agentroot"
+authors = ["Spacejar"]
+
+[workspace.dependencies]
+# Async runtime
+tokio = { version = "1.43", features = ["full"] }
+async-trait = "0.1"
+
+# Database
+rusqlite = { version = "0.32", features = ["bundled", "vtab", "functions", "blob"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+
+# CLI
+clap = { version = "4.5", features = ["derive", "env"] }
+
+# LLM
+llama-cpp-2 = "0.1"
+
+# HTTP (for model downloads)
+reqwest = { version = "0.12", features = ["rustls-tls"], default-features = false }
+
+# AST parsing
+tree-sitter = "0.24"
+tree-sitter-rust = "0.23"
+tree-sitter-python = "0.23"
+tree-sitter-javascript = "0.23"
+tree-sitter-go = "0.23"
+tree-sitter-typescript = "0.23"
+
+# Hashing
+blake3 = "1.5"
+
+# Utilities
+sha2 = "0.10"
+glob = "0.3"
+walkdir = "2.5"
+thiserror = "2.0"
+anyhow = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+regex = "1.11"
+lazy_static = "1.5"
+dirs = "5.0"
+chrono = { version = "0.4", features = ["serde"] }
+
+# TUI (optional)
+ratatui = "0.29"
+crossterm = "0.28"
+arboard = "3.4"
+
+# Testing
+proptest = "1.5"
+criterion = "0.5"
+
+# Internal crates
+agentroot-core = { path = "crates/agentroot-core" }
+agentroot-mcp = { path = "crates/agentroot-mcp" }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
