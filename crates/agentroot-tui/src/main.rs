@@ -2,6 +2,7 @@
 //!
 //! Terminal user interface for searching your knowledge base.
 
+use agentroot_core::Database;
 use anyhow::Result;
 use crossterm::{
     event::{DisableMouseCapture, EnableMouseCapture},
@@ -9,7 +10,6 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
-use agentroot_core::Database;
 
 mod app;
 mod event;

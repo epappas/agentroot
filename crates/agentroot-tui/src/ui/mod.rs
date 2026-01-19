@@ -1,5 +1,6 @@
 //! TUI rendering
 
+use crate::app::{App, AppMode, SearchMode};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -7,7 +8,6 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
     Frame,
 };
-use crate::app::{App, AppMode, SearchMode};
 
 pub fn render(frame: &mut Frame, app: &App) {
     let chunks = Layout::default()
@@ -33,9 +33,11 @@ fn render_search_bar(frame: &mut Frame, app: &App, area: Rect) {
 
     let input = Paragraph::new(format!("{} {}", mode_indicator, app.query))
         .style(Style::default().fg(Color::Yellow))
-        .block(Block::default()
-            .borders(Borders::ALL)
-            .title(" Search (Tab to change mode) "));
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Search (Tab to change mode) "),
+        );
 
     frame.render_widget(input, area);
 
@@ -65,14 +67,17 @@ fn render_main(frame: &mut Frame, app: &App, area: Rect) {
 }
 
 fn render_results(frame: &mut Frame, app: &App, area: Rect) {
-    let items: Vec<ListItem> = app.results
+    let items: Vec<ListItem> = app
+        .results
         .iter()
         .enumerate()
         .skip(app.scroll_offset)
         .take(area.height as usize - 2)
         .map(|(i, result)| {
             let style = if i == app.selected {
-                Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .bg(Color::DarkGray)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default()
             };
@@ -86,7 +91,10 @@ fn render_results(frame: &mut Frame, app: &App, area: Rect) {
             };
 
             let line = Line::from(vec![
-                Span::styled(format!("{:>3}% ", (result.score * 100.0) as u32), Style::default().fg(score_color)),
+                Span::styled(
+                    format!("{:>3}% ", (result.score * 100.0) as u32),
+                    Style::default().fg(score_color),
+                ),
                 Span::styled(&result.display_path, Style::default().fg(Color::Cyan)),
                 Span::raw(" - "),
                 Span::raw(&result.title),
@@ -96,16 +104,20 @@ fn render_results(frame: &mut Frame, app: &App, area: Rect) {
         })
         .collect();
 
-    let list = List::new(items)
-        .block(Block::default()
+    let list = List::new(items).block(
+        Block::default()
             .borders(Borders::ALL)
-            .title(format!(" Results ({}) ", app.results.len())));
+            .title(format!(" Results ({}) ", app.results.len())),
+    );
 
     frame.render_widget(list, area);
 }
 
 fn render_preview(frame: &mut Frame, app: &App, area: Rect) {
-    let content = app.preview_content.as_deref().unwrap_or("No preview available");
+    let content = app
+        .preview_content
+        .as_deref()
+        .unwrap_or("No preview available");
 
     let lines: Vec<Line> = content
         .lines()
@@ -114,16 +126,17 @@ fn render_preview(frame: &mut Frame, app: &App, area: Rect) {
         .enumerate()
         .map(|(i, line)| {
             Line::from(vec![
-                Span::styled(format!("{:>4} ", app.preview_scroll + i + 1), Style::default().fg(Color::DarkGray)),
+                Span::styled(
+                    format!("{:>4} ", app.preview_scroll + i + 1),
+                    Style::default().fg(Color::DarkGray),
+                ),
                 Span::raw(line),
             ])
         })
         .collect();
 
     let paragraph = Paragraph::new(lines)
-        .block(Block::default()
-            .borders(Borders::ALL)
-            .title(" Preview "))
+        .block(Block::default().borders(Borders::ALL).title(" Preview "))
         .wrap(Wrap { trim: false });
 
     frame.render_widget(paragraph, area);
@@ -143,8 +156,7 @@ fn render_status(frame: &mut Frame, app: &App, area: Rect) {
         mode_help.to_string()
     };
 
-    let paragraph = Paragraph::new(status)
-        .style(Style::default().fg(Color::DarkGray));
+    let paragraph = Paragraph::new(status).style(Style::default().fg(Color::DarkGray));
 
     frame.render_widget(paragraph, area);
 }

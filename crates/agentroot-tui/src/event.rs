@@ -1,9 +1,9 @@
 //! TUI event handling
 
-use crossterm::event::{self, Event, KeyCode, KeyEvent};
-use std::time::Duration;
 use crate::app::{App, AppMode};
 use anyhow::Result;
+use crossterm::event::{self, Event, KeyCode, KeyEvent};
+use std::time::Duration;
 
 pub async fn handle_events(app: &mut App) -> Result<()> {
     if event::poll(Duration::from_millis(100))? {

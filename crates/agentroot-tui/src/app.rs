@@ -1,6 +1,6 @@
 //! TUI application state
 
-use agentroot_core::{Database, SearchResult, SearchOptions};
+use agentroot_core::{Database, SearchOptions, SearchResult};
 use std::rc::Rc;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
