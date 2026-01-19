@@ -5,7 +5,7 @@ use crate::progress::ProgressReporter;
 use agentroot_core::Database;
 use anyhow::Result;
 
-pub async fn run(args: UpdateArgs, db: &Database) -> Result<()> {
+pub async fn run(args: UpdateArgs, db: &Database, verbose: bool) -> Result<()> {
     let collections = db.list_collections()?;
 
     if collections.is_empty() {
@@ -13,12 +13,25 @@ pub async fn run(args: UpdateArgs, db: &Database) -> Result<()> {
         return Ok(());
     }
 
-    let mut progress = ProgressReporter::new(collections.len());
+    let total_docs_before: usize = collections.iter().map(|c| c.document_count).sum();
+    let mut progress = ProgressReporter::new(collections.len()).with_percentage(true);
 
-    for coll in collections {
-        progress.set_message(&format!("Updating {}", coll.name));
+    println!(
+        "Updating {} collections ({} documents)...",
+        collections.len(),
+        total_docs_before
+    );
+
+    let mut total_updated = 0;
+    let mut total_errors = 0;
+
+    for coll in &collections {
+        progress.set_message(&format!("Updating {} ({})", coll.name, coll.provider_type));
 
         if args.pull {
+            if verbose {
+                eprintln!("Running git pull in {}...", coll.path);
+            }
             let status = std::process::Command::new("git")
                 .args(["pull"])
                 .current_dir(&coll.path)
@@ -26,14 +39,56 @@ pub async fn run(args: UpdateArgs, db: &Database) -> Result<()> {
 
             if let Err(e) = status {
                 eprintln!("Warning: git pull failed for {}: {}", coll.name, e);
+                total_errors += 1;
             }
         }
 
-        let updated = db.reindex_collection(&coll.name).await?;
-        progress.increment();
-        println!("{}: {} files updated", coll.name, updated);
+        match db.reindex_collection(&coll.name).await {
+            Ok(updated) => {
+                progress.increment();
+                if updated > 0 || verbose {
+                    println!("{}: {} files updated", coll.name, updated);
+                }
+                total_updated += updated;
+            }
+            Err(e) => {
+                progress.increment();
+                eprintln!("Error updating {}: {}", coll.name, e);
+                total_errors += 1;
+            }
+        }
     }
 
-    progress.finish();
+    let collections_after = db.list_collections()?;
+    let total_docs_after: usize = collections_after.iter().map(|c| c.document_count).sum();
+
+    if total_errors > 0 {
+        progress.finish_with_message(&format!("Completed with {} errors", total_errors));
+    } else {
+        progress.finish();
+    }
+
+    println!();
+    println!(
+        "Summary: {} files updated, {} total documents",
+        total_updated, total_docs_after
+    );
+
+    if total_docs_after > total_docs_before {
+        println!(
+            "  {} new documents added",
+            total_docs_after - total_docs_before
+        );
+    } else if total_docs_after < total_docs_before {
+        println!(
+            "  {} documents removed",
+            total_docs_before - total_docs_after
+        );
+    }
+
+    if total_errors > 0 {
+        std::process::exit(1);
+    }
+
     Ok(())
 }

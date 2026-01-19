@@ -501,4 +501,123 @@ mod tests {
         let result = provider.parse_github_url(url);
         assert!(result.is_err());
     }
+
+    #[test]
+    fn test_parse_github_url_variants() {
+        let provider = GitHubProvider::new();
+
+        let test_cases = vec![
+            ("https://github.com/rust-lang/rust", true),
+            ("http://github.com/rust-lang/rust", true),
+            ("https://github.com/user/repo/blob/main/README.md", true),
+            (
+                "https://github.com/user/repo/blob/feature-branch/src/main.rs",
+                true,
+            ),
+            ("https://gitlab.com/user/repo", false),
+            ("github.com/user/repo", false),
+            ("https://github.com/", false),
+            ("https://github.com/user", false),
+        ];
+
+        for (url, should_succeed) in test_cases {
+            let result = provider.parse_github_url(url);
+            assert_eq!(
+                result.is_ok(),
+                should_succeed,
+                "URL: {} - Expected success: {}, Got: {:?}",
+                url,
+                should_succeed,
+                result
+            );
+        }
+    }
+
+    #[test]
+    fn test_parse_github_file_url_components() {
+        let provider = GitHubProvider::new();
+        let url = "https://github.com/rust-lang/rust/blob/master/src/main.rs";
+        let result = provider.parse_github_url(url).unwrap();
+
+        match result {
+            GitHubUrl::File {
+                owner,
+                repo,
+                branch,
+                path,
+            } => {
+                assert_eq!(owner, "rust-lang");
+                assert_eq!(repo, "rust");
+                assert_eq!(branch, "master");
+                assert_eq!(path, "src/main.rs");
+            }
+            _ => panic!("Expected File variant"),
+        }
+    }
+
+    #[test]
+    fn test_parse_github_file_url_nested_path() {
+        let provider = GitHubProvider::new();
+        let url = "https://github.com/owner/repo/blob/main/deep/nested/path/file.md";
+        let result = provider.parse_github_url(url).unwrap();
+
+        match result {
+            GitHubUrl::File { path, .. } => {
+                assert_eq!(path, "deep/nested/path/file.md");
+            }
+            _ => panic!("Expected File variant"),
+        }
+    }
+
+    #[test]
+    fn test_get_token_from_config() {
+        let provider = GitHubProvider::new();
+
+        let config = ProviderConfig::new(
+            "https://github.com/user/repo".to_string(),
+            "*.md".to_string(),
+        )
+        .with_option("github_token".to_string(), "ghp_test123".to_string());
+
+        let token = provider.get_token(&config);
+        assert_eq!(token, Some("ghp_test123".to_string()));
+    }
+
+    #[test]
+    fn test_get_token_priority() {
+        let provider = GitHubProvider::new();
+
+        let config_with_token = ProviderConfig::new(
+            "https://github.com/user/repo".to_string(),
+            "*.md".to_string(),
+        )
+        .with_option("github_token".to_string(), "ghp_config".to_string());
+
+        let token = provider.get_token(&config_with_token);
+        assert_eq!(token, Some("ghp_config".to_string()));
+    }
+
+    #[test]
+    fn test_provider_type() {
+        let provider = GitHubProvider::new();
+        assert_eq!(provider.provider_type(), "github");
+    }
+
+    #[test]
+    fn test_parse_github_url_edge_cases() {
+        let provider = GitHubProvider::new();
+
+        let edge_cases = vec![
+            "https://github.com/user/repo-with-dashes",
+            "https://github.com/user/repo_with_underscores",
+            "https://github.com/user/repo.with.dots",
+            "https://github.com/user-with-dash/repo",
+            "https://github.com/user_with_underscore/repo",
+        ];
+
+        for url in edge_cases {
+            let result = provider.parse_github_url(url);
+            assert!(result.is_ok(), "Failed to parse valid URL: {}", url);
+        }
+    }
 }

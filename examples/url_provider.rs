@@ -17,6 +17,12 @@ pub struct URLProvider {
     client: reqwest::Client,
 }
 
+impl Default for URLProvider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl URLProvider {
     pub fn new() -> Self {
         let client = reqwest::Client::builder()
@@ -70,7 +76,7 @@ impl URLProvider {
         }
 
         url.split('/')
-            .last()
+            .next_back()
             .unwrap_or(url)
             .trim_end_matches(".md")
             .trim_end_matches(".html")

@@ -63,3 +63,11 @@ path = "../../examples/url_provider.rs"
 name = "custom_provider"
 path = "../../examples/custom_provider.rs"
 
+[[bench]]
+name = "indexing"
+harness = false
+
+[[bench]]
+name = "search"
+harness = false
+

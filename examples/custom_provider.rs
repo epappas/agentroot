@@ -34,6 +34,12 @@ pub struct JSONAPIProvider {
     cache: tokio::sync::Mutex<HashMap<String, String>>,
 }
 
+impl Default for JSONAPIProvider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl JSONAPIProvider {
     pub fn new() -> Self {
         let client = reqwest::Client::builder()

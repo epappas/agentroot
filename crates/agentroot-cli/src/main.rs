@@ -36,7 +36,7 @@ async fn main() -> Result<()> {
         Commands::Get(args) => commands::get::run(args, &db, cli.format).await,
         Commands::MultiGet(args) => commands::get::run_multi(args, &db, cli.format).await,
         Commands::Status => commands::status::run(&db, cli.format).await,
-        Commands::Update(args) => commands::update::run(args, &db).await,
+        Commands::Update(args) => commands::update::run(args, &db, cli.verbose).await,
         Commands::Embed(args) => commands::embed::run(args, &db).await,
         Commands::Search(args) => commands::search::run_bm25(args, &db, cli.format).await,
         Commands::Vsearch(args) => commands::search::run_vector(args, &db, cli.format).await,
