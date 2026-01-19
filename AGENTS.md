@@ -333,7 +333,7 @@ pub const DEFAULT_EMBED_MODEL: &str = "nomic-embed-text-v1.5.Q4_K_M.gguf";
 ### Database Schema Version
 Located in `crates/agentroot-core/src/db/schema.rs`:
 ```rust
-const SCHEMA_VERSION: i32 = 3;
+const SCHEMA_VERSION: i32 = 4;
 ```
 
 ## Core Data Models
@@ -411,6 +411,237 @@ pub struct CollectionInfo {
     pub provider_config: Option<String>,
 }
 ```
+
+## LLM-Generated Metadata System
+
+Agentroot automatically generates rich semantic metadata for all indexed documents using local LLMs. This metadata significantly improves search quality and document discovery.
+
+### Architecture Overview
+
+The metadata system operates during indexing:
+1. Provider fetches document content
+2. MetadataGenerator analyzes content with environmental context
+3. Generated metadata is cached by content hash
+4. Metadata is stored in database and indexed for search
+5. Search results include metadata for better relevance
+
+### MetadataGenerator Trait
+
+Location: `crates/agentroot-core/src/llm/metadata_generator.rs`
+
+```rust
+pub trait MetadataGenerator: Send + Sync {
+    async fn generate_metadata(
+        &self,
+        content: &str,
+        context: &MetadataContext,
+    ) -> Result<DocumentMetadata>;
+    
+    fn model_name(&self) -> &str;
+}
+```
+
+### MetadataContext
+
+Provides environmental signals to the LLM:
+```rust
+pub struct MetadataContext {
+    pub source_type: String,        // file, github, url, pdf, sql
+    pub language: Option<String>,   // Programming language
+    pub file_extension: Option<String>,
+    pub collection_name: String,
+    pub provider_config: Option<String>,
+    pub created_at: String,
+    pub modified_at: String,
+    pub existing_structure: Option<Vec<ChunkType>>, // AST chunk types
+}
+```
+
+### DocumentMetadata
+
+Generated metadata includes 8 fields:
+```rust
+pub struct DocumentMetadata {
+    pub summary: String,              // 100-200 words
+    pub semantic_title: String,       // Improved title
+    pub keywords: Vec<String>,        // 5-10 keywords
+    pub category: String,             // Document type
+    pub intent: String,               // Purpose description
+    pub concepts: Vec<String>,        // Related concepts
+    pub difficulty: String,           // beginner/intermediate/advanced
+    pub suggested_queries: Vec<String>, // Search queries
+}
+```
+
+### LlamaMetadataGenerator
+
+Location: `crates/agentroot-core/src/llm/llama_metadata.rs`
+
+**Default Model**: `llama-3.1-8b-instruct.Q4_K_M.gguf`
+- Instruction-tuned for structured JSON output
+- 8B parameters, Q4 quantization (~4.5GB)
+- Located at: `~/.local/share/agentroot/models/`
+
+**Smart Truncation Strategies**:
+- **Markdown**: Extract headers + first paragraph of each section
+- **Code**: Extract function/class signatures + docstrings + structure
+- **Generic**: First + last portions (up to MAX_CONTENT_TOKENS)
+
+**Fallback Generation**:
+When LLM fails or unavailable, generates basic metadata using heuristics:
+- Title from filename (improved formatting)
+- Summary from first paragraph
+- Keywords from word frequency
+- Category from file extension
+- Concepts from capitalized terms
+
+### Database Schema Changes (v4)
+
+**New Columns in documents table**:
+```sql
+ALTER TABLE documents ADD COLUMN llm_summary TEXT;
+ALTER TABLE documents ADD COLUMN llm_title TEXT;
+ALTER TABLE documents ADD COLUMN llm_keywords TEXT;  -- JSON array
+ALTER TABLE documents ADD COLUMN llm_category TEXT;
+ALTER TABLE documents ADD COLUMN llm_intent TEXT;
+ALTER TABLE documents ADD COLUMN llm_concepts TEXT;  -- JSON array
+ALTER TABLE documents ADD COLUMN llm_difficulty TEXT;
+ALTER TABLE documents ADD COLUMN llm_queries TEXT;  -- JSON array
+ALTER TABLE documents ADD COLUMN llm_metadata_generated_at TEXT;
+ALTER TABLE documents ADD COLUMN llm_model TEXT;
+```
+
+**FTS5 Index Updated**:
+```sql
+CREATE VIRTUAL TABLE documents_fts USING fts5(
+    filepath,
+    title,
+    body,
+    llm_summary,      -- Searchable via BM25
+    llm_title,        -- Searchable via BM25
+    llm_keywords,     -- Searchable via BM25
+    llm_intent,       -- Searchable via BM25
+    llm_concepts,     -- Searchable via BM25
+    tokenize='porter unicode61'
+);
+```
+
+### Indexing with Metadata
+
+**Legacy Method** (without metadata):
+```rust
+db.reindex_collection("my-collection").await?;
+```
+
+**With Metadata**:
+```rust
+let generator = LlamaMetadataGenerator::from_default()?;
+db.reindex_collection_with_metadata("my-collection", Some(&generator)).await?;
+```
+
+**Caching**:
+- Metadata cached by content hash in `llm_cache` table
+- Cache key format: `metadata:v1:{content_hash}`
+- Regenerate only when content changes
+
+### CLI Commands
+
+**Refresh Metadata**:
+```bash
+# Refresh entire collection
+agentroot metadata refresh my-collection
+
+# Refresh all collections
+agentroot metadata refresh --all
+
+# Refresh single document
+agentroot metadata refresh --doc path/to/doc.md
+
+# Use custom model
+agentroot metadata refresh my-collection --model /path/to/model.gguf
+
+# Force regeneration (ignore cache)
+agentroot metadata refresh my-collection --force
+```
+
+**Show Metadata**:
+```bash
+# Show metadata for a document
+agentroot metadata show #abc123
+agentroot metadata show path/to/doc.md
+```
+
+**Status with Metadata**:
+```bash
+agentroot status
+# Output includes:
+# Metadata:
+#   Generated:     1,180
+#   Pending:       65
+```
+
+### Search Integration
+
+**SearchResult includes metadata**:
+```rust
+pub struct SearchResult {
+    // ... existing fields ...
+    pub llm_summary: Option<String>,
+    pub llm_title: Option<String>,
+    pub llm_keywords: Option<Vec<String>>,
+    pub llm_category: Option<String>,
+    pub llm_difficulty: Option<String>,
+}
+```
+
+**Metadata automatically included** in:
+- BM25 full-text search (via FTS index)
+- Vector similarity search (metadata fields fetched)
+- Hybrid search (combines both)
+
+**Future Enhancement**: Metadata boost scoring to give higher weight to matches in metadata fields.
+
+### Configuration
+
+**Global Config** (`~/.config/agentroot/config.toml`):
+```toml
+[metadata]
+enabled = true  # Always enabled by default
+model_path = "/path/to/llama-3.1-8b-instruct.gguf"  # Optional
+max_content_tokens = 2048  # Maximum tokens to send to LLM
+cache_enabled = true  # Cache by content hash
+```
+
+**Collection-Level Config**:
+```json
+{
+    "metadata_enabled": true,
+    "metadata_model": "llama-3.1-8b-instruct"
+}
+```
+
+### Performance Considerations
+
+**Indexing Time**: +30-60 seconds per collection (one-time cost)
+**Storage**: +2-5KB per document for metadata
+**Search Latency**: Negligible (FTS already includes all fields)
+**Memory**: LLM requires 5-8GB RAM during indexing
+
+**Optimization**:
+- Metadata cached by content hash
+- Smart truncation reduces LLM inference time
+- Fallback ensures indexing never fails
+- Background processing option (future)
+
+### Error Handling
+
+**Graceful Degradation**:
+1. LLM model not found → Use fallback heuristics
+2. LLM generation timeout (30s) → Use fallback
+3. Invalid JSON response → Use fallback
+4. Memory errors → Truncate more aggressively, retry
+
+**Indexing Never Fails**: If metadata generation fails, document is still indexed with basic metadata.
 
 ## Database API Signatures
 

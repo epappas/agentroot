@@ -80,6 +80,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enhanced `examples/url_provider.rs` with comprehensive error handling
 - All examples include step-by-step demonstrations and cleanup instructions
 
+#### LLM-Generated Metadata System
+- **Automatic metadata generation** during document indexing using local LLMs
+  - 8 metadata fields: summary, semantic title, keywords, category, intent, concepts, difficulty, suggested queries
+  - Smart content truncation strategies (markdown, code, generic)
+  - Fallback heuristics when LLM unavailable
+  - Content-hash based caching for efficiency
+  - Default model: `llama-3.1-8b-instruct.Q4_K_M.gguf` (8B parameters, ~4.5GB)
+
+- **Database schema v4** with 10 new metadata columns
+  - All metadata fields indexed in FTS5 for full-text search
+  - Automatic trigger-based sync to search index
+  - Migration from v3 handles schema upgrade transparently
+
+- **CLI metadata commands**
+  - `agentroot metadata refresh <collection>` - Regenerate metadata for collection
+  - `agentroot metadata refresh --all` - Regenerate for all collections
+  - `agentroot metadata refresh --doc <path>` - Regenerate single document
+  - `agentroot metadata show <docid>` - Display document metadata
+  - Support for custom model paths via `--model` flag
+
+- **Enhanced search results** with metadata fields
+  - BM25 search includes metadata in queries automatically
+  - Vector search fetches metadata alongside results
+  - Search results include summary, title, keywords, category, difficulty
+
+- **Updated status command** with metadata statistics
+  - Shows count of documents with generated metadata
+  - Shows count of pending metadata generation
+
+
 ### Changed
 - ProviderRegistry now includes URLProvider, PDFProvider, and SQLProvider by default
 - Test coverage increased from 92 to 107 tests (+15 tests)
