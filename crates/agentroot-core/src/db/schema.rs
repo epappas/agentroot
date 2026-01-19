@@ -181,9 +181,12 @@ impl Database {
         // Create triggers
         self.conn.execute_batch(CREATE_TRIGGERS)?;
 
-        // Set schema version
+        // Run migrations to upgrade existing databases (BEFORE setting version)
+        self.migrate()?;
+
+        // Set schema version (after migrations complete)
         self.conn.execute(
-            "INSERT OR IGNORE INTO schema_version (version) VALUES (?1)",
+            "INSERT OR REPLACE INTO schema_version (version) VALUES (?1)",
             params![SCHEMA_VERSION],
         )?;
 
@@ -357,5 +360,78 @@ mod tests {
         let db = Database::open_in_memory().unwrap();
         db.initialize().unwrap();
         assert_eq!(db.schema_version().unwrap(), Some(SCHEMA_VERSION));
+    }
+
+    #[test]
+    fn test_migration_v2_to_v3() {
+        let db = Database::open_in_memory().unwrap();
+
+        db.conn
+            .execute_batch(
+                "CREATE TABLE collections (
+                name TEXT PRIMARY KEY,
+                path TEXT NOT NULL,
+                pattern TEXT NOT NULL DEFAULT '**/*.md',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE TABLE documents (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                collection TEXT NOT NULL,
+                path TEXT NOT NULL,
+                title TEXT NOT NULL,
+                hash TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                modified_at TEXT NOT NULL,
+                active INTEGER NOT NULL DEFAULT 1,
+                UNIQUE(collection, path)
+            );
+            CREATE TABLE schema_version (version INTEGER PRIMARY KEY);
+            INSERT INTO schema_version VALUES (2);",
+            )
+            .unwrap();
+
+        assert_eq!(db.schema_version().unwrap(), Some(2));
+
+        db.initialize().unwrap();
+
+        assert_eq!(db.schema_version().unwrap(), Some(3));
+
+        let has_provider_type: bool = db.conn.query_row(
+            "SELECT COUNT(*) > 0 FROM pragma_table_info('collections') WHERE name = 'provider_type'",
+            [],
+            |row| row.get(0),
+        ).unwrap();
+        assert!(
+            has_provider_type,
+            "collections should have provider_type column"
+        );
+
+        let has_provider_config: bool = db.conn.query_row(
+            "SELECT COUNT(*) > 0 FROM pragma_table_info('collections') WHERE name = 'provider_config'",
+            [],
+            |row| row.get(0),
+        ).unwrap();
+        assert!(
+            has_provider_config,
+            "collections should have provider_config column"
+        );
+
+        let has_source_type: bool = db.conn.query_row(
+            "SELECT COUNT(*) > 0 FROM pragma_table_info('documents') WHERE name = 'source_type'",
+            [],
+            |row| row.get(0),
+        ).unwrap();
+        assert!(has_source_type, "documents should have source_type column");
+
+        let has_source_uri: bool = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('documents') WHERE name = 'source_uri'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(has_source_uri, "documents should have source_uri column");
     }
 }

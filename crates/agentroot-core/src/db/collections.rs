@@ -173,8 +173,8 @@ impl Database {
 
             if let Some(existing) = self.find_active_document(name, &item.uri)? {
                 if existing.hash != item.hash {
-                    self.update_document(existing.id, &item.title, &item.hash, &now)?;
                     self.insert_content(&item.hash, &item.content)?;
+                    self.update_document(existing.id, &item.title, &item.hash, &now)?;
                     updated += 1;
                 }
             } else {
@@ -195,5 +195,339 @@ impl Database {
 
         self.touch_collection(name)?;
         Ok(updated)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_database_stores_provider_info_correctly() {
+        let db = Database::open_in_memory().unwrap();
+        db.initialize().unwrap();
+
+        db.add_collection(
+            "test_file",
+            "/tmp/test",
+            "**/*.md",
+            "file",
+            Some(r#"{"exclude_hidden":"false"}"#),
+        )
+        .unwrap();
+
+        db.add_collection(
+            "test_github",
+            "https://github.com/test/repo",
+            "**/*.md",
+            "github",
+            None,
+        )
+        .unwrap();
+
+        let provider_type_file: String = db
+            .conn
+            .query_row(
+                "SELECT provider_type FROM collections WHERE name = 'test_file'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(provider_type_file, "file");
+
+        let provider_config_file: Option<String> = db
+            .conn
+            .query_row(
+                "SELECT provider_config FROM collections WHERE name = 'test_file'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            provider_config_file,
+            Some(r#"{"exclude_hidden":"false"}"#.to_string())
+        );
+
+        let provider_type_github: String = db
+            .conn
+            .query_row(
+                "SELECT provider_type FROM collections WHERE name = 'test_github'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(provider_type_github, "github");
+
+        let provider_config_github: Option<String> = db
+            .conn
+            .query_row(
+                "SELECT provider_config FROM collections WHERE name = 'test_github'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(provider_config_github, None);
+
+        let collections = db.list_collections().unwrap();
+        assert_eq!(collections.len(), 2);
+
+        let file_coll = collections.iter().find(|c| c.name == "test_file").unwrap();
+        assert_eq!(file_coll.provider_type, "file");
+        assert_eq!(
+            file_coll.provider_config.as_deref(),
+            Some(r#"{"exclude_hidden":"false"}"#)
+        );
+
+        let github_coll = collections
+            .iter()
+            .find(|c| c.name == "test_github")
+            .unwrap();
+        assert_eq!(github_coll.provider_type, "github");
+        assert_eq!(github_coll.provider_config, None);
+    }
+
+    #[test]
+    fn test_documents_store_source_metadata() {
+        use crate::db::hash_content;
+        use chrono::Utc;
+
+        let db = Database::open_in_memory().unwrap();
+        db.initialize().unwrap();
+
+        db.add_collection("test", "/tmp", "**/*.md", "file", None)
+            .unwrap();
+
+        let content = "# Test Document";
+        let hash = hash_content(content);
+        db.insert_content(&hash, content).unwrap();
+
+        let now = Utc::now().to_rfc3339();
+        let doc_id = db
+            .insert_document(
+                "test",
+                "doc1.md",
+                "Test Document",
+                &hash,
+                &now,
+                &now,
+                "file",
+                Some("/tmp/doc1.md"),
+            )
+            .unwrap();
+
+        assert!(doc_id > 0);
+
+        let source_type: String = db
+            .conn
+            .query_row(
+                "SELECT source_type FROM documents WHERE id = ?1",
+                [doc_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(source_type, "file");
+
+        let source_uri: Option<String> = db
+            .conn
+            .query_row(
+                "SELECT source_uri FROM documents WHERE id = ?1",
+                [doc_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(source_uri, Some("/tmp/doc1.md".to_string()));
+
+        db.insert_content(&hash, content).unwrap();
+        let doc_id2 = db
+            .insert_document(
+                "test",
+                "doc2.md",
+                "Test Document 2",
+                &hash,
+                &now,
+                &now,
+                "github",
+                Some("https://github.com/test/repo/doc2.md"),
+            )
+            .unwrap();
+
+        let source_type2: String = db
+            .conn
+            .query_row(
+                "SELECT source_type FROM documents WHERE id = ?1",
+                [doc_id2],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(source_type2, "github");
+
+        let source_uri2: Option<String> = db
+            .conn
+            .query_row(
+                "SELECT source_uri FROM documents WHERE id = ?1",
+                [doc_id2],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            source_uri2,
+            Some("https://github.com/test/repo/doc2.md".to_string())
+        );
+    }
+
+    #[test]
+    fn test_reindex_collection_uses_provider_system() {
+        use std::fs;
+        use tempfile::TempDir;
+
+        let temp = TempDir::new().unwrap();
+        let base = temp.path();
+
+        fs::write(base.join("doc1.md"), "# Document 1\nInitial content").unwrap();
+        fs::write(base.join("doc2.md"), "# Document 2\nInitial content").unwrap();
+
+        let db = Database::open_in_memory().unwrap();
+        db.initialize().unwrap();
+
+        db.add_collection(
+            "test",
+            &base.to_string_lossy(),
+            "**/*.md",
+            "file",
+            Some(r#"{"exclude_hidden":"false"}"#),
+        )
+        .unwrap();
+
+        let updated = db.reindex_collection("test").unwrap();
+        assert_eq!(updated, 2, "Should index 2 files on first run");
+
+        let collections = db.list_collections().unwrap();
+        assert_eq!(collections[0].document_count, 2);
+
+        let doc_count: i64 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM documents WHERE collection = 'test' AND active = 1",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(doc_count, 2);
+
+        let mut stmt = db
+            .conn
+            .prepare(
+                "SELECT path, source_type FROM documents WHERE collection = 'test' ORDER BY path",
+            )
+            .unwrap();
+        let sources: Vec<(String, String)> = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .unwrap()
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .unwrap();
+
+        assert_eq!(sources.len(), 2);
+        assert_eq!(sources[0].0, "doc1.md");
+        assert_eq!(sources[0].1, "file");
+        assert_eq!(sources[1].0, "doc2.md");
+        assert_eq!(sources[1].1, "file");
+
+        fs::write(base.join("doc1.md"), "# Document 1\nUpdated content").unwrap();
+
+        let updated2 = db.reindex_collection("test").unwrap();
+        assert_eq!(updated2, 1, "Should update only changed file");
+
+        let collections2 = db.list_collections().unwrap();
+        assert_eq!(
+            collections2[0].document_count, 2,
+            "Should still have 2 documents"
+        );
+
+        fs::write(base.join("doc3.md"), "# Document 3\nNew content").unwrap();
+
+        let updated3 = db.reindex_collection("test").unwrap();
+        assert_eq!(updated3, 1, "Should add new file");
+
+        let collections3 = db.list_collections().unwrap();
+        assert_eq!(
+            collections3[0].document_count, 3,
+            "Should now have 3 documents"
+        );
+    }
+
+    #[test]
+    fn test_reindex_invalid_provider_type() {
+        let db = Database::open_in_memory().unwrap();
+        db.initialize().unwrap();
+
+        db.add_collection("test", "/tmp", "**/*.md", "nonexistent_provider", None)
+            .unwrap();
+
+        let result = db.reindex_collection("test");
+        assert!(result.is_err(), "Should error on invalid provider type");
+
+        match result {
+            Err(crate::error::AgentRootError::InvalidInput(msg)) => {
+                assert!(msg.contains("Unknown provider type"));
+                assert!(msg.contains("nonexistent_provider"));
+            }
+            _ => panic!("Expected InvalidInput error"),
+        }
+    }
+
+    #[test]
+    fn test_reindex_nonexistent_collection() {
+        let db = Database::open_in_memory().unwrap();
+        db.initialize().unwrap();
+
+        let result = db.reindex_collection("nonexistent");
+        assert!(result.is_err(), "Should error on nonexistent collection");
+
+        match result {
+            Err(crate::error::AgentRootError::CollectionNotFound(name)) => {
+                assert_eq!(name, "nonexistent");
+            }
+            _ => panic!("Expected CollectionNotFound error"),
+        }
+    }
+
+    #[test]
+    fn test_add_collection_duplicate_name() {
+        let db = Database::open_in_memory().unwrap();
+        db.initialize().unwrap();
+
+        db.add_collection("test", "/tmp1", "**/*.md", "file", None)
+            .unwrap();
+
+        let result = db.add_collection("test", "/tmp2", "**/*.md", "file", None);
+        assert!(result.is_err(), "Should error on duplicate collection name");
+    }
+
+    #[test]
+    fn test_reindex_with_malformed_provider_config() {
+        use std::fs;
+        use tempfile::TempDir;
+
+        let temp = TempDir::new().unwrap();
+        let base = temp.path();
+        fs::write(base.join("test.md"), "# Test").unwrap();
+
+        let db = Database::open_in_memory().unwrap();
+        db.initialize().unwrap();
+
+        db.add_collection(
+            "test",
+            &base.to_string_lossy(),
+            "**/*.md",
+            "file",
+            Some("malformed json that won't parse"),
+        )
+        .unwrap();
+
+        let result = db.reindex_collection("test");
+        assert!(
+            result.is_ok(),
+            "Should succeed despite malformed JSON config (uses defaults)"
+        );
     }
 }
