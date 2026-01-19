@@ -69,6 +69,76 @@ cargo run --example github_provider
 
 **Note**: Requires internet connection. Set `GITHUB_TOKEN` environment variable for higher API rate limits.
 
+### url_provider.rs
+
+Demonstrates using the URL provider to index web content:
+- Fetching content from HTTP/HTTPS URLs
+- Title extraction from HTML and markdown
+- Error handling for various HTTP status codes
+- Timeout and redirect configuration
+- Indexing web pages in database
+
+```bash
+cargo run --example url_provider
+```
+
+**Note**: Requires internet connection. Example includes comprehensive error handling demonstration.
+
+### pdf_provider.rs
+
+Demonstrates using the PDF provider to index PDF documents:
+- Indexing single PDF files
+- Scanning directories for PDF files
+- Text extraction from PDFs
+- Smart title extraction from content or filename
+- Searching indexed PDF content
+
+```bash
+cargo run --example pdf_provider
+```
+
+**Note**: Create `example.pdf` or `./pdfs/` directory with PDF files to run the full example.
+
+### sql_provider.rs
+
+Demonstrates using the SQL provider to index database content:
+- Creating a sample SQLite database
+- Table-based indexing configuration
+- Custom SQL query indexing
+- Advanced queries with JOINs and filters
+- Searching indexed database content
+
+```bash
+cargo run --example sql_provider
+```
+
+**Note**: Creates sample databases (`sample_data.db` and `example_sql.db`) for demonstration.
+
+### custom_provider.rs
+
+Demonstrates creating a custom provider implementation:
+- Implementing the SourceProvider trait
+- Async/await patterns for network operations
+- JSON API integration example
+- Caching strategies
+- Error handling best practices
+
+```bash
+cargo run --example custom_provider
+```
+
+**Note**: Example template for building your own custom providers.
+
+## Provider Summary
+
+| Example | Provider Type | Use Case | Requirements |
+|---------|--------------|----------|--------------|
+| `github_provider.rs` | GitHub | Index GitHub repositories | Internet, optional GITHUB_TOKEN |
+| `url_provider.rs` | URL | Index web pages | Internet connection |
+| `pdf_provider.rs` | PDF | Index PDF documents | PDF files |
+| `sql_provider.rs` | SQL | Index database content | SQLite database |
+| `custom_provider.rs` | Custom | Template for custom sources | None (template) |
+
 ## Using Agentroot as a Library
 
 Add to your `Cargo.toml`:
@@ -85,15 +155,18 @@ Basic usage:
 ```rust
 use agentroot_core::{Database, SearchOptions};
 
-fn main() -> agentroot_core::Result<()> {
+#[tokio::main]
+async fn main() -> agentroot_core::Result<()> {
     // Open database
     let db = Database::open("./agentroot.db")?;
     db.initialize()?;
     
-    // Create collection (file-based)
+    // Create collections from different sources
+    
+    // Local files
     db.add_collection("myproject", "/path/to/code", "**/*.rs", "file", None)?;
     
-    // Or create GitHub collection
+    // GitHub repository
     db.add_collection(
         "rust-docs",
         "https://github.com/rust-lang/rust",
@@ -102,7 +175,32 @@ fn main() -> agentroot_core::Result<()> {
         None,
     )?;
     
-    // Search
+    // Web pages
+    db.add_collection(
+        "blog",
+        "https://example.com/docs",
+        "**/*.html",
+        "url",
+        None,
+    )?;
+    
+    // PDF documents
+    db.add_collection("pdfs", "/path/to/pdfs", "**/*.pdf", "pdf", None)?;
+    
+    // SQLite database
+    db.add_collection(
+        "articles",
+        "/path/to/database.db",
+        "",
+        "sql",
+        Some(r#"{"table":"articles","id_column":"id","title_column":"title","content_column":"body"}"#),
+    )?;
+    
+    // Index all collections
+    db.reindex_collection("myproject").await?;
+    db.reindex_collection("rust-docs").await?;
+    
+    // Search across all collections
     let options = SearchOptions::default();
     let results = db.search_fts("error handling", &options)?;
     
@@ -117,3 +215,5 @@ fn main() -> agentroot_core::Result<()> {
     Ok(())
 }
 ```
+
+See individual example files for complete, runnable demonstrations of each provider.

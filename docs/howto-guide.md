@@ -56,6 +56,77 @@ agentroot collection add https://github.com/myorg/private-repo \
   --provider github
 ```
 
+### Add Web Pages (URL Provider)
+
+```bash
+# Index a single web page
+agentroot collection add https://doc.rust-lang.org/book/ \
+  --name rust-book \
+  --provider url
+
+# Index with custom timeout and user agent
+agentroot collection add https://example.com/docs \
+  --name docs \
+  --provider url \
+  --config '{"timeout":"60","user_agent":"agentroot/1.0"}'
+
+# Index with redirect limit
+agentroot collection add https://blog.example.com \
+  --name blog \
+  --provider url \
+  --config '{"redirect_limit":"5"}'
+```
+
+### Add PDF Documents
+
+```bash
+# Index a single PDF
+agentroot collection add /path/to/document.pdf \
+  --name research \
+  --provider pdf
+
+# Index all PDFs in a directory
+agentroot collection add /path/to/papers \
+  --name papers \
+  --mask '**/*.pdf' \
+  --provider pdf
+
+# Include hidden PDF files
+agentroot collection add /path/to/pdfs \
+  --name all-pdfs \
+  --mask '**/*.pdf' \
+  --provider pdf \
+  --config '{"exclude_hidden":"false"}'
+```
+
+### Add Database Content (SQL Provider)
+
+```bash
+# Index a table (uses first 3 columns as id, title, content)
+agentroot collection add /path/to/database.sqlite \
+  --name blog-posts \
+  --provider sql \
+  --config '{"table":"posts"}'
+
+# Index with custom query
+agentroot collection add /path/to/database.sqlite \
+  --name published-posts \
+  --provider sql \
+  --config '{"query":"SELECT id, title, content FROM posts WHERE published = 1"}'
+
+# Index with custom column mapping
+agentroot collection add /path/to/cms.sqlite \
+  --name articles \
+  --provider sql \
+  --config '{"table":"articles","id_column":"article_id","title_column":"headline","content_column":"body"}'
+
+# Index with JOIN query
+agentroot collection add /path/to/app.sqlite \
+  --name user-posts \
+  --provider sql \
+  --config '{"query":"SELECT p.id, u.username || ': ' || p.title, p.content FROM posts p JOIN users u ON p.user_id = u.id"}'
+```
+
 ### Configure File Provider Options
 
 ```bash
@@ -483,6 +554,62 @@ agentroot collection add ~/Documents/wiki --name wiki --mask '**/*.md'
 # Natural language search
 agentroot query "how to set up postgres" -c notes
 agentroot query "deployment checklist" -c wiki
+```
+
+### Index Research Papers
+
+```bash
+# 1. Add PDF collection
+agentroot collection add ~/Documents/research/papers \
+  --name research-papers \
+  --mask '**/*.pdf' \
+  --provider pdf
+
+# 2. Index PDFs
+agentroot update
+
+# 3. Generate embeddings
+agentroot embed
+
+# 4. Search by topic
+agentroot query "machine learning optimization techniques" -c research-papers
+agentroot vsearch "neural network architectures" -c research-papers
+```
+
+### Index Documentation Website
+
+```bash
+# 1. Add URL collection
+agentroot collection add https://doc.rust-lang.org/book/ \
+  --name rust-book \
+  --provider url
+
+# 2. Index content
+agentroot update
+
+# 3. Search documentation
+agentroot query "ownership and borrowing" -c rust-book
+agentroot search "lifetime" -c rust-book
+```
+
+### Index CMS or Blog Database
+
+```bash
+# 1. Add SQL collection (published posts only)
+agentroot collection add ~/blog/database.sqlite \
+  --name blog-posts \
+  --provider sql \
+  --config '{"query":"SELECT id, title, content FROM posts WHERE status = 'published' ORDER BY created_at DESC"}'
+
+# 2. Index database
+agentroot update
+
+# 3. Generate embeddings
+agentroot embed
+
+# 4. Search posts
+agentroot query "deployment strategies" -c blog-posts
+agentroot search "docker OR kubernetes" -c blog-posts
 ```
 
 ## Integration with Other Tools

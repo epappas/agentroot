@@ -133,6 +133,52 @@ Located in `crates/agentroot-core/src/providers/github.rs`:
   - `branch`: Branch name (for files)
   - `path`: File path (for files)
 
+#### URLProvider
+Located in `crates/agentroot-core/src/providers/url.rs`:
+- **Type**: "url"
+- **Features**: HTTP/HTTPS content fetching, HTML title extraction, configurable timeouts
+- **Configuration Options**:
+  - `timeout`: Request timeout in seconds (default: "30")
+  - `user_agent`: Custom User-Agent header (default: "agentroot/x.y.z")
+  - `redirect_limit`: Maximum redirects to follow (default: "10")
+- **Supported URLs**: Any HTTP/HTTPS URL
+- **Error Handling**: Gracefully handles 404, 403, 401, 429, 5xx status codes
+- **Metadata**:
+  - `url`: Original URL
+  - `status_code`: HTTP status code
+  - `content_type`: Response Content-Type header
+
+#### PDFProvider
+Located in `crates/agentroot-core/src/providers/pdf.rs`:
+- **Type**: "pdf"
+- **Features**: Text extraction from PDF files, directory scanning, title extraction
+- **Configuration Options**:
+  - `exclude_hidden`: "true" or "false" (default: "true")
+- **Supported Inputs**:
+  - Single file: `/path/to/document.pdf`
+  - Directory with pattern: `/path/to/pdfs/**/*.pdf`
+- **Error Handling**: Gracefully handles image-based PDFs (no extractable text)
+- **Metadata**:
+  - `pages`: Number of pages in PDF
+  - `file_size`: File size in bytes
+
+#### SQLProvider
+Located in `crates/agentroot-core/src/providers/sql.rs`:
+- **Type**: "sql"
+- **Features**: Index SQLite database content, table-based or custom SQL queries
+- **Configuration Options** (JSON):
+  - `table`: Table name to index (mutually exclusive with `query`)
+  - `query`: Custom SQL SELECT statement (mutually exclusive with `table`)
+  - `id_column`: Column to use for URI (default: first column)
+  - `title_column`: Column to use for title (default: second column)
+  - `content_column`: Column to use for content (default: third column)
+- **URI Format**: `sql://path/to/database.sqlite/row_id`
+- **Supported Queries**: Simple SELECT or complex JOINs
+- **Metadata**:
+  - `database`: Database file path
+  - `table`: Source table name (if applicable)
+  - `row_count`: Number of rows indexed
+
 ### Database Schema (v3)
 
 **Documents Table** (schema.rs:23-34):
@@ -180,6 +226,33 @@ db.add_collection(
     "github",
     Some(r#"{"github_token": "ghp_..."}"#),
 )?;
+
+// URL collection (index web pages)
+db.add_collection(
+    "rust-docs",
+    "https://doc.rust-lang.org/book/",
+    "**/*.html",
+    "url",
+    Some(r#"{"timeout": "60", "user_agent": "agentroot/1.0"}"#),
+)?;
+
+// PDF collection (index PDF documents)
+db.add_collection(
+    "research-papers",
+    "/path/to/papers",
+    "**/*.pdf",
+    "pdf",
+    None,
+)?;
+
+// SQL collection (index database content)
+db.add_collection(
+    "blog-posts",
+    "/path/to/blog.sqlite",
+    "SELECT id, title, content FROM posts",
+    "sql",
+    Some(r#"{"query": "SELECT id, title, content FROM posts WHERE published = 1"}"#),
+)?;
 ```
 
 **Indexing Collections**:
@@ -205,7 +278,7 @@ for item in items {
 
 ### Adding New Providers
 
-To add a new provider (e.g., URLProvider, PDFProvider):
+To add a new provider (e.g., a custom provider for your data source):
 
 1. **Create provider file**: `crates/agentroot-core/src/providers/my_provider.rs`
 2. **Implement SourceProvider trait**:

@@ -118,6 +118,36 @@ agentroot collection add https://github.com/rust-lang/rust \
   --config '{"github_token":"ghp_your_token_here"}'
 ```
 
+**Web Pages**:
+```bash
+agentroot collection add https://doc.rust-lang.org/book/ \
+  --name rust-book \
+  --provider url
+```
+
+**PDF Documents**:
+```bash
+agentroot collection add ~/Documents/papers \
+  --name research \
+  --mask '**/*.pdf' \
+  --provider pdf
+```
+
+**SQLite Databases**:
+```bash
+# Index a table
+agentroot collection add ~/blog.sqlite \
+  --name blog-posts \
+  --provider sql \
+  --config '{"table":"posts"}'
+
+# Or use a custom query
+agentroot collection add ~/blog.sqlite \
+  --name published-posts \
+  --provider sql \
+  --config '{"query":"SELECT id, title, content FROM posts WHERE published = 1"}'
+```
+
 See [Provider Documentation](providers.md) for complete details on available providers and how to use them.
 
 ### Step 2: Index Files

@@ -154,18 +154,22 @@ agentroot status  # Check document count
 **Solution**: Use supported provider types:
 
 ```bash
-# Supported providers (v0.2.0):
+# Supported providers:
 # - file (default, local filesystem)
 # - github (GitHub repositories)
+# - url (web pages via HTTP/HTTPS)
+# - pdf (PDF documents)
+# - sql (SQLite databases)
 
 # Check available providers in code:
 # See ProviderRegistry::with_defaults() in lib.rs
 
-# Example with explicit provider:
+# Examples with explicit provider:
 agentroot collection add /path --name local --provider file
-agentroot collection add https://github.com/owner/repo \
-  --name remote \
-  --provider github
+agentroot collection add https://github.com/owner/repo --provider github
+agentroot collection add https://example.com --provider url
+agentroot collection add /path/to/docs --mask '**/*.pdf' --provider pdf
+agentroot collection add /path/to/db.sqlite --provider sql
 ```
 
 ### Provider Config Parse Error
@@ -279,6 +283,234 @@ See `examples/github_provider.rs` for a complete working example.
 **Status**: This will be fixed in a future release by converting GitHubProvider to use async reqwest client.
 
 **For now**: File-based collections work perfectly via CLI. GitHub collections can be managed via the library API.
+
+### URL Provider Connection Timeout
+
+**Problem**: `HTTP error: connection timeout` or request hangs when indexing URLs
+
+**Solution**: Adjust timeout settings or check network:
+
+```bash
+# Increase timeout (default is 30 seconds)
+agentroot collection add https://example.com/docs \
+  --name docs \
+  --provider url \
+  --config '{"timeout":"120"}'
+
+# Check URL accessibility
+curl -I https://example.com/docs
+
+# Test with different user agent (some sites block default agents)
+agentroot collection add https://example.com \
+  --provider url \
+  --config '{"user_agent":"Mozilla/5.0"}'
+```
+
+### URL Provider HTTP Errors
+
+**Problem**: `HTTP error: 404`, `403`, or `401` when fetching URLs
+
+**Solution**: Verify URL and access permissions:
+
+```bash
+# 404 - Page not found
+curl -I https://example.com/missing-page  # Should return 404
+
+# 403 - Forbidden (may require authentication or user-agent)
+agentroot collection add https://example.com \
+  --provider url \
+  --config '{"user_agent":"Mozilla/5.0 (compatible; agentroot/1.0)"}'
+
+# 401 - Authentication required
+# URLProvider does not currently support authenticated requests
+# Workaround: Download content locally first
+wget -r -np -k https://example.com/docs
+agentroot collection add ./docs --name docs --provider file
+```
+
+### URL Provider SSL/TLS Errors
+
+**Problem**: `SSL error` or certificate validation fails
+
+**Solution**: Check certificate validity:
+
+```bash
+# Test SSL certificate
+curl -vI https://example.com
+
+# If certificate is self-signed or expired, download content locally
+wget --no-check-certificate -r https://example.com
+agentroot collection add ./downloaded --provider file
+```
+
+### URL Provider Too Many Redirects
+
+**Problem**: `Redirect limit exceeded` when fetching URL
+
+**Solution**: Increase redirect limit or check for redirect loops:
+
+```bash
+# Increase redirect limit (default is 10)
+agentroot collection add https://example.com \
+  --provider url \
+  --config '{"redirect_limit":"20"}'
+
+# Check redirect chain
+curl -L -I https://example.com  # Shows all redirects
+```
+
+### PDF Provider No Text Extracted
+
+**Problem**: PDF indexed but contains no content or shows empty results
+
+**Solution**: PDF may be image-based (scanned document):
+
+```bash
+# Check if PDF has extractable text
+pdftotext document.pdf - | head -20
+
+# If output is empty, PDF is image-based
+# You'll need OCR to extract text (not currently supported)
+# Workaround: Use OCR tool first
+# Example with tesseract:
+# pdftoppm document.pdf output -png
+# tesseract output.png output
+# agentroot collection add output.txt --provider file
+```
+
+Alternative: Some PDFs have copy protection that prevents text extraction. Try opening in PDF viewer and checking if text is selectable.
+
+### PDF Provider File Not Found
+
+**Problem**: `File not found` when adding PDF collection
+
+**Solution**: Verify path and file extension:
+
+```bash
+# Check file exists
+ls -la /path/to/document.pdf
+
+# Verify .pdf extension
+file /path/to/document.pdf
+# Should show: PDF document, version X.X
+
+# For directories, ensure pattern matches
+agentroot collection add /path/to/pdfs \
+  --mask '**/*.pdf' \  # Case-sensitive!
+  --provider pdf
+
+# Check for uppercase extension
+ls /path/to/pdfs/*.PDF
+# If found, add pattern:
+agentroot collection add /path/to/pdfs \
+  --mask '**/*.{pdf,PDF}' \
+  --provider pdf
+```
+
+### PDF Provider Permission Denied
+
+**Problem**: `Permission denied` when reading PDF files
+
+**Solution**: Ensure read permissions:
+
+```bash
+# Check permissions
+ls -la /path/to/document.pdf
+
+# Fix permissions
+chmod u+r /path/to/document.pdf
+
+# For directory
+chmod -R u+r /path/to/pdfs/
+```
+
+### SQL Provider Database Not Found
+
+**Problem**: `Database not found` or `unable to open database file`
+
+**Solution**: Verify database path and format:
+
+```bash
+# Check file exists
+ls -la /path/to/database.sqlite
+
+# Verify it's a valid SQLite database
+file /path/to/database.sqlite
+# Should show: SQLite 3.x database
+
+# Test with sqlite3
+sqlite3 /path/to/database.sqlite "SELECT COUNT(*) FROM sqlite_master;"
+# Should return a number (not an error)
+```
+
+### SQL Provider Invalid Query
+
+**Problem**: `SQL error: syntax error` or query fails
+
+**Solution**: Test query in sqlite3 first:
+
+```bash
+# Test query
+sqlite3 /path/to/database.sqlite
+> SELECT id, title, content FROM posts WHERE published = 1;
+
+# If query fails, fix syntax
+# Common issues:
+# - Missing quotes around string literals
+# - Invalid column names
+# - Wrong table name
+
+# Escape JSON quotes properly in shell
+agentroot collection add /path/to/db.sqlite \
+  --provider sql \
+  --config '{"query":"SELECT id, title, body FROM posts WHERE status = \"published\""}'
+```
+
+### SQL Provider Column Mapping Error
+
+**Problem**: Results have wrong titles or content
+
+**Solution**: Specify column mapping explicitly:
+
+```bash
+# Check table structure
+sqlite3 /path/to/database.sqlite
+> .schema posts
+
+# Map columns correctly
+agentroot collection add /path/to/db.sqlite \
+  --provider sql \
+  --config '{
+    "table":"posts",
+    "id_column":"post_id",
+    "title_column":"headline",
+    "content_column":"body_text"
+  }'
+```
+
+### SQL Provider Empty Results
+
+**Problem**: SQL collection created but no documents indexed
+
+**Solution**: Verify query returns rows:
+
+```bash
+# Test query
+sqlite3 /path/to/database.sqlite
+> SELECT id, title, content FROM posts;
+# Should show rows
+
+# Check if WHERE clause is too restrictive
+agentroot collection add /path/to/db.sqlite \
+  --provider sql \
+  --config '{"table":"posts"}'  # Index all rows first
+
+# Then refine with query
+agentroot collection remove posts
+agentroot collection add /path/to/db.sqlite \
+  --provider sql \
+  --config '{"query":"SELECT id, title, content FROM posts WHERE published = 1"}'
+```
 
 ## Indexing Issues
 

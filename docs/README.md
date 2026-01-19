@@ -22,10 +22,11 @@ Complete documentation for Agentroot - local semantic search for codebases and k
 
 | Document | Description |
 |----------|-------------|
-| [Provider System](providers.md) | Multi-source indexing (files, GitHub, URLs, etc.) |
+| [Provider System](providers.md) | Multi-source indexing (files, GitHub, URLs, PDFs, databases) |
 | [Semantic Chunking](semantic-chunking.md) | AST-aware code parsing and chunking |
 | [Embedding Cache](embedding-cache.md) | Content-addressable caching system |
 | [MCP Server](mcp-server.md) | Model Context Protocol integration for AI assistants |
+| [Performance](performance.md) | Performance tuning for large codebases (10K-100K+ files) |
 
 ### Reference
 
@@ -88,11 +89,14 @@ See [Getting Started Guide](getting-started.md) for detailed walkthrough.
 |------|---------|
 | Add local directory | `agentroot collection add /path --name myproject` |
 | Add GitHub repo | `agentroot collection add https://github.com/owner/repo --provider github --name repo` |
+| Add PDF directory | `agentroot collection add /path/to/pdfs --mask '**/*.pdf' --provider pdf --name pdfs` |
+| Add SQLite database | `agentroot collection add database.db --provider sql --config '{"table":"articles"}' --name articles` |
 | Update index | `agentroot update` |
 | Generate embeddings | `agentroot embed` |
 | Search (BM25) | `agentroot search "keyword"` |
 | Search (vector) | `agentroot vsearch "natural language query"` |
 | Search (hybrid) | `agentroot query "best quality search"` |
+| Filter by provider | `agentroot search "keyword" --provider pdf` |
 | List collections | `agentroot collection list` |
 | Check status | `agentroot status` |
 
@@ -109,18 +113,20 @@ See [Getting Started Guide](getting-started.md) for detailed walkthrough.
 Working code examples are in [`../examples/`](../examples/):
 
 ```bash
-# Basic search (database setup, indexing, BM25)
-cargo run --example basic_search
+# Core examples
+cargo run --example basic_search           # Database setup and BM25 search
+cargo run --example semantic_chunking      # AST-aware code parsing
+cargo run --example custom_index           # Custom indexing pipeline
 
-# Semantic chunking (AST-aware parsing)
-cargo run --example semantic_chunking
-
-# Custom indexing pipeline
-cargo run --example custom_index
-
-# GitHub provider
-cargo run --example github_provider
+# Provider examples
+cargo run --example github_provider        # Index GitHub repositories
+cargo run --example url_provider          # Index web pages
+cargo run --example pdf_provider          # Index PDF documents
+cargo run --example sql_provider          # Index SQLite databases
+cargo run --example custom_provider       # Custom provider template
 ```
+
+See [`../examples/README.md`](../examples/README.md) for detailed descriptions.
 
 ## Contributing
 

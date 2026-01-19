@@ -32,8 +32,11 @@ agentroot collection add <PATH> [OPTIONS]
 
 **Provider Types:**
 
-- **`file`** - Index local filesystem directories
+- **`file`** - Index local filesystem directories (default)
 - **`github`** - Index GitHub repositories (supports authentication)
+- **`url`** - Index web pages via HTTP/HTTPS
+- **`pdf`** - Index PDF documents (text extraction)
+- **`sql`** - Index SQLite database content
 
 **Examples:**
 
@@ -58,6 +61,35 @@ agentroot collection add https://github.com/rust-lang/rust --name rust-lang \
 # Index GitHub repository with authentication
 agentroot collection add https://github.com/myorg/private-repo --name myrepo \
   --provider github --config '{"github_token":"ghp_your_token_here"}'
+
+# Index web page
+agentroot collection add https://doc.rust-lang.org/book/ --name rust-book \
+  --provider url
+
+# Index web page with custom timeout
+agentroot collection add https://example.com/docs --name docs \
+  --provider url --config '{"timeout":"60","user_agent":"agentroot/1.0"}'
+
+# Index PDF documents
+agentroot collection add ~/Documents/papers --name research \
+  --mask '**/*.pdf' --provider pdf
+
+# Index single PDF
+agentroot collection add ~/document.pdf --name mydoc --provider pdf
+
+# Index SQLite database (table)
+agentroot collection add ~/blog.sqlite --name blog \
+  --provider sql --config '{"table":"posts"}'
+
+# Index SQLite database (custom query)
+agentroot collection add ~/cms.sqlite --name articles \
+  --provider sql \
+  --config '{"query":"SELECT id, title, content FROM posts WHERE published = 1"}'
+
+# Index database with column mapping
+agentroot collection add ~/app.sqlite --name content \
+  --provider sql \
+  --config '{"table":"articles","id_column":"article_id","title_column":"headline","content_column":"body"}'
 ```
 
 **Provider Configuration:**
@@ -68,6 +100,21 @@ File provider options (`--config` JSON keys):
 
 GitHub provider options (`--config` JSON keys):
 - `github_token` - GitHub personal access token for authentication
+
+URL provider options (`--config` JSON keys):
+- `timeout` - Request timeout in seconds (default: `30`)
+- `user_agent` - Custom User-Agent header (default: `agentroot/x.y.z`)
+- `redirect_limit` - Maximum redirects to follow (default: `10`)
+
+PDF provider options (`--config` JSON keys):
+- `exclude_hidden` - Skip hidden PDF files (default: `true`)
+
+SQL provider options (`--config` JSON keys):
+- `table` - Table name to index (mutually exclusive with `query`)
+- `query` - Custom SQL SELECT statement (mutually exclusive with `table`)
+- `id_column` - Column for URI (default: first column)
+- `title_column` - Column for title (default: second column)
+- `content_column` - Column for content (default: third column)
 
 See [Providers Documentation](providers.md) for detailed provider information.
 
