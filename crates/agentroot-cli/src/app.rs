@@ -61,6 +61,9 @@ pub enum Commands {
     /// Database cleanup
     Cleanup,
 
+    /// Manage LLM-generated metadata
+    Metadata(MetadataArgs),
+
     /// Start MCP server
     Mcp,
 }
@@ -215,6 +218,42 @@ pub struct EmbedArgs {
     /// Path to embedding model (GGUF file)
     #[arg(short, long)]
     pub model: Option<std::path::PathBuf>,
+}
+
+#[derive(Args)]
+pub struct MetadataArgs {
+    #[command(subcommand)]
+    pub action: MetadataAction,
+}
+
+#[derive(Subcommand)]
+pub enum MetadataAction {
+    /// Regenerate metadata for a collection
+    Refresh {
+        /// Collection name (or --all for all collections)
+        collection: Option<String>,
+
+        /// Regenerate for all collections
+        #[arg(long)]
+        all: bool,
+
+        /// Document ID or path to refresh (single document)
+        #[arg(long)]
+        doc: Option<String>,
+
+        /// Force regeneration even if cached
+        #[arg(short, long)]
+        force: bool,
+
+        /// Path to metadata generation model (GGUF file)
+        #[arg(short, long)]
+        model: Option<std::path::PathBuf>,
+    },
+    /// Show metadata for a document
+    Show {
+        /// Document ID (#abc123) or path
+        docid: String,
+    },
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]

@@ -231,6 +231,11 @@ impl Database {
         }
     }
 
+    /// Get metadata from LLM cache (public API)
+    pub fn get_llm_cache_public(&self, key: &str) -> Result<Option<String>> {
+        self.get_llm_cache(key)
+    }
+
     /// Get metadata from LLM cache
     fn get_llm_cache(&self, key: &str) -> Result<Option<String>> {
         let result = self.conn.query_row(

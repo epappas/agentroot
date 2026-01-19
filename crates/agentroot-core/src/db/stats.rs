@@ -10,6 +10,8 @@ pub struct DatabaseStats {
     pub document_count: usize,
     pub embedded_count: usize,
     pub pending_embedding: usize,
+    pub metadata_count: usize,
+    pub pending_metadata: usize,
 }
 
 impl Database {
@@ -45,11 +47,31 @@ impl Database {
             )
             .unwrap_or(0);
 
+        let metadata_count: i64 = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM documents WHERE active = 1 AND llm_summary IS NOT NULL",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        let pending_metadata: i64 = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM documents WHERE active = 1 AND llm_summary IS NULL",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
         Ok(DatabaseStats {
             collection_count: collection_count as usize,
             document_count: document_count as usize,
             embedded_count: embedded_count as usize,
             pending_embedding: pending_embedding as usize,
+            metadata_count: metadata_count as usize,
+            pending_metadata: pending_metadata as usize,
         })
     }
 

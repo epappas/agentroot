@@ -45,6 +45,7 @@ async fn main() -> Result<()> {
         Commands::Vsearch(args) => commands::search::run_vector(args, &db, cli.format).await,
         Commands::Query(args) => commands::search::run_hybrid(args, &db, cli.format).await,
         Commands::Cleanup => commands::cleanup::run(&db).await,
+        Commands::Metadata(args) => commands::metadata::run(args, &db, cli.format).await,
         Commands::Mcp => agentroot_mcp::start_server(&db).await,
     };
 
