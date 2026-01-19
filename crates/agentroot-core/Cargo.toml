@@ -1,0 +1,39 @@
+[package]
+name = "agentroot-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Core library for agentroot - local markdown search engine"
+
+[dependencies]
+tokio.workspace = true
+async-trait.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+sha2.workspace = true
+blake3.workspace = true
+tree-sitter.workspace = true
+tree-sitter-rust.workspace = true
+tree-sitter-python.workspace = true
+tree-sitter-javascript.workspace = true
+tree-sitter-go.workspace = true
+tree-sitter-typescript.workspace = true
+glob.workspace = true
+walkdir.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+regex.workspace = true
+lazy_static.workspace = true
+dirs.workspace = true
+chrono.workspace = true
+llama-cpp-2.workspace = true
+reqwest.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+criterion.workspace = true
+tokio = { workspace = true, features = ["test-util"] }
+
