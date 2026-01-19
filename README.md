@@ -119,6 +119,7 @@ Hybrid combines both for best results
 
 ## Features
 
+- **Multi-Source Indexing**: Pluggable provider system for indexing from local files, GitHub repositories, URLs, databases, and more
 - **Hybrid Search**: Combines BM25 full-text search with vector similarity search using Reciprocal Rank Fusion
 - **AST-Aware Chunking**: Intelligently chunks code by semantic units (functions, classes, methods) using tree-sitter
 - **Smart Cache Invalidation**: Content-addressable chunk hashing achieves 80-90% cache hit rates on re-indexing
@@ -169,6 +170,68 @@ agentroot query "error handling"       # Hybrid search (best quality)
 
 See [Getting Started Guide](docs/getting-started.md) for detailed walkthrough.
 
+## Multi-Source Indexing
+
+Agentroot can index content from multiple sources beyond local files using its pluggable provider system:
+
+### Local Files (Default)
+
+```bash
+# Add local directory
+agentroot collection add /path/to/code --name myproject --mask '**/*.rs'
+```
+
+### GitHub Repositories
+
+```bash
+# Add GitHub repository
+agentroot collection add https://github.com/rust-lang/rust \
+  --name rust-lang \
+  --mask '**/*.md' \
+  --provider github
+
+# Optionally provide GitHub token for higher rate limits
+export GITHUB_TOKEN=ghp_your_token_here
+```
+
+### Provider Architecture
+
+The provider system is extensible and designed to support:
+
+| Provider | Status | Description |
+|----------|--------|-------------|
+| **FileProvider** | ✅ Available | Local file system with glob patterns |
+| **GitHubProvider** | ✅ Available | GitHub repositories and files |
+| **URLProvider** | 🔄 Planned | Web pages and documents |
+| **PDFProvider** | 🔄 Planned | PDF document extraction |
+| **SQLProvider** | 🔄 Planned | Database content indexing |
+| **CalendarProvider** | 🔄 Planned | Calendar events and notes |
+
+Adding a new provider is simple - implement the `SourceProvider` trait and register it. See [Provider Documentation](docs/providers.md) for details.
+
+### Using Providers in Code
+
+```rust
+use agentroot_core::{Database, GitHubProvider, ProviderConfig};
+
+let db = Database::open("index.db")?;
+db.initialize()?;
+
+// Add GitHub collection
+db.add_collection(
+    "rust-docs",
+    "https://github.com/rust-lang/rust",
+    "**/*.md",
+    "github",
+    None,
+)?;
+
+// Index using provider
+db.reindex_collection("rust-docs")?;
+```
+
+See [examples/github_provider.rs](examples/github_provider.rs) for a complete working example.
+
 ## Code Examples
 
 Working code examples demonstrating library usage are available in [`examples/`](examples/):
@@ -182,6 +245,9 @@ cargo run -p agentroot-core --example semantic_chunking
 
 # Custom indexing pipeline example
 cargo run -p agentroot-core --example custom_index
+
+# GitHub provider example (indexing from GitHub repositories)
+cargo run -p agentroot-core --example github_provider
 ```
 
 All examples are production-ready, compile cleanly, and demonstrate real functionality. See [examples/README.md](examples/README.md) for details.
@@ -262,6 +328,7 @@ agentroot/
 │   ├── db/             # SQLite database layer
 │   ├── index/          # Indexing and chunking
 │   │   └── ast_chunker/  # AST-aware semantic chunking
+│   ├── providers/      # Pluggable content sources
 │   ├── search/         # Search algorithms
 │   └── llm/            # Embedding model integration
 ├── agentroot-cli/      # Command-line interface
@@ -370,6 +437,7 @@ See [AGENTS.md](AGENTS.md) for developer guidelines.
 ## Documentation
 
 - [Getting Started](docs/getting-started.md) - Step-by-step tutorial
+- [Provider System](docs/providers.md) - Multi-source indexing guide
 - [CLI Reference](docs/cli-reference.md) - Complete command reference
 - [Architecture](docs/architecture.md) - System design and components
 - [Semantic Chunking](docs/semantic-chunking.md) - AST-aware chunking details

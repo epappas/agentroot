@@ -7,13 +7,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2024-01-XX
+
 ### Added
-- Comprehensive documentation suite
-- Getting started tutorial
-- MCP server integration guide
-- Troubleshooting guide
-- Performance documentation
-- Contributing guidelines
+
+#### Provider System (Multi-Source Indexing)
+- Pluggable provider architecture for indexing from multiple sources
+- `SourceProvider` trait for implementing content sources
+- `ProviderRegistry` for managing available providers
+- `ProviderConfig` for provider-specific configuration
+- `SourceItem` data structure for unified content representation
+- `FileProvider` - Local file system with glob patterns (default)
+- `GitHubProvider` - GitHub repositories and files with API integration
+- Support for provider-specific metadata and authentication
+- Database schema v3 with source tracking columns
+- `DocumentInsert` struct with builder pattern for cleaner API
+
+#### CLI Enhancements
+- `--provider` flag for `collection add` command (file, github, url, etc.)
+- `--config` flag for provider-specific JSON configuration
+- Enhanced `collection list` output showing provider type and document count
+- Support for GitHub URLs in collection paths
+- Automatic provider detection based on path format
+
+#### Library API
+- New public exports: `FileProvider`, `GitHubProvider`, `ProviderConfig`, `ProviderRegistry`, `SourceProvider`, `SourceItem`
+- `add_collection()` now accepts 5 parameters (name, path, pattern, provider_type, provider_config)
+- `insert_doc()` method using `DocumentInsert` struct (preferred over insert_document)
+- `reindex_collection()` now uses provider system automatically
+- Backward compatible: existing file-based collections work unchanged
+
+#### Documentation
+- Comprehensive [Provider System Guide](docs/providers.md)
+- GitHub provider example (`examples/github_provider.rs`)
+- Updated README with multi-source indexing section
+- Updated getting started guide with provider usage
+- Updated AGENTS.md with provider architecture details
+- API reference updates for new signatures
+
+### Changed
+- Database schema upgraded from v2 to v3
+- `documents` table: added `source_type` and `source_uri` columns
+- `collections` table: added `provider_type` and `provider_config` columns
+- `Document` struct: added `source_type` and `source_uri` fields
+- `CollectionInfo` struct: added `provider_type` and `provider_config` fields
+- `insert_document()` signature: now requires 8 parameters (legacy method)
+- `add_collection()` signature: now requires 5 parameters (added provider support)
+- Automatic migration from schema v2 to v3 on database open
+
+### Dependencies
+- Added `base64` for GitHub API response decoding
+- Added `reqwest` blocking feature for synchronous HTTP
+- Added `tempfile` for provider tests
+
+### Fixed
+- Clippy warning: Too many arguments in `insert_document()` (now uses struct pattern)
 
 ## [0.1.0] - 2024-01-XX
 

@@ -75,11 +75,24 @@ pub struct CollectionArgs {
 pub enum CollectionAction {
     /// Add a new collection
     Add {
+        /// Path to local directory or URL (e.g., https://github.com/owner/repo)
         path: PathBuf,
+
+        /// Collection name (defaults to directory/repo name)
         #[arg(long)]
         name: Option<String>,
+
+        /// Glob pattern to match files (e.g., **/*.rs, **/*.{md,txt})
         #[arg(long, default_value = "**/*.md")]
         mask: String,
+
+        /// Provider type: file, github, url, etc. (defaults to 'file')
+        #[arg(long, default_value = "file")]
+        provider: String,
+
+        /// Provider-specific configuration as JSON (e.g., {"github_token": "ghp_..."})
+        #[arg(long)]
+        config: Option<String>,
     },
     /// List all collections
     List,

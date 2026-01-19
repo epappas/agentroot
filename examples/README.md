@@ -54,6 +54,21 @@ Demonstrates building a custom indexing pipeline:
 cargo run --example custom_index
 ```
 
+### github_provider.rs
+
+Demonstrates using the GitHub provider for multi-source indexing:
+- Fetching content from GitHub repositories
+- Fetching specific files from GitHub
+- Listing files with glob patterns
+- Using provider metadata
+- Indexing GitHub content in database
+
+```bash
+cargo run --example github_provider
+```
+
+**Note**: Requires internet connection. Set `GITHUB_TOKEN` environment variable for higher API rate limits.
+
 ## Using Agentroot as a Library
 
 Add to your `Cargo.toml`:
@@ -73,9 +88,19 @@ use agentroot_core::{Database, SearchOptions};
 fn main() -> agentroot_core::Result<()> {
     // Open database
     let db = Database::open("./agentroot.db")?;
+    db.initialize()?;
     
-    // Create collection
-    db.add_collection("myproject", "/path/to/code", "**/*.rs")?;
+    // Create collection (file-based)
+    db.add_collection("myproject", "/path/to/code", "**/*.rs", "file", None)?;
+    
+    // Or create GitHub collection
+    db.add_collection(
+        "rust-docs",
+        "https://github.com/rust-lang/rust",
+        "**/*.md",
+        "github",
+        None,
+    )?;
     
     // Search
     let options = SearchOptions::default();

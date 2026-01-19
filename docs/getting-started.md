@@ -80,9 +80,37 @@ List your collections:
 ```bash
 agentroot collection list
 # Output:
-# myproject: /path/to/your/rust/project (**/*.rs)
-# notes: /home/user/Documents/notes (**/*.md)
+# myproject: /path/to/your/rust/project (**/*.rs) [provider: file, 0 documents]
+# notes: /home/user/Documents/notes (**/*.md) [provider: file, 0 documents]
 ```
+
+#### Using Different Providers
+
+Agentroot can index content from multiple sources:
+
+**Local Files (default)**:
+```bash
+agentroot collection add /path/to/code --name mycode --mask '**/*.rs'
+```
+
+**GitHub Repositories**:
+```bash
+agentroot collection add https://github.com/rust-lang/rust \
+  --name rust-docs \
+  --mask '**/*.md' \
+  --provider github
+```
+
+**With GitHub Authentication** (for higher rate limits):
+```bash
+export GITHUB_TOKEN=ghp_your_token_here
+agentroot collection add https://github.com/rust-lang/rust \
+  --name rust-docs \
+  --mask '**/*.md' \
+  --provider github
+```
+
+See [Provider Documentation](providers.md) for complete details on available providers and how to use them.
 
 ### Step 2: Index Files
 

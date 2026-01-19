@@ -6,25 +6,39 @@ use anyhow::Result;
 
 pub async fn run(args: CollectionArgs, db: &Database) -> Result<()> {
     match args.action {
-        CollectionAction::Add { path, name, mask } => {
+        CollectionAction::Add {
+            path,
+            name,
+            mask,
+            provider,
+            config,
+        } => {
             let collection_name = name.unwrap_or_else(|| {
                 path.file_name()
                     .and_then(|n| n.to_str())
                     .unwrap_or("unnamed")
                     .to_string()
             });
-            let abs_path = path.canonicalize()?;
+
+            let base_path = if provider == "file" {
+                // For file provider, canonicalize the path
+                path.canonicalize()?.to_string_lossy().to_string()
+            } else {
+                // For other providers (GitHub, URL, etc.), use path as-is
+                path.to_string_lossy().to_string()
+            };
+
             db.add_collection(
                 &collection_name,
-                abs_path.to_str().unwrap(),
+                &base_path,
                 &mask,
-                "file",
-                None,
+                &provider,
+                config.as_deref(),
             )?;
+
             println!(
-                "Added collection '{}' at {}",
-                collection_name,
-                abs_path.display()
+                "Added collection '{}' (provider: {}, path: {})",
+                collection_name, provider, base_path
             );
         }
         CollectionAction::List => {
@@ -33,7 +47,10 @@ pub async fn run(args: CollectionArgs, db: &Database) -> Result<()> {
                 println!("No collections");
             } else {
                 for coll in collections {
-                    println!("{}: {} ({})", coll.name, coll.path, coll.pattern);
+                    println!(
+                        "{}: {} ({}) [provider: {}, {} documents]",
+                        coll.name, coll.path, coll.pattern, coll.provider_type, coll.document_count
+                    );
                 }
             }
         }
