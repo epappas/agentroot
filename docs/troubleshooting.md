@@ -59,77 +59,193 @@ source ~/.bashrc
 Verify:
 
 ```bash
-which agentroot
-# Should show: /home/user/.cargo/bin/agentroot
-```
-
-## Collection Management Issues
-
-### Collection Already Exists
-
-**Problem**: `Collection 'myproject' already exists`
-
-**Solution**: Remove the old collection first or use a different name:
-
-```bash
-# Remove old collection
-agentroot collection remove myproject
-
-# Or use different name
-agentroot collection add /path --name myproject-v2
-```
-
-### Collection Not Found
-
-**Problem**: `Collection not found: myproject`
-
-**Solution**: List existing collections to verify name:
-
-```bash
-agentroot collection list
-```
-
-Collection names are case-sensitive. Use exact name shown in list.
-
-### No Files Matched
-
-**Problem**: After adding collection, `agentroot update` shows 0 files
-
-**Solution**: Check your file mask pattern:
-
-```bash
-# Verify files exist
-ls /path/to/collection/**/*.rs
-
-# Try without mask first
-agentroot collection add /path --name test
-
-# Then add specific mask
-agentroot collection remove test
-agentroot collection add /path --name test --mask '**/*.rs'
-```
-
-Common mask patterns:
-- `**/*.rs` - All Rust files recursively
-- `*.md` - Markdown files in root only
-- `**/*.{rs,py}` - Multiple extensions (shell dependent)
-
-### Path Does Not Exist
-
-**Problem**: `IO error: No such file or directory`
-
-**Solution**: Ensure path is absolute or relative to current directory:
-
-```bash
-# Use absolute path
-agentroot collection add /home/user/projects/myapp --name myapp
-
-# Or relative to current directory
-cd ~/projects
-agentroot collection add ./myapp --name myapp
-
 # Expand ~ manually if needed
 agentroot collection add $HOME/projects/myapp --name myapp
+```
+
+## Provider-Specific Issues
+
+### GitHub API Rate Limit
+
+**Problem**: `GitHub API error: 403` or `API rate limit exceeded`
+
+**Solution**: You've hit GitHub's API rate limits:
+
+**Without authentication**:
+- Limit: 60 requests/hour
+- Solution: Set GITHUB_TOKEN
+
+```bash
+export GITHUB_TOKEN=ghp_your_token_here
+agentroot update
+```
+
+**With authentication**:
+- Limit: 5,000 requests/hour
+- Solution: Wait for rate limit reset or use local caching
+
+Check your rate limit:
+```bash
+curl -H "Authorization: token $GITHUB_TOKEN" \
+  https://api.github.com/rate_limit
+```
+
+### GitHub Repository Not Found
+
+**Problem**: `HTTP error: 404` when adding GitHub collection
+
+**Solution**: Verify repository URL and access:
+
+```bash
+# Check URL format
+# Correct: https://github.com/owner/repo
+# Wrong: git@github.com:owner/repo.git
+
+# Verify repository exists
+curl -I https://github.com/owner/repo
+
+# For private repos, ensure GITHUB_TOKEN has access
+export GITHUB_TOKEN=ghp_your_token_with_repo_access
+```
+
+### GitHub Connection Timeout
+
+**Problem**: `Network error: connection timeout`
+
+**Solution**: Check internet connection and proxy settings:
+
+```bash
+# Test GitHub connectivity
+curl -I https://github.com
+
+# Set proxy if behind firewall
+export HTTP_PROXY=http://proxy.example.com:8080
+export HTTPS_PROXY=http://proxy.example.com:8080
+
+# Try again
+agentroot update
+```
+
+### GitHub Files Not Indexed
+
+**Problem**: GitHub collection created but no files indexed
+
+**Solution**: Check pattern and repository structure:
+
+```bash
+# List collections to verify provider
+agentroot collection list
+# Should show: [provider: github, ...]
+
+# Try broader pattern first
+agentroot collection add https://github.com/owner/repo \
+  --name test \
+  --mask '**/*' \
+  --provider github
+
+agentroot update
+agentroot status  # Check document count
+```
+
+### Invalid Provider Type
+
+**Problem**: `Unknown provider type: xyz`
+
+**Solution**: Use supported provider types:
+
+```bash
+# Supported providers (v0.2.0):
+# - file (default, local filesystem)
+# - github (GitHub repositories)
+
+# Check available providers in code:
+# See ProviderRegistry::with_defaults() in lib.rs
+
+# Example with explicit provider:
+agentroot collection add /path --name local --provider file
+agentroot collection add https://github.com/owner/repo \
+  --name remote \
+  --provider github
+```
+
+### Provider Config Parse Error
+
+**Problem**: `Invalid provider config` or JSON parse error
+
+**Solution**: Provider config must be valid JSON:
+
+```bash
+# Wrong: single quotes
+agentroot collection add https://github.com/owner/repo \
+  --config '{'github_token': 'ghp_...'}'
+
+# Right: double quotes, escaped
+agentroot collection add https://github.com/owner/repo \
+  --config '{"github_token": "ghp_..."}'
+
+# Or use environment variable instead
+export GITHUB_TOKEN=ghp_...
+agentroot collection add https://github.com/owner/repo \
+  --provider github  # Uses GITHUB_TOKEN automatically
+```
+
+### File Provider with URL
+
+**Problem**: `Path does not exist` when using URL with file provider
+
+**Solution**: File provider only works with local paths. Use appropriate provider:
+
+```bash
+# Wrong: URL with file provider
+agentroot collection add https://github.com/owner/repo \
+  --provider file  # Error!
+
+# Right: Use github provider
+agentroot collection add https://github.com/owner/repo \
+  --provider github
+
+# Right: Local path with file provider
+agentroot collection add /path/to/local \
+  --provider file
+```
+
+### GitHub Large Repository Timeout
+
+**Problem**: Indexing GitHub repo times out or takes hours
+
+**Solution**: Large repositories may hit API limits or take long time:
+
+1. **Use specific file patterns**:
+```bash
+# Instead of **/*
+agentroot collection add https://github.com/owner/repo \
+  --mask '**/*.md' \  # Only markdown
+  --provider github
+```
+
+2. **Index incrementally**:
+```bash
+# First run: indexes everything (may be slow)
+agentroot update
+
+# Subsequent runs: only changed files (fast)
+agentroot update
+```
+
+3. **Monitor progress**:
+```bash
+# Use verbose mode
+agentroot update -v
+
+# Check status in another terminal
+watch -n 5 agentroot status
+```
+
+4. **Consider local clone**:
+```bash
+# For very large repos, clone locally first
+git clone https://github.com/owner/repo /tmp/repo
+agentroot collection add /tmp/repo --name local-copy
 ```
 
 ## Indexing Issues
