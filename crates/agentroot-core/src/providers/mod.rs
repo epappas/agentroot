@@ -21,15 +21,16 @@ pub use file::FileProvider;
 pub use github::GitHubProvider;
 
 /// Source provider trait - all content sources must implement this
+#[async_trait::async_trait]
 pub trait SourceProvider: Send + Sync {
     /// Provider type identifier (e.g., "file", "github", "url")
     fn provider_type(&self) -> &'static str;
 
     /// List all items from source (for scanning/indexing)
-    fn list_items(&self, config: &ProviderConfig) -> Result<Vec<SourceItem>>;
+    async fn list_items(&self, config: &ProviderConfig) -> Result<Vec<SourceItem>>;
 
     /// Fetch single item by URI
-    fn fetch_item(&self, uri: &str) -> Result<SourceItem>;
+    async fn fetch_item(&self, uri: &str) -> Result<SourceItem>;
 }
 
 /// Configuration for a provider instance
@@ -148,6 +149,12 @@ impl ProviderRegistry {
     }
 }
 
+impl Default for ProviderRegistry {
+    fn default() -> Self {
+        Self::with_defaults()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -230,11 +237,5 @@ mod tests {
             Some(&"**/*.{md,txt}".to_string())
         );
         assert_eq!(config_map.get("token"), Some(&"ghp_abc123".to_string()));
-    }
-}
-
-impl Default for ProviderRegistry {
-    fn default() -> Self {
-        Self::with_defaults()
     }
 }

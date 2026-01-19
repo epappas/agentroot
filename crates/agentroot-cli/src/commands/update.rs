@@ -29,7 +29,7 @@ pub async fn run(args: UpdateArgs, db: &Database) -> Result<()> {
             }
         }
 
-        let updated = db.reindex_collection(&coll.name)?;
+        let updated = db.reindex_collection(&coll.name).await?;
         progress.increment();
         println!("{}: {} files updated", coll.name, updated);
     }

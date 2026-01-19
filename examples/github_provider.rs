@@ -6,7 +6,8 @@
 use agentroot_core::{Database, GitHubProvider, ProviderConfig, SourceProvider};
 use chrono::Utc;
 
-fn main() -> agentroot_core::Result<()> {
+#[tokio::main]
+async fn main() -> agentroot_core::Result<()> {
     println!("Agentroot GitHub Provider Example\n");
 
     let db_path = std::env::temp_dir().join("agentroot_github_example.db");
@@ -27,7 +28,7 @@ fn main() -> agentroot_core::Result<()> {
     let provider = GitHubProvider::new();
 
     let repo_url = "https://github.com/rust-lang/rust";
-    match provider.fetch_item(repo_url) {
+    match provider.fetch_item(repo_url).await {
         Ok(item) => {
             println!("Successfully fetched:");
             println!("  URI: {}", item.uri);
@@ -67,7 +68,7 @@ fn main() -> agentroot_core::Result<()> {
 
     println!("\nFetching specific file from repository...");
     let file_url = "https://github.com/rust-lang/rust/blob/master/CONTRIBUTING.md";
-    match provider.fetch_item(file_url) {
+    match provider.fetch_item(file_url).await {
         Ok(item) => {
             println!("Successfully fetched file:");
             println!("  URI: {}", item.uri);
@@ -89,7 +90,7 @@ fn main() -> agentroot_core::Result<()> {
         "**/*.md".to_string(),
     );
 
-    match provider.list_items(&config) {
+    match provider.list_items(&config).await {
         Ok(items) => {
             println!("Found {} markdown files", items.len());
             for (i, item) in items.iter().take(5).enumerate() {

@@ -12,16 +12,16 @@ use serde::Deserialize;
 
 /// GitHub provider
 pub struct GitHubProvider {
-    client: reqwest::blocking::Client,
+    client: reqwest::Client,
 }
 
 impl GitHubProvider {
     /// Create new GitHub provider
     pub fn new() -> Self {
-        let client = reqwest::blocking::Client::builder()
+        let client = reqwest::Client::builder()
             .user_agent("agentroot/1.0")
             .build()
-            .unwrap_or_else(|_| reqwest::blocking::Client::new());
+            .unwrap_or_else(|_| reqwest::Client::new());
 
         Self { client }
     }
@@ -73,7 +73,7 @@ impl GitHubProvider {
     }
 
     /// Fetch file from GitHub
-    fn fetch_file(
+    async fn fetch_file(
         &self,
         owner: &str,
         repo: &str,
@@ -92,7 +92,7 @@ impl GitHubProvider {
             request = request.header("Authorization", format!("token {}", token));
         }
 
-        let response = request.send()?;
+        let response = request.send().await?;
 
         if !response.status().is_success() {
             return Err(AgentRootError::ExternalError(format!(
@@ -101,11 +101,11 @@ impl GitHubProvider {
             )));
         }
 
-        Ok(response.text()?)
+        Ok(response.text().await?)
     }
 
     /// Fetch README from repository
-    fn fetch_readme(
+    async fn fetch_readme(
         &self,
         owner: &str,
         repo: &str,
@@ -121,7 +121,7 @@ impl GitHubProvider {
 
         request = request.header("Accept", "application/vnd.github.v3+json");
 
-        let response = request.send()?;
+        let response = request.send().await?;
 
         if !response.status().is_success() {
             return Err(AgentRootError::ExternalError(format!(
@@ -130,7 +130,7 @@ impl GitHubProvider {
             )));
         }
 
-        let readme: ReadmeResponse = response.json()?;
+        let readme: ReadmeResponse = response.json().await?;
         let content = String::from_utf8(
             base64::engine::general_purpose::STANDARD
                 .decode(readme.content.replace('\n', ""))
@@ -144,7 +144,7 @@ impl GitHubProvider {
     }
 
     /// List files in repository
-    fn list_repo_files(
+    async fn list_repo_files(
         &self,
         owner: &str,
         repo: &str,
@@ -163,7 +163,7 @@ impl GitHubProvider {
 
         request = request.header("Accept", "application/vnd.github.v3+json");
 
-        let response = request.send()?;
+        let response = request.send().await?;
 
         if !response.status().is_success() {
             return Err(AgentRootError::ExternalError(format!(
@@ -172,7 +172,7 @@ impl GitHubProvider {
             )));
         }
 
-        let tree: TreeResponse = response.json()?;
+        let tree: TreeResponse = response.json().await?;
         Ok(tree.tree)
     }
 }
@@ -183,18 +183,21 @@ impl Default for GitHubProvider {
     }
 }
 
+#[async_trait::async_trait]
 impl SourceProvider for GitHubProvider {
     fn provider_type(&self) -> &'static str {
         "github"
     }
 
-    fn list_items(&self, config: &ProviderConfig) -> Result<Vec<SourceItem>> {
+    async fn list_items(&self, config: &ProviderConfig) -> Result<Vec<SourceItem>> {
         let github_url = self.parse_github_url(&config.base_path)?;
         let token = self.get_token(config);
 
         match github_url {
             GitHubUrl::Repository { owner, repo } => {
-                let files = self.list_repo_files(&owner, &repo, token.as_deref())?;
+                let files = self
+                    .list_repo_files(&owner, &repo, token.as_deref())
+                    .await?;
                 let pattern = glob::Pattern::new(&config.pattern)?;
 
                 let mut items = Vec::new();
@@ -205,7 +208,7 @@ impl SourceProvider for GitHubProvider {
                             "https://github.com/{}/{}/blob/HEAD/{}",
                             owner, repo, file.path
                         );
-                        match self.fetch_item(&url) {
+                        match self.fetch_item(&url).await {
                             Ok(item) => items.push(item),
                             Err(_) => continue,
                         }
@@ -215,27 +218,28 @@ impl SourceProvider for GitHubProvider {
                 Ok(items)
             }
             GitHubUrl::File { .. } => {
-                let item = self.fetch_item(&config.base_path)?;
+                let item = self.fetch_item(&config.base_path).await?;
                 Ok(vec![item])
             }
         }
     }
 
-    fn fetch_item(&self, uri: &str) -> Result<SourceItem> {
+    async fn fetch_item(&self, uri: &str) -> Result<SourceItem> {
         let github_url = self.parse_github_url(uri)?;
         let token = std::env::var("GITHUB_TOKEN").ok();
 
         match github_url {
             GitHubUrl::Repository { owner, repo } => {
-                let (filename, content) = self.fetch_readme(&owner, &repo, token.as_deref())?;
+                let (filename, content) =
+                    self.fetch_readme(&owner, &repo, token.as_deref()).await?;
                 let title = extract_title(&content, &filename);
                 let hash = hash_content(&content);
                 let uri = format!("{}/{}/{}", owner, repo, filename);
 
                 Ok(
                     SourceItem::new(uri, title, content, hash, "github".to_string())
-                        .with_metadata("owner".to_string(), owner.clone())
-                        .with_metadata("repo".to_string(), repo.clone())
+                        .with_metadata("owner".to_string(), owner)
+                        .with_metadata("repo".to_string(), repo)
                         .with_metadata("file".to_string(), filename),
                 )
             }
@@ -245,7 +249,9 @@ impl SourceProvider for GitHubProvider {
                 branch,
                 path,
             } => {
-                let content = self.fetch_file(&owner, &repo, &branch, &path, token.as_deref())?;
+                let content = self
+                    .fetch_file(&owner, &repo, &branch, &path, token.as_deref())
+                    .await?;
                 let title = extract_title(&content, &path);
                 let hash = hash_content(&content);
                 let uri = format!("{}/{}/{}", owner, repo, path);

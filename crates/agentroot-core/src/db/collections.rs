@@ -139,7 +139,7 @@ impl Database {
     }
 
     /// Reindex a collection using the provider system
-    pub fn reindex_collection(&self, name: &str) -> Result<usize> {
+    pub async fn reindex_collection(&self, name: &str) -> Result<usize> {
         let coll = self
             .get_collection(name)?
             .ok_or_else(|| crate::error::AgentRootError::CollectionNotFound(name.to_string()))?;
@@ -165,7 +165,7 @@ impl Database {
             }
         }
 
-        let items = provider.list_items(&config)?;
+        let items = provider.list_items(&config).await?;
         let mut updated = 0;
 
         for item in items {
@@ -375,8 +375,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_reindex_collection_uses_provider_system() {
+    #[tokio::test]
+    async fn test_reindex_collection_uses_provider_system() {
         use std::fs;
         use tempfile::TempDir;
 
@@ -398,7 +398,7 @@ mod tests {
         )
         .unwrap();
 
-        let updated = db.reindex_collection("test").unwrap();
+        let updated = db.reindex_collection("test").await.unwrap();
         assert_eq!(updated, 2, "Should index 2 files on first run");
 
         let collections = db.list_collections().unwrap();
@@ -434,7 +434,7 @@ mod tests {
 
         fs::write(base.join("doc1.md"), "# Document 1\nUpdated content").unwrap();
 
-        let updated2 = db.reindex_collection("test").unwrap();
+        let updated2 = db.reindex_collection("test").await.unwrap();
         assert_eq!(updated2, 1, "Should update only changed file");
 
         let collections2 = db.list_collections().unwrap();
@@ -445,7 +445,7 @@ mod tests {
 
         fs::write(base.join("doc3.md"), "# Document 3\nNew content").unwrap();
 
-        let updated3 = db.reindex_collection("test").unwrap();
+        let updated3 = db.reindex_collection("test").await.unwrap();
         assert_eq!(updated3, 1, "Should add new file");
 
         let collections3 = db.list_collections().unwrap();
@@ -455,15 +455,15 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_reindex_invalid_provider_type() {
+    #[tokio::test]
+    async fn test_reindex_invalid_provider_type() {
         let db = Database::open_in_memory().unwrap();
         db.initialize().unwrap();
 
         db.add_collection("test", "/tmp", "**/*.md", "nonexistent_provider", None)
             .unwrap();
 
-        let result = db.reindex_collection("test");
+        let result = db.reindex_collection("test").await;
         assert!(result.is_err(), "Should error on invalid provider type");
 
         match result {
@@ -475,12 +475,12 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_reindex_nonexistent_collection() {
+    #[tokio::test]
+    async fn test_reindex_nonexistent_collection() {
         let db = Database::open_in_memory().unwrap();
         db.initialize().unwrap();
 
-        let result = db.reindex_collection("nonexistent");
+        let result = db.reindex_collection("nonexistent").await;
         assert!(result.is_err(), "Should error on nonexistent collection");
 
         match result {
@@ -503,8 +503,8 @@ mod tests {
         assert!(result.is_err(), "Should error on duplicate collection name");
     }
 
-    #[test]
-    fn test_reindex_with_malformed_provider_config() {
+    #[tokio::test]
+    async fn test_reindex_with_malformed_provider_config() {
         use std::fs;
         use tempfile::TempDir;
 
@@ -524,7 +524,7 @@ mod tests {
         )
         .unwrap();
 
-        let result = db.reindex_collection("test");
+        let result = db.reindex_collection("test").await;
         assert!(
             result.is_ok(),
             "Should succeed despite malformed JSON config (uses defaults)"

@@ -39,12 +39,13 @@ impl Default for FileProvider {
     }
 }
 
+#[async_trait::async_trait]
 impl SourceProvider for FileProvider {
     fn provider_type(&self) -> &'static str {
         "file"
     }
 
-    fn list_items(&self, config: &ProviderConfig) -> Result<Vec<SourceItem>> {
+    async fn list_items(&self, config: &ProviderConfig) -> Result<Vec<SourceItem>> {
         let root = Path::new(&config.base_path);
         let pattern = Pattern::new(&config.pattern)?;
 
@@ -94,7 +95,7 @@ impl SourceProvider for FileProvider {
         Ok(items)
     }
 
-    fn fetch_item(&self, uri: &str) -> Result<SourceItem> {
+    async fn fetch_item(&self, uri: &str) -> Result<SourceItem> {
         let path = Path::new(uri);
         let content = std::fs::read_to_string(path)?;
         let title = extract_title(&content, uri);
@@ -133,8 +134,8 @@ mod tests {
         assert_eq!(provider.provider_type(), "file");
     }
 
-    #[test]
-    fn test_file_provider_list_items() {
+    #[tokio::test]
+    async fn test_file_provider_list_items() {
         let temp = TempDir::new().unwrap();
         let base = temp.path();
 
@@ -145,15 +146,15 @@ mod tests {
         let config = ProviderConfig::new(base.to_string_lossy().to_string(), "**/*.md".to_string())
             .with_option("exclude_hidden".to_string(), "false".to_string());
         let provider = FileProvider::new();
-        let items = provider.list_items(&config).unwrap();
+        let items = provider.list_items(&config).await.unwrap();
 
         assert_eq!(items.len(), 2);
         assert!(items.iter().any(|i| i.uri == "test1.md"));
         assert!(items.iter().any(|i| i.uri == "test2.md"));
     }
 
-    #[test]
-    fn test_file_provider_fetch_item() {
+    #[tokio::test]
+    async fn test_file_provider_fetch_item() {
         let temp = TempDir::new().unwrap();
         let base = temp.path();
         let file = base.join("test.md");
@@ -161,15 +162,15 @@ mod tests {
         fs::write(&file, "# Test Content").unwrap();
 
         let provider = FileProvider::new();
-        let item = provider.fetch_item(file.to_str().unwrap()).unwrap();
+        let item = provider.fetch_item(file.to_str().unwrap()).await.unwrap();
 
         assert_eq!(item.content, "# Test Content");
         assert_eq!(item.title, "Test Content");
         assert_eq!(item.source_type, "file");
     }
 
-    #[test]
-    fn test_file_provider_database_integration() {
+    #[tokio::test]
+    async fn test_file_provider_database_integration() {
         use crate::{db::hash_content, Database};
         use chrono::Utc;
 
@@ -188,7 +189,7 @@ mod tests {
         let config = ProviderConfig::new(base.to_string_lossy().to_string(), "**/*.md".to_string())
             .with_option("exclude_hidden".to_string(), "false".to_string());
         let provider = FileProvider::new();
-        let items = provider.list_items(&config).unwrap();
+        let items = provider.list_items(&config).await.unwrap();
 
         assert_eq!(items.len(), 2, "Should find 2 .md files");
 
