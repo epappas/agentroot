@@ -55,3 +55,11 @@ path = "../../examples/custom_index.rs"
 name = "github_provider"
 path = "../../examples/github_provider.rs"
 
+[[example]]
+name = "url_provider"
+path = "../../examples/url_provider.rs"
+
+[[example]]
+name = "custom_provider"
+path = "../../examples/custom_provider.rs"
+

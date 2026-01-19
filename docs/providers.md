@@ -4,20 +4,23 @@ Agentroot's provider system enables indexing content from multiple sources beyon
 
 ## Overview
 
-The provider system is based on a simple trait that any content source can implement:
+The provider system is based on a simple async trait that any content source can implement:
 
 ```rust
+#[async_trait::async_trait]
 pub trait SourceProvider: Send + Sync {
     /// Provider type identifier (e.g., "file", "github", "url")
     fn provider_type(&self) -> &'static str;
 
     /// List all items from source (for scanning/indexing)
-    fn list_items(&self, config: &ProviderConfig) -> Result<Vec<SourceItem>>;
+    async fn list_items(&self, config: &ProviderConfig) -> Result<Vec<SourceItem>>;
 
     /// Fetch single item by URI
-    fn fetch_item(&self, uri: &str) -> Result<SourceItem>;
+    async fn fetch_item(&self, uri: &str) -> Result<SourceItem>;
 }
 ```
+
+**Note**: As of v0.1.0, the provider system is fully async to support efficient network operations and proper error handling.
 
 ## Built-in Providers
 
@@ -49,20 +52,26 @@ agentroot collection add /path/to/code \
 ```rust
 use agentroot_core::Database;
 
-let db = Database::open("index.db")?;
-db.initialize()?;
+#[tokio::main]
+async fn main() -> Result<()> {
+    let db = Database::open("index.db")?;
+    db.initialize()?;
 
-// Add file-based collection
-db.add_collection(
-    "myproject",
-    "/path/to/code",
-    "**/*.rs",
-    "file",
-    None,
-)?;
+    // Add file-based collection
+    db.add_collection(
+        "myproject",
+        "/path/to/code",
+        "**/*.rs",
+        "file",
+        None,
+    )?;
 
-// Reindex using FileProvider
-db.reindex_collection("myproject")?;
+    // Reindex using FileProvider (async)
+    let count = db.reindex_collection("myproject").await?;
+    println!("Indexed {} files", count);
+
+    Ok(())
+}
 ```
 
 **Configuration Options**:
@@ -95,6 +104,9 @@ Indexes content from GitHub repositories.
 - List all files in repository
 - Glob pattern filtering
 - Authentication support
+- Automatic retry with exponential backoff for rate limits
+- Descriptive error messages with actionable suggestions
+- Rate limit monitoring and warnings
 
 **Usage (CLI)**:
 ```bash
@@ -113,20 +125,31 @@ agentroot update
 ```rust
 use agentroot_core::Database;
 
-let db = Database::open("index.db")?;
-db.initialize()?;
+#[tokio::main]
+async fn main() -> Result<()> {
+    let db = Database::open("index.db")?;
+    db.initialize()?;
 
-// Add GitHub collection
-db.add_collection(
-    "rust-docs",
-    "https://github.com/rust-lang/rust",
-    "**/*.md",
-    "github",
-    None,  // Or: Some(r#"{"github_token": "ghp_..."}"#)
-)?;
+    // Add GitHub collection
+    db.add_collection(
+        "rust-docs",
+        "https://github.com/rust-lang/rust",
+        "**/*.md",
+        "github",
+        None,  // Or: Some(r#"{"github_token": "ghp_..."}"#)
+    )?;
 
-// Reindex using GitHubProvider
-db.reindex_collection("rust-docs")?;
+    // Reindex using GitHubProvider (async with retry logic)
+    match db.reindex_collection("rust-docs").await {
+        Ok(count) => println!("Indexed {} files", count),
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            // Error messages include actionable suggestions
+        }
+    }
+
+    Ok(())
+}
 ```
 
 **Supported URL Formats**:
@@ -156,6 +179,24 @@ db.add_collection(
 - **With authentication**: 5,000 requests per hour
 
 For repositories with many files, authentication is strongly recommended.
+
+**Automatic Rate Limit Handling**:
+
+The GitHub provider automatically handles rate limits:
+- **Retry logic**: Automatically retries failed requests up to 3 times with exponential backoff
+- **Rate limit warnings**: Warns when fewer than 10 requests remain
+- **Proper 429 handling**: Respects `Retry-After` headers from GitHub
+- **Timeout retry**: Automatically retries transient network failures
+
+**Error Messages**:
+
+The provider provides descriptive error messages with actionable suggestions:
+- **404**: "File not found: {path}. Verify the repository, branch, and file path are correct."
+- **403**: "GitHub API rate limit exceeded. Set GITHUB_TOKEN environment variable..."
+- **401**: "Authentication failed. Your GITHUB_TOKEN may be invalid or expired..."
+- **409**: "Repository {owner}/{repo} is empty or has no commits yet."
+
+All error messages include links to GitHub's token generation page when authentication is needed.
 
 **Metadata Captured**:
 - `owner`: Repository owner
@@ -244,27 +285,33 @@ use agentroot_core::{ProviderConfig, SourceItem, SourceProvider, Result};
 
 pub struct MyProvider {
     // Provider state (API clients, config, etc.)
+    client: reqwest::Client,
 }
 
 impl MyProvider {
     pub fn new() -> Self {
-        Self {}
+        Self {
+            client: reqwest::Client::new(),
+        }
     }
 }
 
+#[async_trait::async_trait]
 impl SourceProvider for MyProvider {
     fn provider_type(&self) -> &'static str {
         "myprovider"
     }
 
-    fn list_items(&self, config: &ProviderConfig) -> Result<Vec<SourceItem>> {
+    async fn list_items(&self, config: &ProviderConfig) -> Result<Vec<SourceItem>> {
         // Implement: fetch all items matching config.pattern
+        // Use async/await for network operations
         let items = vec![]; // Your implementation here
         Ok(items)
     }
 
-    fn fetch_item(&self, uri: &str) -> Result<SourceItem> {
+    async fn fetch_item(&self, uri: &str) -> Result<SourceItem> {
         // Implement: fetch single item by URI
+        // Use async/await for network operations
         todo!()
     }
 }
@@ -294,14 +341,14 @@ mod tests {
         assert_eq!(provider.provider_type(), "myprovider");
     }
 
-    #[test]
-    fn test_list_items() {
+    #[tokio::test]
+    async fn test_list_items() {
         let provider = MyProvider::new();
         let config = ProviderConfig::new(
             "https://example.com".to_string(),
             "**/*.txt".to_string(),
         );
-        let items = provider.list_items(&config).unwrap();
+        let items = provider.list_items(&config).await.unwrap();
         assert!(!items.is_empty());
     }
 }
@@ -328,7 +375,7 @@ impl ProviderRegistry {
 
 ### Example: URL Provider
 
-Here's a complete example of a URL provider:
+Here's a complete example of an async URL provider:
 
 ```rust
 use agentroot_core::{ProviderConfig, SourceItem, SourceProvider, Result};
@@ -336,43 +383,56 @@ use agentroot_core::error::AgentRootError;
 use agentroot_core::db::hash_content;
 
 pub struct URLProvider {
-    client: reqwest::blocking::Client,
+    client: reqwest::Client,
 }
 
 impl URLProvider {
     pub fn new() -> Self {
-        let client = reqwest::blocking::Client::builder()
+        let client = reqwest::Client::builder()
             .user_agent("agentroot/1.0")
+            .timeout(std::time::Duration::from_secs(30))
             .build()
-            .unwrap_or_else(|_| reqwest::blocking::Client::new());
+            .unwrap_or_else(|_| reqwest::Client::new());
         Self { client }
     }
 
-    fn fetch_url(&self, url: &str) -> Result<String> {
-        let response = self.client.get(url).send()?;
+    async fn fetch_url(&self, url: &str) -> Result<String> {
+        let response = self.client.get(url).send().await.map_err(|e| {
+            AgentRootError::ExternalError(format!(
+                "Failed to fetch URL: {}. Check your internet connection.",
+                e
+            ))
+        })?;
+
         if !response.status().is_success() {
+            let status = response.status();
             return Err(AgentRootError::ExternalError(format!(
-                "HTTP error: {}",
-                response.status()
+                "HTTP error {}: {}",
+                status.as_u16(),
+                status.canonical_reason().unwrap_or("Unknown error")
             )));
         }
-        Ok(response.text()?)
+
+        response.text().await.map_err(|e| {
+            AgentRootError::ExternalError(format!("Failed to read response body: {}", e))
+        })
     }
 }
 
+#[async_trait::async_trait]
 impl SourceProvider for URLProvider {
     fn provider_type(&self) -> &'static str {
         "url"
     }
 
-    fn list_items(&self, config: &ProviderConfig) -> Result<Vec<SourceItem>> {
+    async fn list_items(&self, config: &ProviderConfig) -> Result<Vec<SourceItem>> {
         // For URLs, base_path is the URL to fetch
-        let item = self.fetch_item(&config.base_path)?;
+        let item = self.fetch_item(&config.base_path).await?;
         Ok(vec![item])
     }
 
-    fn fetch_item(&self, uri: &str) -> Result<SourceItem> {
-        let content = self.fetch_url(uri)?;
+    async fn fetch_item(&self, uri: &str) -> Result<SourceItem> {
+        let content = self.fetch_url(uri).await?;
         let title = uri.split('/').last().unwrap_or(uri).to_string();
         let hash = hash_content(&content);
 
@@ -436,6 +496,56 @@ agentroot collection add https://github.com/tokio-rs/tokio --name tokio --provid
 
 # Search both
 agentroot query "async runtime performance"
+```
+
+### Collection Management via MCP
+
+Agentroot provides MCP (Model Context Protocol) tools for managing collections programmatically:
+
+**Available MCP Tools**:
+- `collection_add`: Add a new collection
+- `collection_remove`: Remove a collection
+- `collection_update`: Reindex a collection
+- `status`: View provider statistics
+
+**Example Usage (via MCP)**:
+```json
+{
+  "name": "collection_add",
+  "arguments": {
+    "name": "rust-docs",
+    "path": "https://github.com/rust-lang/rust",
+    "pattern": "**/*.md",
+    "provider": "github",
+    "config": "{\"github_token\": \"ghp_...\"}"
+  }
+}
+```
+
+**Search with Provider Filter**:
+```json
+{
+  "name": "search",
+  "arguments": {
+    "query": "async runtime",
+    "provider": "github",
+    "limit": 10
+  }
+}
+```
+
+This filters search results to only show documents from GitHub collections.
+
+**Provider Statistics**:
+
+The `status` MCP tool now shows per-provider statistics:
+```json
+{
+  "providers": [
+    {"provider": "file", "collections": 2, "documents": 150},
+    {"provider": "github", "collections": 3, "documents": 45}
+  ]
+}
 ```
 
 ## Best Practices
