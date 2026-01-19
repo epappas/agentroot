@@ -171,7 +171,7 @@ See [Getting Started Guide](docs/getting-started.md) for detailed walkthrough.
 
 ## Code Examples
 
-Working code examples demonstrating library usage are available in [`crates/agentroot-core/examples/`](crates/agentroot-core/examples/):
+Working code examples demonstrating library usage are available in [`examples/`](examples/):
 
 ```bash
 # Basic search example (database setup, indexing, BM25 search)
@@ -184,7 +184,7 @@ cargo run -p agentroot-core --example semantic_chunking
 cargo run -p agentroot-core --example custom_index
 ```
 
-All examples are production-ready, compile cleanly, and demonstrate real functionality. See [examples/README.md](crates/agentroot-core/examples/README.md) for details.
+All examples are production-ready, compile cleanly, and demonstrate real functionality. See [examples/README.md](examples/README.md) for details.
 
 ## Commands
 

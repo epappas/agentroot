@@ -37,3 +37,15 @@ proptest.workspace = true
 criterion.workspace = true
 tokio = { workspace = true, features = ["test-util"] }
 
+[[example]]
+name = "basic_search"
+path = "../../examples/basic_search.rs"
+
+[[example]]
+name = "semantic_chunking"
+path = "../../examples/semantic_chunking.rs"
+
+[[example]]
+name = "custom_index"
+path = "../../examples/custom_index.rs"
+

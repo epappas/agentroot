@@ -8,10 +8,10 @@ From the workspace root:
 
 ```bash
 # Run an example
-cargo run --example basic_search
+cargo run -p agentroot-core --example basic_search
 
 # With debug logging
-RUST_LOG=debug cargo run --example basic_search
+RUST_LOG=debug cargo run -p agentroot-core --example basic_search
 ```
 
 ## Examples
