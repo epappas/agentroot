@@ -205,7 +205,7 @@ The hash includes context (leading/trailing trivia) so that changes to comments 
 
 ## Oversized Chunk Handling
 
-When a semantic unit exceeds the maximum chunk size (default: 2000 chars), it's split using striding:
+When a semantic unit exceeds the maximum chunk size (default: 3200 chars), it's split using striding:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -219,14 +219,11 @@ When a semantic unit exceeds the maximum chunk size (default: 2000 chars), it's 
 │  Split into overlapping strides:                                 │
 │                                                                  │
 │  ┌──────────────────────┐                                       │
-│  │ Stride 0 (0-2000)    │ breadcrumb: "very_large_function[0]"  │
+│  │ Stride 0 (0-3200)    │ breadcrumb: "very_large_function[0]"  │
 │  └──────────────────────┘                                       │
 │           ┌──────────────────────┐                              │
-│           │ Stride 1 (1700-3700) │ 300 char overlap             │
+│           │ Stride 1 (2720-5000) │ 480 char overlap             │
 │           └──────────────────────┘                              │
-│                    ┌──────────────────────┐                     │
-│                    │ Stride 2 (3400-5000) │                     │
-│                    └──────────────────────┘                     │
 │                                                                  │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -269,8 +266,8 @@ For unsupported languages, Agentroot falls back to character-based chunking with
 ```rust
 pub fn chunk_by_chars(
     content: &str,
-    chunk_size: usize,    // 2000 chars
-    overlap: usize        // 300 chars (15%)
+    chunk_size: usize,    // 3200 chars
+    overlap: usize        // 480 chars (15%)
 ) -> Vec<Chunk>
 ```
 
@@ -323,14 +320,14 @@ Note: The `impl` block is chunked as a whole, and individual methods within it a
 
 ```rust
 let chunker = SemanticChunker::new()
-    .with_max_chunk_chars(3000);  // Default: 2000
+    .with_max_chunk_chars(4000);  // Default: 3200
 ```
 
 ### Chunk Size Constants
 
 ```rust
-pub const CHUNK_SIZE_CHARS: usize = 2000;
-pub const CHUNK_OVERLAP_CHARS: usize = 300;  // 15% overlap
+pub const CHUNK_SIZE_CHARS: usize = 3200;
+pub const CHUNK_OVERLAP_CHARS: usize = 480;  // 15% overlap
 ```
 
 ## Performance
