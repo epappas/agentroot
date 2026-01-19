@@ -75,7 +75,7 @@ fn main() -> agentroot_core::Result<()> {
     let db = Database::open("./agentroot.db")?;
     
     // Create collection
-    db.create_collection("myproject", "/path/to/code", "**/*.rs")?;
+    db.add_collection("myproject", "/path/to/code", "**/*.rs")?;
     
     // Search
     let options = SearchOptions::default();
