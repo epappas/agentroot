@@ -15,35 +15,61 @@ Complete reference for all Agentroot commands.
 
 ### collection add
 
-Add a new collection to the index.
+Add a new collection to the index from various sources (local files, GitHub, etc.).
 
 ```bash
 agentroot collection add <PATH> [OPTIONS]
 ```
 
 **Arguments:**
-- `<PATH>` - Directory path to index
+- `<PATH>` - Source path or URL (filesystem path, GitHub repository URL, etc.)
 
 **Options:**
-- `--name <NAME>` - Collection name (defaults to directory name)
-- `--mask <PATTERN>` - Glob pattern for files to include (can be repeated)
-- `--exclude <PATTERN>` - Glob pattern for files to exclude (can be repeated)
+- `--name <NAME>` - Collection name (defaults to directory/repository name)
+- `--mask <PATTERN>` - Glob pattern for files to include (default: `**/*.md`)
+- `--provider <TYPE>` - Provider type: `file` (default), `github`, etc.
+- `--config <JSON>` - Provider-specific configuration (JSON format)
+
+**Provider Types:**
+
+- **`file`** - Index local filesystem directories
+- **`github`** - Index GitHub repositories (supports authentication)
 
 **Examples:**
 
 ```bash
-# Index all files in a directory
+# Index local directory (file provider - default)
 agentroot collection add ~/Documents/notes --name mynotes
 
-# Index only Rust files
+# Index Rust files only
 agentroot collection add ./src --name rust-code --mask '**/*.rs'
 
 # Index markdown and text files
-agentroot collection add ./docs --name docs --mask '**/*.md' --mask '**/*.txt'
+agentroot collection add ./docs --name docs --mask '**/*.md'
 
-# Exclude test directories
-agentroot collection add ./src --name code --mask '**/*.py' --exclude '**/test/**'
+# Index with custom file provider options
+agentroot collection add ./project --name myproject --mask '**/*.{rs,toml}' \
+  --config '{"exclude_hidden":"false","follow_symlinks":"true"}'
+
+# Index GitHub repository
+agentroot collection add https://github.com/rust-lang/rust --name rust-lang \
+  --provider github --mask '**/*.md'
+
+# Index GitHub repository with authentication
+agentroot collection add https://github.com/myorg/private-repo --name myrepo \
+  --provider github --config '{"github_token":"ghp_your_token_here"}'
 ```
+
+**Provider Configuration:**
+
+File provider options (`--config` JSON keys):
+- `exclude_hidden` - Skip hidden files/directories (default: `true`)
+- `follow_symlinks` - Follow symbolic links (default: `true`)
+
+GitHub provider options (`--config` JSON keys):
+- `github_token` - GitHub personal access token for authentication
+
+See [Providers Documentation](providers.md) for detailed provider information.
 
 ### collection list
 

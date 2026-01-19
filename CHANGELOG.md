@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Critical**: Database migration not running automatically on `initialize()` - schema v2 databases now properly upgrade to v3
+- **Critical**: Foreign key constraint violation in `reindex_collection()` when updating documents - content now inserted before document reference update
+- CLI exit handling causing tokio runtime panic (partial fix - simplified exit code handling)
+
+### Added
+- Comprehensive test suite for provider system (85 tests total, up from 71)
+- Database migration verification test (`test_migration_v2_to_v3`)
+- FileProvider end-to-end integration tests
+- JSON configuration parsing tests (5 tests covering valid, empty, invalid, nested, and special characters)
+- Error handling tests for invalid providers (4 tests)
+- Standalone reindex verification examples
+
+### Changed
+- Database `initialize()` now calls `migrate()` before setting schema version to ensure proper upgrades
+- Test coverage increased by 20% (14 new tests added)
+
 ## [0.2.0] - 2024-01-XX
 
 ### Added

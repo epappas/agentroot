@@ -248,6 +248,38 @@ git clone https://github.com/owner/repo /tmp/repo
 agentroot collection add /tmp/repo --name local-copy
 ```
 
+### CLI Update Command Panics with GitHub Collections
+
+**Problem**: `agentroot update` crashes with "Cannot drop a runtime in a context where blocking is not allowed"
+
+**Root Cause**: This is a known issue with the GitHubProvider using `reqwest::blocking::Client` in an async tokio context. The core provider system works correctly (verified by unit tests), but CLI runtime handling has limitations.
+
+**Workaround**: Use the library API directly for GitHub collections:
+
+```rust
+use agentroot_core::Database;
+
+let db = Database::open(Database::default_path())?;
+db.initialize()?;
+
+// Add GitHub collection
+db.add_collection("rust-docs", 
+    "https://github.com/rust-lang/rust", 
+    "**/*.md", 
+    "github", 
+    None)?;
+
+// Reindex (works correctly)
+let updated = db.reindex_collection("rust-docs")?;
+println!("Updated {} files", updated);
+```
+
+See `examples/github_provider.rs` for a complete working example.
+
+**Status**: This will be fixed in a future release by converting GitHubProvider to use async reqwest client.
+
+**For now**: File-based collections work perfectly via CLI. GitHub collections can be managed via the library API.
+
 ## Indexing Issues
 
 ### Database Locked

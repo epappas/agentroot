@@ -101,13 +101,21 @@ agentroot collection add https://github.com/rust-lang/rust \
   --provider github
 ```
 
-**With GitHub Authentication** (for higher rate limits):
+**With GitHub Authentication** (for higher rate limits and private repos):
 ```bash
+# Option 1: Use environment variable
 export GITHUB_TOKEN=ghp_your_token_here
 agentroot collection add https://github.com/rust-lang/rust \
   --name rust-docs \
   --mask '**/*.md' \
   --provider github
+
+# Option 2: Pass token in config (more explicit)
+agentroot collection add https://github.com/rust-lang/rust \
+  --name rust-docs \
+  --mask '**/*.md' \
+  --provider github \
+  --config '{"github_token":"ghp_your_token_here"}'
 ```
 
 See [Provider Documentation](providers.md) for complete details on available providers and how to use them.
