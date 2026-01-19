@@ -18,6 +18,7 @@ agentroot/
 │   │   ├── src/
 │   │   │   ├── db/          # Database layer (schema, collections, documents, vectors)
 │   │   │   ├── index/       # Indexing (scanner, parser, chunker, ast_chunker)
+│   │   │   ├── providers/   # Source providers (file, github, url, etc.)
 │   │   │   ├── search/      # Search (bm25, vector, hybrid)
 │   │   │   ├── llm/         # LLM integration (embedder, reranker, expander)
 │   │   │   └── lib.rs
@@ -52,6 +53,184 @@ agentroot/
 └── AGENTS.md              # This file
 ```
 
+## Provider Architecture
+
+Agentroot uses a pluggable provider system to index content from multiple sources beyond local files.
+
+### Provider Trait
+Located in `crates/agentroot-core/src/providers/mod.rs:25-35`:
+```rust
+pub trait SourceProvider: Send + Sync {
+    /// Provider type identifier (e.g., "file", "github", "url")
+    fn provider_type(&self) -> &'static str;
+
+    /// List all items from source (for scanning/indexing)
+    fn list_items(&self, config: &ProviderConfig) -> Result<Vec<SourceItem>>;
+
+    /// Fetch single item by URI
+    fn fetch_item(&self, uri: &str) -> Result<SourceItem>;
+}
+```
+
+### Data Structures
+
+**ProviderConfig** (mod.rs:38-49):
+```rust
+pub struct ProviderConfig {
+    pub base_path: String,        // Base path/URL for the provider
+    pub pattern: String,           // Pattern to match items (glob, etc.)
+    pub options: HashMap<String, String>, // Provider-specific options
+}
+```
+
+**SourceItem** (mod.rs:74-84):
+```rust
+pub struct SourceItem {
+    pub uri: String,               // Unique identifier within collection
+    pub title: String,             // Display title
+    pub content: String,           // Full content
+    pub hash: String,              // Content hash (SHA-256)
+    pub source_type: String,       // Provider type
+    pub metadata: HashMap<String, String>, // Provider-specific metadata
+}
+```
+
+**ProviderRegistry** (mod.rs:119-160):
+```rust
+pub struct ProviderRegistry {
+    providers: HashMap<String, Arc<dyn SourceProvider>>,
+}
+
+impl ProviderRegistry {
+    pub fn with_defaults() -> Self  // Creates registry with FileProvider and GitHubProvider
+    pub fn register(&mut self, provider: Arc<dyn SourceProvider>)
+    pub fn get(&self, provider_type: &str) -> Option<Arc<dyn SourceProvider>>
+}
+```
+
+### Built-in Providers
+
+#### FileProvider
+Located in `crates/agentroot-core/src/providers/file.rs`:
+- **Type**: "file"
+- **Features**: Glob patterns, exclude dirs/hidden files, symlink following
+- **Configuration Options**:
+  - `exclude_hidden`: "true" or "false" (default: "true")
+  - `follow_symlinks`: "true" or "false" (default: "true")
+- **Excluded Directories**: node_modules, .git, .cache, vendor, dist, build, __pycache__, .venv, target
+
+#### GitHubProvider
+Located in `crates/agentroot-core/src/providers/github.rs`:
+- **Type**: "github"
+- **Features**: Repository README, specific files, file listing
+- **Authentication**: Via `GITHUB_TOKEN` env var or `github_token` option
+- **Supported URLs**:
+  - Repository: `https://github.com/owner/repo`
+  - File: `https://github.com/owner/repo/blob/branch/path`
+- **Metadata**:
+  - `owner`: Repository owner
+  - `repo`: Repository name
+  - `branch`: Branch name (for files)
+  - `path`: File path (for files)
+
+### Database Schema (v3)
+
+**Documents Table** (schema.rs:23-34):
+```sql
+CREATE TABLE documents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    collection TEXT NOT NULL,
+    path TEXT NOT NULL,
+    title TEXT NOT NULL,
+    hash TEXT NOT NULL REFERENCES content(hash),
+    created_at TEXT NOT NULL,
+    modified_at TEXT NOT NULL,
+    active INTEGER NOT NULL DEFAULT 1,
+    source_type TEXT NOT NULL DEFAULT 'file',  -- Provider type
+    source_uri TEXT,                           -- Original URI
+    UNIQUE(collection, path)
+);
+```
+
+**Collections Table** (schema.rs:80-88):
+```sql
+CREATE TABLE collections (
+    name TEXT PRIMARY KEY,
+    path TEXT NOT NULL,
+    pattern TEXT NOT NULL DEFAULT '**/*.md',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    provider_type TEXT NOT NULL DEFAULT 'file',  -- Provider type
+    provider_config TEXT                          -- JSON configuration
+);
+```
+
+### Using Providers
+
+**Creating Collections**:
+```rust
+// File-based collection (backward compatible)
+db.add_collection("my-docs", "/path/to/docs", "**/*.md", "file", None)?;
+
+// GitHub collection
+db.add_collection(
+    "rust-lang",
+    "https://github.com/rust-lang/rust",
+    "**/*.md",
+    "github",
+    Some(r#"{"github_token": "ghp_..."}"#),
+)?;
+```
+
+**Indexing Collections**:
+```rust
+// Uses provider system automatically
+db.reindex_collection("my-docs")?;
+db.reindex_collection("rust-lang")?;
+```
+
+**Direct Provider Usage**:
+```rust
+let provider = GitHubProvider::new();
+let config = ProviderConfig::new(
+    "https://github.com/rust-lang/rust".to_string(),
+    "**/*.md".to_string(),
+);
+
+let items = provider.list_items(&config)?;
+for item in items {
+    println!("{}: {}", item.uri, item.title);
+}
+```
+
+### Adding New Providers
+
+To add a new provider (e.g., URLProvider, PDFProvider):
+
+1. **Create provider file**: `crates/agentroot-core/src/providers/my_provider.rs`
+2. **Implement SourceProvider trait**:
+   ```rust
+   pub struct MyProvider;
+   
+   impl SourceProvider for MyProvider {
+       fn provider_type(&self) -> &'static str { "myprovider" }
+       fn list_items(&self, config: &ProviderConfig) -> Result<Vec<SourceItem>> { /* ... */ }
+       fn fetch_item(&self, uri: &str) -> Result<SourceItem> { /* ... */ }
+   }
+   ```
+3. **Add to module**: Update `providers/mod.rs`:
+   ```rust
+   pub mod my_provider;
+   pub use my_provider::MyProvider;
+   ```
+4. **Register in ProviderRegistry**: Update `ProviderRegistry::with_defaults()`:
+   ```rust
+   registry.register(Arc::new(MyProvider::new()));
+   ```
+5. **Export from lib.rs**: Add to public API
+6. **Add tests**: Create tests in provider file
+7. **Add example**: Create `examples/my_provider.rs`
+
 ## Technical Constants
 
 ### Chunking Configuration
@@ -81,7 +260,7 @@ pub const DEFAULT_EMBED_MODEL: &str = "nomic-embed-text-v1.5.Q4_K_M.gguf";
 ### Database Schema Version
 Located in `crates/agentroot-core/src/db/schema.rs`:
 ```rust
-const SCHEMA_VERSION: i32 = 2;
+const SCHEMA_VERSION: i32 = 3;
 ```
 
 ## Core Data Models
@@ -127,6 +306,8 @@ pub struct Document {
     pub created_at: String,
     pub modified_at: String,
     pub active: bool,
+    pub source_type: String,
+    pub source_uri: Option<String>,
 }
 
 pub struct DocumentResult {
@@ -153,6 +334,8 @@ pub struct CollectionInfo {
     pub document_count: usize,
     pub created_at: String,
     pub updated_at: String,
+    pub provider_type: String,
+    pub provider_config: Option<String>,
 }
 ```
 
@@ -176,8 +359,14 @@ Database::default_path() -> PathBuf
 ### Collection Operations
 Located in `crates/agentroot-core/src/db/collections.rs`:
 ```rust
-// Add a new collection
-db.add_collection(name: &str, path: &str, pattern: &str) -> Result<()>
+// Add a new collection (5 parameters)
+db.add_collection(
+    name: &str,
+    path: &str,
+    pattern: &str,
+    provider_type: &str,         // "file", "github", "url", etc.
+    provider_config: Option<&str>, // JSON config string
+) -> Result<()>
 
 // Remove collection and its documents
 db.remove_collection(name: &str) -> Result<bool>
@@ -190,6 +379,9 @@ db.list_collections() -> Result<Vec<CollectionInfo>>
 
 // Get collection by name
 db.get_collection(name: &str) -> Result<Option<CollectionInfo>>
+
+// Reindex collection using provider system
+db.reindex_collection(name: &str) -> Result<usize>
 ```
 
 **CRITICAL**: Use `add_collection()`, NOT `create_collection()`. The latter does not exist.
@@ -197,22 +389,33 @@ db.get_collection(name: &str) -> Result<Option<CollectionInfo>>
 ### Document Operations
 Located in `crates/agentroot-core/src/db/documents.rs`:
 ```rust
-// Insert new document (6 parameters)
+// Insert new document (8 parameters - legacy method)
 db.insert_document(
     collection: &str,
     path: &str,
     title: &str,
     hash: &str,
-    created_at: &str,    // ISO 8601 timestamp
-    modified_at: &str,   // ISO 8601 timestamp
+    created_at: &str,        // ISO 8601 timestamp
+    modified_at: &str,       // ISO 8601 timestamp
+    source_type: &str,       // "file", "github", etc.
+    source_uri: Option<&str>, // Original URI
 ) -> Result<i64>
+
+// Insert new document (preferred method using struct)
+db.insert_doc(doc: &DocumentInsert) -> Result<i64>
+
+// DocumentInsert builder pattern
+let doc = DocumentInsert::new(collection, path, title, hash, created_at, modified_at)
+    .with_source_type("github")
+    .with_source_uri("https://github.com/rust-lang/rust");
+db.insert_doc(&doc)?;
 
 // Get document by various methods
 db.get_document(file: &str) -> Result<Option<DocumentResult>>
 db.get_documents_by_pattern(pattern: &str) -> Result<Vec<DocumentResult>>
 ```
 
-**CRITICAL**: `insert_document()` requires 6 parameters including both `created_at` and `modified_at` timestamps in ISO 8601 format (RFC 3339).
+**CRITICAL**: `insert_document()` now requires 8 parameters including `source_type` and `source_uri`. Prefer using `insert_doc()` with `DocumentInsert` struct for cleaner code.
 
 ### Search Operations
 Located in `crates/agentroot-core/src/search/`:
@@ -670,7 +873,7 @@ Based on verified bugs found during development:
 
 1. **Wrong API Method**:
    - ❌ `db.create_collection()` - Does NOT exist
-   - ✅ `db.add_collection(name, path, pattern)` - Correct method
+   - ✅ `db.add_collection(name, path, pattern, provider_type, provider_config)` - Correct method (5 parameters)
 
 2. **Missing Database Initialization**:
    - ❌ `let db = Database::open(path)?;` - Database won't work
@@ -681,8 +884,9 @@ Based on verified bugs found during development:
    - ✅ `chunk.chunk_type` - Direct field on SemanticChunk
 
 4. **Missing Parameters in insert_document()**:
-   - ❌ `db.insert_document(collection, path, title, hash)` - Missing 2 params
-   - ✅ `db.insert_document(collection, path, title, hash, created_at, modified_at)` - All 6 required
+   - ❌ `db.insert_document(collection, path, title, hash)` - Missing 4 params
+   - ✅ `db.insert_document(collection, path, title, hash, created_at, modified_at, source_type, source_uri)` - All 8 required
+   - Better: Use `DocumentInsert` struct with builder pattern
 
 5. **Wrong Constants in Documentation**:
    - ❌ `CHUNK_SIZE_CHARS = 2000` - Old incorrect value
