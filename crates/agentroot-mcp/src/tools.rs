@@ -394,7 +394,11 @@ pub async fn handle_query(db: &Database, args: Value) -> Result<ToolResult> {
 
     let fused_results = agentroot_core::search::rrf_fusion(&bm25_results, &vec_results);
 
-    let final_results: Vec<_> = fused_results.into_iter().take(options.limit).collect();
+    let final_results: Vec<_> = fused_results
+        .into_iter()
+        .filter(|r| r.score >= options.min_score)
+        .take(options.limit)
+        .collect();
 
     let summary = format!(
         "Found {} results for \"{}\" (hybrid search)",
