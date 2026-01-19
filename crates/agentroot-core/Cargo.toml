@@ -32,6 +32,7 @@ chrono.workspace = true
 llama-cpp-2.workspace = true
 reqwest.workspace = true
 base64.workspace = true
+pdf-extract.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true
@@ -62,6 +63,14 @@ path = "../../examples/url_provider.rs"
 [[example]]
 name = "custom_provider"
 path = "../../examples/custom_provider.rs"
+
+[[example]]
+name = "pdf_provider"
+path = "../../examples/pdf_provider.rs"
+
+[[example]]
+name = "sql_provider"
+path = "../../examples/sql_provider.rs"
 
 [[bench]]
 name = "indexing"

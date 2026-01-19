@@ -23,7 +23,8 @@ pub use error::{AgentRootError, Error, Result};
 pub use index::{chunk_semantic, ChunkType, SemanticChunk, SemanticChunker};
 pub use llm::{Embedder, LlamaEmbedder, DEFAULT_EMBED_MODEL};
 pub use providers::{
-    FileProvider, GitHubProvider, ProviderConfig, ProviderRegistry, SourceItem, SourceProvider,
+    FileProvider, GitHubProvider, PDFProvider, ProviderConfig, ProviderRegistry, SQLProvider,
+    SourceItem, SourceProvider, URLProvider,
 };
 pub use search::{SearchOptions, SearchResult, SearchSource};
 

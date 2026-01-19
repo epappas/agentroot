@@ -16,9 +16,15 @@ use std::sync::Arc;
 
 pub mod file;
 pub mod github;
+pub mod pdf;
+pub mod sql;
+pub mod url;
 
 pub use file::FileProvider;
 pub use github::GitHubProvider;
+pub use pdf::PDFProvider;
+pub use sql::SQLProvider;
+pub use url::URLProvider;
 
 /// Source provider trait - all content sources must implement this
 #[async_trait::async_trait]
@@ -134,6 +140,9 @@ impl ProviderRegistry {
         let mut registry = Self::new();
         registry.register(Arc::new(FileProvider::new()));
         registry.register(Arc::new(GitHubProvider::new()));
+        registry.register(Arc::new(PDFProvider::new()));
+        registry.register(Arc::new(SQLProvider::new()));
+        registry.register(Arc::new(URLProvider::new()));
         registry
     }
 
