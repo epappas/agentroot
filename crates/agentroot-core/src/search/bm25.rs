@@ -18,7 +18,12 @@ impl Database {
                 d.modified_at,
                 c.doc,
                 LENGTH(c.doc),
-                1.0 / (1.0 + (-1.0 * bm25(documents_fts, 1.0, 10.0, 1.0))) as score
+                1.0 / (1.0 + (-1.0 * bm25(documents_fts, 1.0, 10.0, 1.0))) as score,
+                d.llm_summary,
+                d.llm_title,
+                d.llm_keywords,
+                d.llm_category,
+                d.llm_difficulty
             FROM documents_fts fts
             JOIN documents d ON d.id = fts.rowid
             JOIN content c ON c.hash = d.hash
@@ -53,6 +58,10 @@ impl Database {
                 rusqlite::params_from_iter(params_vec.iter().map(|p| p.as_ref())),
                 |row| {
                     let score: f64 = row.get(8)?;
+                    let keywords_json: Option<String> = row.get(11)?;
+                    let keywords = keywords_json
+                        .and_then(|json| serde_json::from_str::<Vec<String>>(&json).ok());
+
                     Ok(SearchResult {
                         filepath: row.get(0)?,
                         display_path: row.get(1)?,
@@ -71,6 +80,11 @@ impl Database {
                         score,
                         source: SearchSource::Bm25,
                         chunk_pos: None,
+                        llm_summary: row.get(9)?,
+                        llm_title: row.get(10)?,
+                        llm_keywords: keywords,
+                        llm_category: row.get(12)?,
+                        llm_difficulty: row.get(13)?,
                     })
                 },
             )?

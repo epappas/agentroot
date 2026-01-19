@@ -21,7 +21,10 @@ pub use config::{CollectionConfig, Config};
 pub use db::Database;
 pub use error::{AgentRootError, Error, Result};
 pub use index::{chunk_semantic, ChunkType, SemanticChunk, SemanticChunker};
-pub use llm::{Embedder, LlamaEmbedder, DEFAULT_EMBED_MODEL};
+pub use llm::{
+    DocumentMetadata, Embedder, LlamaEmbedder, LlamaMetadataGenerator, MetadataContext,
+    MetadataGenerator, DEFAULT_EMBED_MODEL, DEFAULT_METADATA_MODEL,
+};
 pub use providers::{
     FileProvider, GitHubProvider, PDFProvider, ProviderConfig, ProviderRegistry, SQLProvider,
     SourceItem, SourceProvider, URLProvider,

@@ -56,6 +56,11 @@ pub struct SearchResult {
     pub score: f64,
     pub source: SearchSource,
     pub chunk_pos: Option<usize>,
+    pub llm_summary: Option<String>,
+    pub llm_title: Option<String>,
+    pub llm_keywords: Option<Vec<String>>,
+    pub llm_category: Option<String>,
+    pub llm_difficulty: Option<String>,
 }
 
 /// Source of search result

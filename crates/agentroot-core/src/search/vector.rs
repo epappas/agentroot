@@ -101,7 +101,12 @@ impl Database {
                 d.modified_at,
                 c.doc,
                 LENGTH(c.doc),
-                cv.pos
+                cv.pos,
+                d.llm_summary,
+                d.llm_title,
+                d.llm_keywords,
+                d.llm_category,
+                d.llm_difficulty
              FROM documents d
              JOIN content c ON c.hash = d.hash
              JOIN content_vectors cv ON cv.hash = d.hash
@@ -109,6 +114,10 @@ impl Database {
              LIMIT 1",
             rusqlite::params![hash],
             |row| {
+                let keywords_json: Option<String> = row.get(11)?;
+                let keywords =
+                    keywords_json.and_then(|json| serde_json::from_str::<Vec<String>>(&json).ok());
+
                 Ok(SearchResult {
                     filepath: row.get(0)?,
                     display_path: row.get(1)?,
@@ -127,6 +136,11 @@ impl Database {
                     score: score as f64,
                     source: SearchSource::Vector,
                     chunk_pos: Some(row.get(8)?),
+                    llm_summary: row.get(9)?,
+                    llm_title: row.get(10)?,
+                    llm_keywords: keywords,
+                    llm_category: row.get(12)?,
+                    llm_difficulty: row.get(13)?,
                 })
             },
         );
