@@ -45,14 +45,5 @@ async fn main() -> Result<()> {
         Commands::Mcp => agentroot_mcp::start_server(&db).await,
     };
 
-    match result {
-        Ok(()) => std::process::exit(0),
-        Err(e) => {
-            eprintln!("Error: {}", e);
-            if let Some(core_err) = e.downcast_ref::<agentroot_core::AgentRootError>() {
-                std::process::exit(core_err.exit_code());
-            }
-            std::process::exit(1)
-        }
-    }
+    result
 }
