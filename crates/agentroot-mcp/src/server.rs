@@ -1,10 +1,10 @@
 //! MCP server implementation
 
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
-use agentroot_core::Database;
 use crate::protocol::*;
 use crate::tools;
+use agentroot_core::Database;
 use anyhow::Result;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
 
 pub struct McpServer<'a> {
     db: &'a Database,
@@ -39,7 +39,8 @@ impl<'a> McpServer<'a> {
             let request: JsonRpcRequest = match serde_json::from_str(trimmed) {
                 Ok(r) => r,
                 Err(e) => {
-                    let response = JsonRpcResponse::error(None, -32700, &format!("Parse error: {}", e));
+                    let response =
+                        JsonRpcResponse::error(None, -32700, &format!("Parse error: {}", e));
                     self.write_response(&mut writer, &response).await?;
                     continue;
                 }
@@ -109,11 +110,15 @@ impl<'a> McpServer<'a> {
     }
 
     async fn handle_tools_call(&self, request: &JsonRpcRequest) -> JsonRpcResponse {
-        let name = request.params.get("name")
+        let name = request
+            .params
+            .get("name")
             .and_then(|v| v.as_str())
             .unwrap_or("");
 
-        let arguments = request.params.get("arguments")
+        let arguments = request
+            .params
+            .get("arguments")
             .cloned()
             .unwrap_or(serde_json::json!({}));
 
@@ -128,16 +133,22 @@ impl<'a> McpServer<'a> {
         };
 
         match result {
-            Ok(tool_result) => {
-                JsonRpcResponse::success(request.id.clone(), serde_json::to_value(tool_result).unwrap())
-            }
+            Ok(tool_result) => JsonRpcResponse::success(
+                request.id.clone(),
+                serde_json::to_value(tool_result).unwrap(),
+            ),
             Err(e) => {
                 let error_result = ToolResult {
-                    content: vec![Content::Text { text: format!("Error: {}", e) }],
+                    content: vec![Content::Text {
+                        text: format!("Error: {}", e),
+                    }],
                     structured_content: None,
                     is_error: Some(true),
                 };
-                JsonRpcResponse::success(request.id.clone(), serde_json::to_value(error_result).unwrap())
+                JsonRpcResponse::success(
+                    request.id.clone(),
+                    serde_json::to_value(error_result).unwrap(),
+                )
             }
         }
     }
@@ -152,7 +163,10 @@ impl<'a> McpServer<'a> {
             "title": "Agentroot Query Guide",
             "description": "How to effectively search your knowledge base"
         })];
-        JsonRpcResponse::success(request.id.clone(), serde_json::json!({ "prompts": prompts }))
+        JsonRpcResponse::success(
+            request.id.clone(),
+            serde_json::json!({ "prompts": prompts }),
+        )
     }
 }
 

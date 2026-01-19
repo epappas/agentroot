@@ -1,7 +1,7 @@
 //! MCP resource handlers
 
-use agentroot_core::Database;
 use crate::protocol::ResourceContent;
+use agentroot_core::Database;
 use anyhow::Result;
 
 /// Read a resource by URI
@@ -22,10 +22,12 @@ pub async fn read_resource(db: &Database, uri: &str) -> Result<ResourceContent> 
     let collection = parts[0];
     let path = parts[1];
 
-    let doc = db.find_active_document(collection, path)?
+    let doc = db
+        .find_active_document(collection, path)?
         .ok_or_else(|| anyhow::anyhow!("Document not found: {}", uri))?;
 
-    let content = db.get_content(&doc.hash)?
+    let content = db
+        .get_content(&doc.hash)?
         .ok_or_else(|| anyhow::anyhow!("Content not found for: {}", uri))?;
 
     Ok(ResourceContent {

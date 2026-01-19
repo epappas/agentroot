@@ -1,9 +1,9 @@
 //! MCP tool definitions and handlers
 
-use agentroot_core::{Database, SearchOptions};
-use serde_json::Value;
-use anyhow::Result;
 use crate::protocol::*;
+use agentroot_core::{Database, SearchOptions};
+use anyhow::Result;
+use serde_json::Value;
 
 pub fn search_tool_definition() -> ToolDefinition {
     ToolDefinition {
@@ -166,28 +166,35 @@ pub fn status_tool_definition() -> ToolDefinition {
 }
 
 pub async fn handle_search(db: &Database, args: Value) -> Result<ToolResult> {
-    let query = args.get("query")
+    let query = args
+        .get("query")
         .and_then(|v| v.as_str())
         .ok_or_else(|| anyhow::anyhow!("Missing query"))?;
 
     let options = SearchOptions {
         limit: args.get("limit").and_then(|v| v.as_u64()).unwrap_or(20) as usize,
         min_score: args.get("minScore").and_then(|v| v.as_f64()).unwrap_or(0.0),
-        collection: args.get("collection").and_then(|v| v.as_str()).map(String::from),
+        collection: args
+            .get("collection")
+            .and_then(|v| v.as_str())
+            .map(String::from),
         full_content: false,
     };
 
     let results = db.search_fts(query, &options)?;
 
     let summary = format!("Found {} results for \"{}\"", results.len(), query);
-    let structured: Vec<Value> = results.iter().map(|r| {
-        serde_json::json!({
-            "docid": format!("#{}", r.docid),
-            "file": r.display_path,
-            "title": r.title,
-            "score": (r.score * 100.0).round() / 100.0
+    let structured: Vec<Value> = results
+        .iter()
+        .map(|r| {
+            serde_json::json!({
+                "docid": format!("#{}", r.docid),
+                "file": r.display_path,
+                "title": r.title,
+                "score": (r.score * 100.0).round() / 100.0
+            })
         })
-    }).collect();
+        .collect();
 
     Ok(ToolResult {
         content: vec![Content::Text { text: summary }],
@@ -200,7 +207,7 @@ pub async fn handle_vsearch(db: &Database, _args: Value) -> Result<ToolResult> {
     if !db.has_vector_index() {
         return Ok(ToolResult {
             content: vec![Content::Text {
-                text: "Vector index not found. Run 'agentroot embed' first.".to_string()
+                text: "Vector index not found. Run 'agentroot embed' first.".to_string(),
             }],
             structured_content: None,
             is_error: Some(true),
@@ -209,7 +216,9 @@ pub async fn handle_vsearch(db: &Database, _args: Value) -> Result<ToolResult> {
 
     // TODO: Implement when embedder is available
     Ok(ToolResult {
-        content: vec![Content::Text { text: "Vector search not yet implemented".to_string() }],
+        content: vec![Content::Text {
+            text: "Vector search not yet implemented".to_string(),
+        }],
         structured_content: None,
         is_error: Some(true),
     })
@@ -221,11 +230,13 @@ pub async fn handle_query(db: &Database, args: Value) -> Result<ToolResult> {
 }
 
 pub async fn handle_get(db: &Database, args: Value) -> Result<ToolResult> {
-    let file = args.get("file")
+    let file = args
+        .get("file")
         .and_then(|v| v.as_str())
         .ok_or_else(|| anyhow::anyhow!("Missing file"))?;
 
-    let doc = db.find_by_docid(file)?
+    let doc = db
+        .find_by_docid(file)?
         .ok_or_else(|| anyhow::anyhow!("Document not found: {}", file))?;
 
     let body = doc.body.unwrap_or_default();
@@ -238,7 +249,7 @@ pub async fn handle_get(db: &Database, args: Value) -> Result<ToolResult> {
                 title: Some(doc.title),
                 mime_type: "text/markdown".to_string(),
                 text: body,
-            }
+            },
         }],
         structured_content: None,
         is_error: None,
@@ -246,23 +257,25 @@ pub async fn handle_get(db: &Database, args: Value) -> Result<ToolResult> {
 }
 
 pub async fn handle_multi_get(db: &Database, args: Value) -> Result<ToolResult> {
-    let pattern = args.get("pattern")
+    let pattern = args
+        .get("pattern")
         .and_then(|v| v.as_str())
         .ok_or_else(|| anyhow::anyhow!("Missing pattern"))?;
 
     let docs = db.fuzzy_find_documents(pattern, 10)?;
 
-    let contents: Vec<Content> = docs.into_iter().map(|doc| {
-        Content::Resource {
+    let contents: Vec<Content> = docs
+        .into_iter()
+        .map(|doc| Content::Resource {
             resource: ResourceContent {
                 uri: doc.filepath,
                 name: doc.display_path,
                 title: Some(doc.title),
                 mime_type: "text/markdown".to_string(),
                 text: doc.body.unwrap_or_default(),
-            }
-        }
-    }).collect();
+            },
+        })
+        .collect();
 
     Ok(ToolResult {
         content: contents,
@@ -288,7 +301,11 @@ pub async fn handle_status(db: &Database) -> Result<ToolResult> {
         } else {
             "Up to date".to_string()
         },
-        if has_vector { "Available" } else { "Not created" }
+        if has_vector {
+            "Available"
+        } else {
+            "Not created"
+        }
     );
 
     let structured = serde_json::json!({
