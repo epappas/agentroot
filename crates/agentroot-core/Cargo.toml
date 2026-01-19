@@ -51,3 +51,7 @@ path = "../../examples/semantic_chunking.rs"
 name = "custom_index"
 path = "../../examples/custom_index.rs"
 
+[[example]]
+name = "github_provider"
+path = "../../examples/github_provider.rs"
+
