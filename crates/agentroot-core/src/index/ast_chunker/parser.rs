@@ -1,15 +1,19 @@
 //! Tree-sitter parser wrapper
 
-use tree_sitter::{Parser, Tree, Language as TsLanguage};
 use super::language::Language;
 use crate::error::{Error, Result};
+use tree_sitter::{Language as TsLanguage, Parser, Tree};
 
 /// Parse source code into a tree-sitter AST
 pub fn parse(source: &str, language: Language) -> Result<Tree> {
     let mut parser = Parser::new();
     let ts_language = get_tree_sitter_language(language);
-    parser.set_language(&ts_language).map_err(|e| Error::Parse(e.to_string()))?;
-    parser.parse(source, None).ok_or_else(|| Error::Parse("Failed to parse source".to_string()))
+    parser
+        .set_language(&ts_language)
+        .map_err(|e| Error::Parse(e.to_string()))?;
+    parser
+        .parse(source, None)
+        .ok_or_else(|| Error::Parse("Failed to parse source".to_string()))
 }
 
 /// Get the tree-sitter language for a Language enum variant.

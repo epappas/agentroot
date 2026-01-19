@@ -1,8 +1,8 @@
 //! Context operations
 
-use rusqlite::params;
-use crate::error::Result;
 use super::Database;
+use crate::error::Result;
+use rusqlite::params;
 
 /// Context info
 #[derive(Debug, Clone, serde::Serialize)]
@@ -25,17 +25,19 @@ impl Database {
 
     /// List all contexts
     pub fn list_contexts(&self) -> Result<Vec<ContextInfo>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT path, context, created_at FROM contexts ORDER BY path"
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT path, context, created_at FROM contexts ORDER BY path")?;
 
-        let results = stmt.query_map([], |row| {
-            Ok(ContextInfo {
-                path: row.get(0)?,
-                context: row.get(1)?,
-                created_at: row.get(2)?,
-            })
-        })?.collect::<std::result::Result<Vec<_>, _>>()?;
+        let results = stmt
+            .query_map([], |row| {
+                Ok(ContextInfo {
+                    path: row.get(0)?,
+                    context: row.get(1)?,
+                    created_at: row.get(2)?,
+                })
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
 
         Ok(results)
     }
@@ -49,10 +51,11 @@ impl Database {
                  WHERE ctx.path = 'agentroot://' || c.name || '/'
                     OR ctx.path = '/'
              )
-             ORDER BY c.name"
+             ORDER BY c.name",
         )?;
 
-        let results = stmt.query_map([], |row| row.get(0))?
+        let results = stmt
+            .query_map([], |row| row.get(0))?
             .collect::<std::result::Result<Vec<_>, _>>()?;
 
         Ok(results)
@@ -60,10 +63,9 @@ impl Database {
 
     /// Remove context for a path
     pub fn remove_context(&self, path: &str) -> Result<bool> {
-        let rows = self.conn.execute(
-            "DELETE FROM contexts WHERE path = ?1",
-            params![path],
-        )?;
+        let rows = self
+            .conn
+            .execute("DELETE FROM contexts WHERE path = ?1", params![path])?;
         Ok(rows > 0)
     }
 
@@ -73,7 +75,7 @@ impl Database {
             "SELECT context FROM contexts
              WHERE ?1 LIKE path || '%'
              ORDER BY LENGTH(path) DESC
-             LIMIT 1"
+             LIMIT 1",
         )?;
 
         let result = stmt.query_row(params![virtual_path], |row| row.get(0));

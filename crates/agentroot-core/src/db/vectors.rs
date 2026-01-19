@@ -2,10 +2,10 @@
 //!
 //! Stores embeddings as BLOBs and computes cosine similarity in Rust.
 
-use rusqlite::params;
-use chrono::Utc;
-use crate::error::Result;
 use super::Database;
+use crate::error::Result;
+use chrono::Utc;
+use rusqlite::params;
 
 /// Result of looking up a cached embedding
 #[derive(Debug, Clone)]
@@ -69,45 +69,53 @@ impl Database {
 
     /// Check if vector index exists and has data
     pub fn has_vector_index(&self) -> bool {
-        self.conn.query_row(
-            "SELECT COUNT(*) FROM content_vectors",
-            [],
-            |row| row.get::<_, i64>(0),
-        ).map(|count| count > 0).unwrap_or(false)
+        self.conn
+            .query_row("SELECT COUNT(*) FROM content_vectors", [], |row| {
+                row.get::<_, i64>(0)
+            })
+            .map(|count| count > 0)
+            .unwrap_or(false)
     }
 
     /// Get all embeddings for similarity search
     pub fn get_all_embeddings(&self) -> Result<Vec<(String, Vec<f32>)>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT hash_seq, embedding FROM embeddings"
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT hash_seq, embedding FROM embeddings")?;
 
-        let results = stmt.query_map([], |row| {
-            let hash_seq: String = row.get(0)?;
-            let embedding_bytes: Vec<u8> = row.get(1)?;
-            let embedding = bytes_to_embedding(&embedding_bytes);
-            Ok((hash_seq, embedding))
-        })?.collect::<std::result::Result<Vec<_>, _>>()?;
+        let results = stmt
+            .query_map([], |row| {
+                let hash_seq: String = row.get(0)?;
+                let embedding_bytes: Vec<u8> = row.get(1)?;
+                let embedding = bytes_to_embedding(&embedding_bytes);
+                Ok((hash_seq, embedding))
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
 
         Ok(results)
     }
 
     /// Get embeddings for specific hashes (for filtered search)
-    pub fn get_embeddings_for_collection(&self, collection: &str) -> Result<Vec<(String, Vec<f32>)>> {
+    pub fn get_embeddings_for_collection(
+        &self,
+        collection: &str,
+    ) -> Result<Vec<(String, Vec<f32>)>> {
         let mut stmt = self.conn.prepare(
             "SELECT e.hash_seq, e.embedding
              FROM embeddings e
              JOIN content_vectors cv ON e.hash_seq = cv.hash || '_' || cv.seq
              JOIN documents d ON d.hash = cv.hash AND d.active = 1
-             WHERE d.collection = ?1"
+             WHERE d.collection = ?1",
         )?;
 
-        let results = stmt.query_map(params![collection], |row| {
-            let hash_seq: String = row.get(0)?;
-            let embedding_bytes: Vec<u8> = row.get(1)?;
-            let embedding = bytes_to_embedding(&embedding_bytes);
-            Ok((hash_seq, embedding))
-        })?.collect::<std::result::Result<Vec<_>, _>>()?;
+        let results = stmt
+            .query_map(params![collection], |row| {
+                let hash_seq: String = row.get(0)?;
+                let embedding_bytes: Vec<u8> = row.get(1)?;
+                let embedding = bytes_to_embedding(&embedding_bytes);
+                Ok((hash_seq, embedding))
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
 
         Ok(results)
     }
@@ -117,12 +125,12 @@ impl Database {
         let mut stmt = self.conn.prepare(
             "SELECT c.hash, c.doc FROM content c
              JOIN documents d ON d.hash = c.hash AND d.active = 1
-             WHERE c.hash NOT IN (SELECT DISTINCT hash FROM content_vectors)"
+             WHERE c.hash NOT IN (SELECT DISTINCT hash FROM content_vectors)",
         )?;
 
-        let results = stmt.query_map([], |row| {
-            Ok((row.get(0)?, row.get(1)?))
-        })?.collect::<std::result::Result<Vec<_>, _>>()?;
+        let results = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
 
         Ok(results)
     }
@@ -145,10 +153,8 @@ impl Database {
 
         self.conn.execute("BEGIN IMMEDIATE", [])?;
         let result = (|| {
-            self.conn.execute(
-                "DELETE FROM content_vectors WHERE hash = ?1",
-                params![hash],
-            )?;
+            self.conn
+                .execute("DELETE FROM content_vectors WHERE hash = ?1", params![hash])?;
             // Use GLOB instead of LIKE to avoid issues with special characters.
             // GLOB uses * and ? as wildcards, which won't appear in SHA-256 hex hashes.
             let rows = self.conn.execute(
@@ -170,12 +176,12 @@ impl Database {
     pub fn get_all_hashes_for_embedding(&self) -> Result<Vec<(String, String)>> {
         let mut stmt = self.conn.prepare(
             "SELECT c.hash, c.doc FROM content c
-             JOIN documents d ON d.hash = c.hash AND d.active = 1"
+             JOIN documents d ON d.hash = c.hash AND d.active = 1",
         )?;
 
-        let results = stmt.query_map([], |row| {
-            Ok((row.get(0)?, row.get(1)?))
-        })?.collect::<std::result::Result<Vec<_>, _>>()?;
+        let results = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
 
         Ok(results)
     }
@@ -189,7 +195,12 @@ impl Database {
     }
 
     /// Look up a cached embedding by chunk hash (performs dimension check)
-    pub fn get_cached_embedding(&self, chunk_hash: &str, model: &str, expected_dims: usize) -> Result<CacheLookupResult> {
+    pub fn get_cached_embedding(
+        &self,
+        chunk_hash: &str,
+        model: &str,
+        expected_dims: usize,
+    ) -> Result<CacheLookupResult> {
         if !self.check_model_compatibility(model, expected_dims)? {
             return Ok(CacheLookupResult::ModelMismatch);
         }
@@ -197,7 +208,11 @@ impl Database {
     }
 
     /// Look up a cached embedding by chunk hash (skips dimension check - caller must verify compatibility)
-    pub fn get_cached_embedding_fast(&self, chunk_hash: &str, model: &str) -> Result<CacheLookupResult> {
+    pub fn get_cached_embedding_fast(
+        &self,
+        chunk_hash: &str,
+        model: &str,
+    ) -> Result<CacheLookupResult> {
         let result = self.conn.query_row(
             "SELECT embedding FROM chunk_embeddings WHERE chunk_hash = ?1 AND model = ?2",
             params![chunk_hash, model],
@@ -261,9 +276,9 @@ impl Database {
             "SELECT seq, chunk_hash FROM content_vectors WHERE hash = ?1 AND chunk_hash IS NOT NULL"
         )?;
 
-        let results = stmt.query_map(params![doc_hash], |row| {
-            Ok((row.get(0)?, row.get(1)?))
-        })?.collect::<std::result::Result<Vec<_>, _>>()?;
+        let results = stmt
+            .query_map(params![doc_hash], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
 
         Ok(results)
     }

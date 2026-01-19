@@ -1,9 +1,11 @@
 //! JavaScript/TypeScript-specific chunking strategy
 
-use tree_sitter::Node;
-use super::{ChunkingStrategy, line_numbers, get_breadcrumb};
-use crate::index::ast_chunker::types::{SemanticChunk, ChunkType, ChunkMetadata, compute_chunk_hash};
+use super::{get_breadcrumb, line_numbers, ChunkingStrategy};
 use crate::error::Result;
+use crate::index::ast_chunker::types::{
+    compute_chunk_hash, ChunkMetadata, ChunkType, SemanticChunk,
+};
+use tree_sitter::Node;
 
 const JS_SEMANTIC_NODES: &[&str] = &[
     "function_declaration",
@@ -23,11 +25,15 @@ pub struct JavaScriptStrategy {
 
 impl JavaScriptStrategy {
     pub fn javascript() -> Self {
-        Self { is_typescript: false }
+        Self {
+            is_typescript: false,
+        }
     }
 
     pub fn typescript() -> Self {
-        Self { is_typescript: true }
+        Self {
+            is_typescript: true,
+        }
     }
 }
 
@@ -50,7 +56,9 @@ impl ChunkingStrategy for JavaScriptStrategy {
 
     fn chunk_type_for_node(&self, node: Node) -> ChunkType {
         match node.kind() {
-            "function_declaration" | "function_expression" | "arrow_function" => ChunkType::Function,
+            "function_declaration" | "function_expression" | "arrow_function" => {
+                ChunkType::Function
+            }
             "class_declaration" => ChunkType::Class,
             "method_definition" => ChunkType::Method,
             "interface_declaration" => ChunkType::Interface,
@@ -110,7 +118,11 @@ fn extract_js_chunks(
             };
 
             let chunk_hash = compute_chunk_hash(&text, &leading, &trailing);
-            let lang: &'static str = if strategy.is_typescript { "typescript" } else { "javascript" };
+            let lang: &'static str = if strategy.is_typescript {
+                "typescript"
+            } else {
+                "javascript"
+            };
 
             let chunk = SemanticChunk {
                 text,
@@ -218,8 +230,8 @@ fn is_variable_with_function(node: Node) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::index::ast_chunker::parser::parse;
     use crate::index::ast_chunker::language::Language;
+    use crate::index::ast_chunker::parser::parse;
 
     #[test]
     fn test_extract_function() {

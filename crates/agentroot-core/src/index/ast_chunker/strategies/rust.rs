@@ -1,9 +1,11 @@
 //! Rust-specific chunking strategy
 
-use tree_sitter::Node;
-use super::{ChunkingStrategy, line_numbers, get_breadcrumb};
-use crate::index::ast_chunker::types::{SemanticChunk, ChunkType, ChunkMetadata, compute_chunk_hash};
+use super::{get_breadcrumb, line_numbers, ChunkingStrategy};
 use crate::error::Result;
+use crate::index::ast_chunker::types::{
+    compute_chunk_hash, ChunkMetadata, ChunkType, SemanticChunk,
+};
+use tree_sitter::Node;
 
 const RUST_SEMANTIC_NODES: &[&str] = &[
     "function_item",
@@ -124,8 +126,8 @@ fn has_child_kind(node: Node, kind: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::index::ast_chunker::parser::parse;
     use crate::index::ast_chunker::language::Language;
+    use crate::index::ast_chunker::parser::parse;
 
     #[test]
     fn test_extract_function() {

@@ -5,20 +5,20 @@
 //! - sqlite-vec vector storage
 //! - Content-addressable storage
 
-mod schema;
-mod content;
-mod documents;
-pub mod vectors;
 mod collections;
+mod content;
 mod context;
+mod documents;
+mod schema;
 mod stats;
+pub mod vectors;
 
-pub use schema::Database;
-pub use content::{hash_content, docid_from_hash};
 pub use collections::CollectionInfo;
+pub use content::{docid_from_hash, hash_content};
 pub use context::ContextInfo;
-pub use vectors::CacheLookupResult;
+pub use schema::Database;
 use std::path::PathBuf;
+pub use vectors::CacheLookupResult;
 
 impl Database {
     /// Get the default database path

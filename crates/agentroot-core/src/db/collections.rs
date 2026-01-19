@@ -1,9 +1,9 @@
 //! Collection operations
 
-use rusqlite::params;
-use chrono::Utc;
-use crate::error::Result;
 use super::Database;
+use crate::error::Result;
+use chrono::Utc;
+use rusqlite::params;
 
 /// Collection info
 #[derive(Debug, Clone, serde::Serialize)]
@@ -37,10 +37,9 @@ impl Database {
         )?;
 
         // Remove collection
-        let rows = self.conn.execute(
-            "DELETE FROM collections WHERE name = ?1",
-            params![name],
-        )?;
+        let rows = self
+            .conn
+            .execute("DELETE FROM collections WHERE name = ?1", params![name])?;
 
         Ok(rows > 0)
     }
@@ -70,19 +69,21 @@ impl Database {
             "SELECT c.name, c.path, c.pattern, c.created_at, c.updated_at,
                     (SELECT COUNT(*) FROM documents d WHERE d.collection = c.name AND d.active = 1)
              FROM collections c
-             ORDER BY c.name"
+             ORDER BY c.name",
         )?;
 
-        let results = stmt.query_map([], |row| {
-            Ok(CollectionInfo {
-                name: row.get(0)?,
-                path: row.get(1)?,
-                pattern: row.get(2)?,
-                created_at: row.get(3)?,
-                updated_at: row.get(4)?,
-                document_count: row.get::<_, i64>(5)? as usize,
-            })
-        })?.collect::<std::result::Result<Vec<_>, _>>()?;
+        let results = stmt
+            .query_map([], |row| {
+                Ok(CollectionInfo {
+                    name: row.get(0)?,
+                    path: row.get(1)?,
+                    pattern: row.get(2)?,
+                    created_at: row.get(3)?,
+                    updated_at: row.get(4)?,
+                    document_count: row.get::<_, i64>(5)? as usize,
+                })
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
 
         Ok(results)
     }
@@ -94,14 +95,16 @@ impl Database {
                     (SELECT COUNT(*) FROM documents d WHERE d.collection = c.name AND d.active = 1)
              FROM collections c WHERE c.name = ?1",
             params![name],
-            |row| Ok(CollectionInfo {
-                name: row.get(0)?,
-                path: row.get(1)?,
-                pattern: row.get(2)?,
-                created_at: row.get(3)?,
-                updated_at: row.get(4)?,
-                document_count: row.get::<_, i64>(5)? as usize,
-            }),
+            |row| {
+                Ok(CollectionInfo {
+                    name: row.get(0)?,
+                    path: row.get(1)?,
+                    pattern: row.get(2)?,
+                    created_at: row.get(3)?,
+                    updated_at: row.get(4)?,
+                    document_count: row.get::<_, i64>(5)? as usize,
+                })
+            },
         );
         match result {
             Ok(info) => Ok(Some(info)),
@@ -122,7 +125,8 @@ impl Database {
 
     /// Reindex a collection (scan files and update database)
     pub fn reindex_collection(&self, name: &str) -> Result<usize> {
-        let coll = self.get_collection(name)?
+        let coll = self
+            .get_collection(name)?
             .ok_or_else(|| crate::error::AgentRootError::CollectionNotFound(name.to_string()))?;
 
         let path = std::path::Path::new(&coll.path);

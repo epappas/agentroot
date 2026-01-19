@@ -2,14 +2,14 @@
 //!
 //! File scanning, parsing, and chunking for document indexing.
 
-mod scanner;
-mod parser;
+pub mod ast_chunker;
 mod chunker;
 mod embedder;
-pub mod ast_chunker;
+mod parser;
+mod scanner;
 
-pub use scanner::*;
-pub use parser::*;
+pub use ast_chunker::{chunk_semantic, ChunkType, SemanticChunk, SemanticChunker};
 pub use chunker::*;
 pub use embedder::*;
-pub use ast_chunker::{SemanticChunk, ChunkType, chunk_semantic, SemanticChunker};
+pub use parser::*;
+pub use scanner::*;

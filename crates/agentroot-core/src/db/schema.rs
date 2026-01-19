@@ -1,8 +1,8 @@
 //! Database schema and initialization
 
-use rusqlite::{Connection, params};
-use std::path::Path;
 use crate::error::Result;
+use rusqlite::{params, Connection};
+use std::path::Path;
 
 /// Main database handle
 pub struct Database {
@@ -168,7 +168,7 @@ impl Database {
              PRAGMA synchronous = NORMAL;
              PRAGMA foreign_keys = ON;
              PRAGMA cache_size = -64000;
-             PRAGMA busy_timeout = 5000;"
+             PRAGMA busy_timeout = 5000;",
         )?;
 
         // Create tables
@@ -188,11 +188,14 @@ impl Database {
 
     /// Get current schema version
     pub fn schema_version(&self) -> Result<Option<i32>> {
-        let version = self.conn.query_row(
-            "SELECT version FROM schema_version ORDER BY version DESC LIMIT 1",
-            [],
-            |row| row.get(0),
-        ).ok();
+        let version = self
+            .conn
+            .query_row(
+                "SELECT version FROM schema_version ORDER BY version DESC LIMIT 1",
+                [],
+                |row| row.get(0),
+            )
+            .ok();
         Ok(version)
     }
 
@@ -216,10 +219,8 @@ impl Database {
         ).unwrap_or(false);
 
         if !has_chunk_hash {
-            self.conn.execute(
-                "ALTER TABLE content_vectors ADD COLUMN chunk_hash TEXT",
-                [],
-            )?;
+            self.conn
+                .execute("ALTER TABLE content_vectors ADD COLUMN chunk_hash TEXT", [])?;
             self.conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_content_vectors_chunk_hash ON content_vectors(chunk_hash)",
                 [],

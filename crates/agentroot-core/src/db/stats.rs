@@ -1,7 +1,7 @@
 //! Database statistics
 
-use crate::error::Result;
 use super::Database;
+use crate::error::Result;
 
 /// Database stats
 #[derive(Debug, Clone, serde::Serialize)]
@@ -15,11 +15,9 @@ pub struct DatabaseStats {
 impl Database {
     /// Get database statistics
     pub fn get_stats(&self) -> Result<DatabaseStats> {
-        let collection_count: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM collections",
-            [],
-            |row| row.get(0),
-        )?;
+        let collection_count: i64 =
+            self.conn
+                .query_row("SELECT COUNT(*) FROM collections", [], |row| row.get(0))?;
 
         let document_count: i64 = self.conn.query_row(
             "SELECT COUNT(*) FROM documents WHERE active = 1",
@@ -27,19 +25,25 @@ impl Database {
             |row| row.get(0),
         )?;
 
-        let embedded_count: i64 = self.conn.query_row(
-            "SELECT COUNT(DISTINCT hash) FROM content_vectors",
-            [],
-            |row| row.get(0),
-        ).unwrap_or(0);
+        let embedded_count: i64 = self
+            .conn
+            .query_row(
+                "SELECT COUNT(DISTINCT hash) FROM content_vectors",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
 
-        let pending_embedding: i64 = self.conn.query_row(
-            "SELECT COUNT(DISTINCT c.hash) FROM content c
+        let pending_embedding: i64 = self
+            .conn
+            .query_row(
+                "SELECT COUNT(DISTINCT c.hash) FROM content c
              JOIN documents d ON d.hash = c.hash AND d.active = 1
              WHERE c.hash NOT IN (SELECT DISTINCT hash FROM content_vectors)",
-            [],
-            |row| row.get(0),
-        ).unwrap_or(0);
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
 
         Ok(DatabaseStats {
             collection_count: collection_count as usize,

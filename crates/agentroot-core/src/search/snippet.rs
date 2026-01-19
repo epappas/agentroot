@@ -70,7 +70,8 @@ fn find_query_position(content: &str, query: &str) -> usize {
     }
 
     // Try individual terms
-    let terms: Vec<&str> = query_lower.split_whitespace()
+    let terms: Vec<&str> = query_lower
+        .split_whitespace()
         .filter(|t| t.len() >= 3)
         .collect();
 
@@ -90,13 +91,23 @@ fn adjust_to_word_boundaries(content: &str, start: usize, end: usize) -> (usize,
 
     // Find start of word
     let mut new_start = start;
-    while new_start > 0 && bytes.get(new_start - 1).map(|&b| !b.is_ascii_whitespace()).unwrap_or(false) {
+    while new_start > 0
+        && bytes
+            .get(new_start - 1)
+            .map(|&b| !b.is_ascii_whitespace())
+            .unwrap_or(false)
+    {
         new_start -= 1;
     }
 
     // Find end of word
     let mut new_end = end;
-    while new_end < bytes.len() && bytes.get(new_end).map(|&b| !b.is_ascii_whitespace()).unwrap_or(false) {
+    while new_end < bytes.len()
+        && bytes
+            .get(new_end)
+            .map(|&b| !b.is_ascii_whitespace())
+            .unwrap_or(false)
+    {
         new_end += 1;
     }
 

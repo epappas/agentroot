@@ -2,12 +2,12 @@
 //!
 //! Computes cosine similarity between query embedding and stored embeddings.
 
-use std::collections::HashMap;
-use crate::db::{Database, docid_from_hash};
-use crate::db::vectors::cosine_similarity;
-use crate::llm::Embedder;
-use crate::error::Result;
 use super::{SearchOptions, SearchResult, SearchSource};
+use crate::db::vectors::cosine_similarity;
+use crate::db::{docid_from_hash, Database};
+use crate::error::Result;
+use crate::llm::Embedder;
+use std::collections::HashMap;
 
 impl Database {
     /// Perform vector similarity search
@@ -61,7 +61,11 @@ impl Database {
         }
 
         let mut final_results: Vec<SearchResult> = best_by_hash.into_values().collect();
-        final_results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        final_results.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         // Filter by min_score and limit
         let filtered: Vec<SearchResult> = final_results
@@ -112,7 +116,11 @@ impl Database {
                     hash: row.get(3)?,
                     collection_name: row.get(4)?,
                     modified_at: row.get(5)?,
-                    body: if options.full_content { Some(row.get(6)?) } else { None },
+                    body: if options.full_content {
+                        Some(row.get(6)?)
+                    } else {
+                        None
+                    },
                     body_length: row.get(7)?,
                     docid: docid_from_hash(&row.get::<_, String>(3)?),
                     context: None,

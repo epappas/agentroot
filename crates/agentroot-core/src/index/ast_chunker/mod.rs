@@ -4,21 +4,24 @@
 //! for AST parsing. It extracts functions, classes, methods, and other semantic
 //! units while preserving context like docstrings and comments.
 
-pub mod types;
 pub mod language;
+pub mod oversized;
 pub mod parser;
 pub mod strategies;
-pub mod oversized;
+pub mod types;
 
-pub use types::{ChunkType, ChunkMetadata, SemanticChunk, compute_chunk_hash};
-pub use language::{Language, is_supported};
-pub use strategies::{ChunkingStrategy, RustStrategy, PythonStrategy, JavaScriptStrategy, GoStrategy, LanguageStrategy};
+pub use language::{is_supported, Language};
 pub use oversized::{split_oversized_chunk, split_oversized_chunks};
+pub use strategies::{
+    ChunkingStrategy, GoStrategy, JavaScriptStrategy, LanguageStrategy, PythonStrategy,
+    RustStrategy,
+};
+pub use types::{compute_chunk_hash, ChunkMetadata, ChunkType, SemanticChunk};
 
+use super::chunker::{chunk_by_chars, Chunk, CHUNK_OVERLAP_CHARS, CHUNK_SIZE_CHARS};
+use crate::error::Result;
 use std::path::Path;
 use tracing::debug;
-use crate::error::Result;
-use super::chunker::{chunk_by_chars, Chunk, CHUNK_SIZE_CHARS, CHUNK_OVERLAP_CHARS};
 
 const MIN_CHUNK_CHARS: usize = 1;
 
@@ -41,8 +44,14 @@ impl SemanticChunker {
     }
 
     pub fn with_max_chunk_chars(self, max: usize) -> Self {
-        let max = if max < MIN_CHUNK_CHARS { MIN_CHUNK_CHARS } else { max };
-        Self { max_chunk_chars: max }
+        let max = if max < MIN_CHUNK_CHARS {
+            MIN_CHUNK_CHARS
+        } else {
+            max
+        };
+        Self {
+            max_chunk_chars: max,
+        }
     }
 
     /// Chunk content semantically based on file path

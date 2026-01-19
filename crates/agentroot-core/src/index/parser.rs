@@ -1,7 +1,7 @@
 //! Document parsing utilities
 
-use regex::Regex;
 use lazy_static::lazy_static;
+use regex::Regex;
 use std::path::Path;
 
 lazy_static! {
@@ -18,7 +18,10 @@ pub fn extract_title(content: &str, filename: &str) -> String {
         if let Some(caps) = HEADING_RE.captures(line) {
             let title = caps.get(1).map(|m| m.as_str().trim()).unwrap_or("");
 
-            if SKIP_TITLES.iter().any(|&s| title == s || title.contains("Notes")) {
+            if SKIP_TITLES
+                .iter()
+                .any(|&s| title == s || title.contains("Notes"))
+            {
                 for line2 in content.lines().skip(1).take(50) {
                     if let Some(caps2) = SECOND_HEADING_RE.captures(line2) {
                         if let Some(title2) = caps2.get(1) {
@@ -46,7 +49,13 @@ pub fn handelize(path: &str) -> String {
     path.to_lowercase()
         .replace("___", "/")
         .chars()
-        .map(|c| if c.is_alphanumeric() || c == '/' || c == '.' || c == '-' { c } else { '-' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == '/' || c == '.' || c == '-' {
+                c
+            } else {
+                '-'
+            }
+        })
         .collect::<String>()
         .replace("--", "-")
         .trim_matches('-')
@@ -71,7 +80,10 @@ mod tests {
 
     #[test]
     fn test_handelize() {
-        assert_eq!(handelize("My Docs/2024/Report.md"), "my-docs/2024/report.md");
+        assert_eq!(
+            handelize("My Docs/2024/Report.md"),
+            "my-docs/2024/report.md"
+        );
         assert_eq!(handelize("foo___bar.md"), "foo/bar.md");
     }
 }

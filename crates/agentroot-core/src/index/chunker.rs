@@ -128,9 +128,9 @@ mod tests {
     #[test]
     fn test_floor_char_boundary() {
         let s = "Hello 世界";
-        assert_eq!(floor_char_boundary(s, 6), 6);  // Start of 世
-        assert_eq!(floor_char_boundary(s, 7), 6);  // Inside 世
-        assert_eq!(floor_char_boundary(s, 8), 6);  // Inside 世
-        assert_eq!(floor_char_boundary(s, 9), 9);  // Start of 界
+        assert_eq!(floor_char_boundary(s, 6), 6); // Start of 世
+        assert_eq!(floor_char_boundary(s, 7), 6); // Inside 世
+        assert_eq!(floor_char_boundary(s, 8), 6); // Inside 世
+        assert_eq!(floor_char_boundary(s, 9), 9); // Start of 界
     }
 }

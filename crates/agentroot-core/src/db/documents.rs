@@ -1,12 +1,12 @@
 //! Document operations
 
+use super::content::docid_from_hash;
+use super::Database;
+use crate::config::virtual_path::{is_virtual_path, parse_virtual_path};
+use crate::error::Result;
 use rusqlite::params;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use crate::error::Result;
-use crate::config::virtual_path::{is_virtual_path, parse_virtual_path};
-use super::Database;
-use super::content::docid_from_hash;
 
 /// Document record from database
 #[derive(Debug, Clone)]
@@ -94,16 +94,18 @@ impl Database {
             "SELECT id, collection, path, title, hash, created_at, modified_at, active
              FROM documents WHERE collection = ?1 AND path = ?2 AND active = 1",
             params![collection, path],
-            |row| Ok(Document {
-                id: row.get(0)?,
-                collection: row.get(1)?,
-                path: row.get(2)?,
-                title: row.get(3)?,
-                hash: row.get(4)?,
-                created_at: row.get(5)?,
-                modified_at: row.get(6)?,
-                active: row.get::<_, i32>(7)? == 1,
-            }),
+            |row| {
+                Ok(Document {
+                    id: row.get(0)?,
+                    collection: row.get(1)?,
+                    path: row.get(2)?,
+                    title: row.get(3)?,
+                    hash: row.get(4)?,
+                    created_at: row.get(5)?,
+                    modified_at: row.get(6)?,
+                    active: row.get::<_, i32>(7)? == 1,
+                })
+            },
         );
         match result {
             Ok(doc) => Ok(Some(doc)),
@@ -114,10 +116,11 @@ impl Database {
 
     /// Get all active document paths in collection
     pub fn get_active_document_paths(&self, collection: &str) -> Result<Vec<String>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT path FROM documents WHERE collection = ?1 AND active = 1"
-        )?;
-        let paths = stmt.query_map(params![collection], |row| row.get(0))?
+        let mut stmt = self
+            .conn
+            .prepare("SELECT path FROM documents WHERE collection = ?1 AND active = 1")?;
+        let paths = stmt
+            .query_map(params![collection], |row| row.get(0))?
             .collect::<std::result::Result<Vec<_>, _>>()?;
         Ok(paths)
     }
@@ -133,18 +136,28 @@ impl Database {
              WHERE d.hash LIKE ?1 || '%' AND d.active = 1
              LIMIT 1",
             params![docid],
-            |row| Ok(DocumentResult {
-                filepath: format!("agentroot://{}/{}", row.get::<_, String>(1)?, row.get::<_, String>(2)?),
-                display_path: format!("{}/{}", row.get::<_, String>(1)?, row.get::<_, String>(2)?),
-                title: row.get(3)?,
-                context: None,
-                hash: row.get(4)?,
-                docid: docid_from_hash(&row.get::<_, String>(4)?),
-                collection_name: row.get(1)?,
-                modified_at: row.get(5)?,
-                body: Some(row.get(6)?),
-                body_length: row.get(7)?,
-            }),
+            |row| {
+                Ok(DocumentResult {
+                    filepath: format!(
+                        "agentroot://{}/{}",
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?
+                    ),
+                    display_path: format!(
+                        "{}/{}",
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?
+                    ),
+                    title: row.get(3)?,
+                    context: None,
+                    hash: row.get(4)?,
+                    docid: docid_from_hash(&row.get::<_, String>(4)?),
+                    collection_name: row.get(1)?,
+                    modified_at: row.get(5)?,
+                    body: Some(row.get(6)?),
+                    body_length: row.get(7)?,
+                })
+            },
         );
         match result {
             Ok(doc) => Ok(Some(doc)),
@@ -155,10 +168,9 @@ impl Database {
 
     /// Hard delete inactive documents
     pub fn delete_inactive_documents(&self) -> Result<usize> {
-        let rows = self.conn.execute(
-            "DELETE FROM documents WHERE active = 0",
-            [],
-        )?;
+        let rows = self
+            .conn
+            .execute("DELETE FROM documents WHERE active = 0", [])?;
         Ok(rows)
     }
 
@@ -171,7 +183,9 @@ impl Database {
         let query = query.trim();
 
         // 1. Docid lookup
-        if query.starts_with('#') || (query.len() == 6 && query.chars().all(|c| c.is_ascii_hexdigit())) {
+        if query.starts_with('#')
+            || (query.len() == 6 && query.chars().all(|c| c.is_ascii_hexdigit()))
+        {
             if let Some(doc) = self.find_by_docid(query)? {
                 return Ok(Some(doc));
             }
@@ -224,20 +238,30 @@ impl Database {
              LIMIT ?2"
         )?;
 
-        let results = stmt.query_map(params![query_lower, limit as i64], |row| {
-            Ok(DocumentResult {
-                filepath: format!("agentroot://{}/{}", row.get::<_, String>(0)?, row.get::<_, String>(1)?),
-                display_path: format!("{}/{}", row.get::<_, String>(0)?, row.get::<_, String>(1)?),
-                title: row.get(2)?,
-                context: None,
-                hash: row.get(3)?,
-                docid: docid_from_hash(&row.get::<_, String>(3)?),
-                collection_name: row.get(0)?,
-                modified_at: row.get(4)?,
-                body: Some(row.get(5)?),
-                body_length: row.get(6)?,
-            })
-        })?.collect::<std::result::Result<Vec<_>, _>>()?;
+        let results = stmt
+            .query_map(params![query_lower, limit as i64], |row| {
+                Ok(DocumentResult {
+                    filepath: format!(
+                        "agentroot://{}/{}",
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?
+                    ),
+                    display_path: format!(
+                        "{}/{}",
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?
+                    ),
+                    title: row.get(2)?,
+                    context: None,
+                    hash: row.get(3)?,
+                    docid: docid_from_hash(&row.get::<_, String>(3)?),
+                    collection_name: row.get(0)?,
+                    modified_at: row.get(4)?,
+                    body: Some(row.get(5)?),
+                    body_length: row.get(6)?,
+                })
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
 
         Ok(results)
     }
@@ -265,9 +289,13 @@ impl Database {
         let query = query.trim();
 
         // Docid lookup
-        if query.starts_with('#') || (query.len() == 6 && query.chars().all(|c| c.is_ascii_hexdigit())) {
+        if query.starts_with('#')
+            || (query.len() == 6 && query.chars().all(|c| c.is_ascii_hexdigit()))
+        {
             if let Some(doc) = self.find_by_docid(query)? {
-                return doc.body.ok_or_else(|| crate::error::AgentRootError::DocumentNotFound(query.to_string()));
+                return doc.body.ok_or_else(|| {
+                    crate::error::AgentRootError::DocumentNotFound(query.to_string())
+                });
             }
         }
 
@@ -294,7 +322,9 @@ impl Database {
             }
         }
 
-        Err(crate::error::AgentRootError::DocumentNotFound(query.to_string()))
+        Err(crate::error::AgentRootError::DocumentNotFound(
+            query.to_string(),
+        ))
     }
 
     /// List documents by prefix
@@ -306,16 +336,18 @@ impl Database {
             "SELECT d.collection, d.path, d.title, d.hash
              FROM documents d
              WHERE d.active = 1 AND (d.collection || '/' || d.path) LIKE ?1
-             ORDER BY d.collection, d.path"
+             ORDER BY d.collection, d.path",
         )?;
 
-        let results = stmt.query_map(params![like_pattern], |row| {
-            Ok(DocumentListItem {
-                path: format!("{}/{}", row.get::<_, String>(0)?, row.get::<_, String>(1)?),
-                title: row.get(2)?,
-                docid: docid_from_hash(&row.get::<_, String>(3)?),
-            })
-        })?.collect::<std::result::Result<Vec<_>, _>>()?;
+        let results = stmt
+            .query_map(params![like_pattern], |row| {
+                Ok(DocumentListItem {
+                    path: format!("{}/{}", row.get::<_, String>(0)?, row.get::<_, String>(1)?),
+                    title: row.get(2)?,
+                    docid: docid_from_hash(&row.get::<_, String>(3)?),
+                })
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
 
         Ok(results)
     }
@@ -343,16 +375,18 @@ impl Database {
             "SELECT d.collection, d.path, c.doc
              FROM documents d
              JOIN content c ON c.hash = d.hash
-             WHERE d.active = 1"
+             WHERE d.active = 1",
         )?;
 
-        let results = stmt.query_map([], |row| {
-            let path = format!("{}/{}", row.get::<_, String>(0)?, row.get::<_, String>(1)?);
-            Ok((path, row.get::<_, String>(2)?))
-        })?.filter_map(|r| r.ok())
-        .filter(|(path, _)| pattern.matches(path))
-        .map(|(path, content)| DocumentContent { path, content })
-        .collect();
+        let results = stmt
+            .query_map([], |row| {
+                let path = format!("{}/{}", row.get::<_, String>(0)?, row.get::<_, String>(1)?);
+                Ok((path, row.get::<_, String>(2)?))
+            })?
+            .filter_map(|r| r.ok())
+            .filter(|(path, _)| pattern.matches(path))
+            .map(|(path, content)| DocumentContent { path, content })
+            .collect();
 
         Ok(results)
     }

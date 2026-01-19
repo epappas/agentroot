@@ -2,10 +2,10 @@
 
 pub mod virtual_path;
 
+use crate::error::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use crate::error::Result;
 
 /// Main configuration structure
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -79,7 +79,8 @@ impl Config {
         let collection_config = self.collections.get(collection)?;
 
         // Collect all matching contexts
-        let mut matching: Vec<(&str, &str)> = collection_config.context
+        let mut matching: Vec<(&str, &str)> = collection_config
+            .context
             .iter()
             .filter(|(prefix, _)| path.starts_with(*prefix) || prefix.is_empty() || *prefix == "/")
             .map(|(prefix, ctx)| (prefix.as_str(), ctx.as_str()))

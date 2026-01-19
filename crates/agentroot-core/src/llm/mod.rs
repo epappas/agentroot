@@ -6,8 +6,8 @@
 //! - Query expansion
 //! - Tokenization
 
-mod traits;
 mod llama;
+mod traits;
 
-pub use traits::*;
 pub use llama::{LlamaEmbedder, DEFAULT_EMBED_MODEL};
+pub use traits::*;

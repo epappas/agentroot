@@ -56,27 +56,54 @@ mod tests {
 
     #[test]
     fn test_rust_detection() {
-        assert_eq!(Language::from_path(Path::new("foo.rs")), Some(Language::Rust));
-        assert_eq!(Language::from_path(Path::new("src/lib.rs")), Some(Language::Rust));
+        assert_eq!(
+            Language::from_path(Path::new("foo.rs")),
+            Some(Language::Rust)
+        );
+        assert_eq!(
+            Language::from_path(Path::new("src/lib.rs")),
+            Some(Language::Rust)
+        );
     }
 
     #[test]
     fn test_python_detection() {
-        assert_eq!(Language::from_path(Path::new("foo.py")), Some(Language::Python));
-        assert_eq!(Language::from_path(Path::new("foo.pyi")), Some(Language::Python));
+        assert_eq!(
+            Language::from_path(Path::new("foo.py")),
+            Some(Language::Python)
+        );
+        assert_eq!(
+            Language::from_path(Path::new("foo.pyi")),
+            Some(Language::Python)
+        );
     }
 
     #[test]
     fn test_javascript_detection() {
-        assert_eq!(Language::from_path(Path::new("foo.js")), Some(Language::JavaScript));
-        assert_eq!(Language::from_path(Path::new("foo.mjs")), Some(Language::JavaScript));
-        assert_eq!(Language::from_path(Path::new("foo.jsx")), Some(Language::JavaScript));
+        assert_eq!(
+            Language::from_path(Path::new("foo.js")),
+            Some(Language::JavaScript)
+        );
+        assert_eq!(
+            Language::from_path(Path::new("foo.mjs")),
+            Some(Language::JavaScript)
+        );
+        assert_eq!(
+            Language::from_path(Path::new("foo.jsx")),
+            Some(Language::JavaScript)
+        );
     }
 
     #[test]
     fn test_typescript_detection() {
-        assert_eq!(Language::from_path(Path::new("foo.ts")), Some(Language::TypeScript));
-        assert_eq!(Language::from_path(Path::new("foo.tsx")), Some(Language::TypeScriptTsx));
+        assert_eq!(
+            Language::from_path(Path::new("foo.ts")),
+            Some(Language::TypeScript)
+        );
+        assert_eq!(
+            Language::from_path(Path::new("foo.tsx")),
+            Some(Language::TypeScriptTsx)
+        );
     }
 
     #[test]

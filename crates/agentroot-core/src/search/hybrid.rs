@@ -1,10 +1,10 @@
 //! Hybrid search with Reciprocal Rank Fusion
 
-use std::collections::HashMap;
-use crate::db::Database;
-use crate::llm::{Embedder, QueryExpander, Reranker, RerankDocument};
-use crate::error::Result;
 use super::{SearchOptions, SearchResult, SearchSource};
+use crate::db::Database;
+use crate::error::Result;
+use crate::llm::{Embedder, QueryExpander, RerankDocument, Reranker};
+use std::collections::HashMap;
 
 /// RRF constant (standard value)
 const RRF_K: f64 = 60.0;
@@ -19,7 +19,10 @@ const STRONG_SIGNAL_GAP: f64 = 0.15;
 /// Check if top BM25 result is a strong signal (skip expansion)
 pub fn has_strong_signal(results: &[SearchResult]) -> bool {
     if results.len() < 2 {
-        return results.first().map(|r| r.score >= STRONG_SIGNAL_SCORE).unwrap_or(false);
+        return results
+            .first()
+            .map(|r| r.score >= STRONG_SIGNAL_SCORE)
+            .unwrap_or(false);
     }
 
     let top_score = results[0].score;
@@ -37,11 +40,11 @@ pub fn cap_for_reranking(results: Vec<SearchResult>) -> Vec<SearchResult> {
 /// Position-aware score blending
 pub fn blend_scores(rrf_rank: usize, rrf_score: f64, rerank_score: f64) -> f64 {
     let rrf_weight = if rrf_rank <= 3 {
-        0.75  // Trust retrieval for top results
+        0.75 // Trust retrieval for top results
     } else if rrf_rank <= 10 {
         0.60
     } else {
-        0.40  // Trust reranker for lower-ranked
+        0.40 // Trust reranker for lower-ranked
     };
 
     rrf_weight * rrf_score + (1.0 - rrf_weight) * rerank_score
@@ -58,18 +61,34 @@ pub fn rrf_fusion(
     for (rank, result) in bm25_results.iter().enumerate() {
         let rrf_score = 2.0 / (RRF_K + (rank + 1) as f64);
         // Bonus for appearing in top 3
-        let bonus = if rank < 3 { 0.05 } else if rank < 10 { 0.02 } else { 0.0 };
+        let bonus = if rank < 3 {
+            0.05
+        } else if rank < 10 {
+            0.02
+        } else {
+            0.0
+        };
 
-        let entry = scores.entry(result.hash.clone()).or_insert((0.0, result.clone()));
+        let entry = scores
+            .entry(result.hash.clone())
+            .or_insert((0.0, result.clone()));
         entry.0 += rrf_score + bonus;
     }
 
     // Process vector results
     for (rank, result) in vec_results.iter().enumerate() {
         let rrf_score = 1.0 / (RRF_K + (rank + 1) as f64);
-        let bonus = if rank < 3 { 0.05 } else if rank < 10 { 0.02 } else { 0.0 };
+        let bonus = if rank < 3 {
+            0.05
+        } else if rank < 10 {
+            0.02
+        } else {
+            0.0
+        };
 
-        let entry = scores.entry(result.hash.clone()).or_insert((0.0, result.clone()));
+        let entry = scores
+            .entry(result.hash.clone())
+            .or_insert((0.0, result.clone()));
         entry.0 += rrf_score + bonus;
     }
 
@@ -77,11 +96,14 @@ pub fn rrf_fusion(
     let mut results: Vec<(f64, SearchResult)> = scores.into_values().collect();
     results.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
 
-    results.into_iter().map(|(score, mut r)| {
-        r.score = score;
-        r.source = SearchSource::Hybrid;
-        r
-    }).collect()
+    results
+        .into_iter()
+        .map(|(score, mut r)| {
+            r.score = score;
+            r.source = SearchSource::Hybrid;
+            r
+        })
+        .collect()
 }
 
 /// Full hybrid search pipeline
@@ -138,17 +160,19 @@ pub async fn hybrid_search(
 
     // 7. Rerank (if available)
     if let Some(rr) = reranker {
-        let docs: Vec<RerankDocument> = fused.iter().map(|r| RerankDocument {
-            id: r.hash.clone(),
-            text: r.body.clone().unwrap_or_default(),
-        }).collect();
+        let docs: Vec<RerankDocument> = fused
+            .iter()
+            .map(|r| RerankDocument {
+                id: r.hash.clone(),
+                text: r.body.clone().unwrap_or_default(),
+            })
+            .collect();
 
         let reranked = rr.rerank(query, &docs).await?;
 
         // Build hash -> rerank score map
-        let rerank_scores: HashMap<String, f64> = reranked.iter()
-            .map(|r| (r.id.clone(), r.score))
-            .collect();
+        let rerank_scores: HashMap<String, f64> =
+            reranked.iter().map(|r| (r.id.clone(), r.score)).collect();
 
         // Blend scores
         for (rrf_rank, result) in fused.iter_mut().enumerate() {
@@ -159,7 +183,11 @@ pub async fn hybrid_search(
         }
 
         // Re-sort by blended score
-        fused.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        fused.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
     }
 
     // 8. Apply final limit and min_score
@@ -174,7 +202,11 @@ pub async fn hybrid_search(
 
 impl Database {
     /// Synchronous vector search (placeholder for CLI - needs runtime)
-    pub fn search_vec_sync(&self, _query: &str, options: &SearchOptions) -> Result<Vec<SearchResult>> {
+    pub fn search_vec_sync(
+        &self,
+        _query: &str,
+        options: &SearchOptions,
+    ) -> Result<Vec<SearchResult>> {
         // Placeholder: In production, this would use a runtime
         // For now, fall back to BM25
         eprintln!("Warning: Vector search requires embeddings, falling back to BM25");
@@ -182,7 +214,11 @@ impl Database {
     }
 
     /// Synchronous hybrid search (placeholder for CLI - needs runtime)
-    pub fn search_hybrid_sync(&self, query: &str, options: &SearchOptions) -> Result<Vec<SearchResult>> {
+    pub fn search_hybrid_sync(
+        &self,
+        query: &str,
+        options: &SearchOptions,
+    ) -> Result<Vec<SearchResult>> {
         // Placeholder: In production, this would use full hybrid pipeline
         // For now, just run BM25
         self.search_fts(query, options)

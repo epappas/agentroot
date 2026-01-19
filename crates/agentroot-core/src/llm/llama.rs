@@ -1,16 +1,16 @@
 //! LLaMA-based embedder using llama-cpp-2
 
-use std::path::Path;
-use std::sync::Mutex;
+use super::Embedder;
+use crate::error::{AgentRootError, Result};
 use async_trait::async_trait;
 use llama_cpp_2::{
     context::params::LlamaContextParams,
     llama_backend::LlamaBackend,
     llama_batch::LlamaBatch,
-    model::{LlamaModel, params::LlamaModelParams},
+    model::{params::LlamaModelParams, LlamaModel},
 };
-use crate::error::{AgentRootError, Result};
-use super::Embedder;
+use std::path::Path;
+use std::sync::Mutex;
 
 /// Default embedding model (nomic-embed-text or similar)
 pub const DEFAULT_EMBED_MODEL: &str = "nomic-embed-text-v1.5.Q4_K_M.gguf";
@@ -100,11 +100,14 @@ impl LlamaEmbedder {
     }
 
     fn embed_sync(&self, text: &str) -> Result<Vec<f32>> {
-        let mut ctx_guard = self.context.lock()
+        let mut ctx_guard = self
+            .context
+            .lock()
             .map_err(|e| AgentRootError::Llm(format!("Lock error: {}", e)))?;
 
         // Tokenize
-        let tokens = self.model
+        let tokens = self
+            .model
             .str_to_token(text, llama_cpp_2::model::AddBos::Always)
             .map_err(|e| AgentRootError::Llm(format!("Tokenization error: {}", e)))?;
 
@@ -116,16 +119,21 @@ impl LlamaEmbedder {
         let mut batch = LlamaBatch::new(tokens.len(), 1);
 
         for (i, token) in tokens.iter().enumerate() {
-            batch.add(*token, i as i32, &[0], i == tokens.len() - 1)
+            batch
+                .add(*token, i as i32, &[0], i == tokens.len() - 1)
                 .map_err(|e| AgentRootError::Llm(format!("Batch error: {}", e)))?;
         }
 
         // Encode (for embeddings)
-        ctx_guard.ctx.encode(&mut batch)
+        ctx_guard
+            .ctx
+            .encode(&mut batch)
             .map_err(|e| AgentRootError::Llm(format!("Encode error: {}", e)))?;
 
         // Get embeddings (sequence-level pooled embedding)
-        let embeddings = ctx_guard.ctx.embeddings_seq_ith(0)
+        let embeddings = ctx_guard
+            .ctx
+            .embeddings_seq_ith(0)
             .map_err(|e| AgentRootError::Llm(format!("Embeddings error: {}", e)))?;
 
         // Normalize the embedding

@@ -1,7 +1,7 @@
 //! LLM trait definitions
 
-use async_trait::async_trait;
 use crate::error::Result;
+use async_trait::async_trait;
 
 /// Embedding generation trait
 #[async_trait]

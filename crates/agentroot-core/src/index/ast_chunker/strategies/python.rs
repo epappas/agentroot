@@ -1,9 +1,11 @@
 //! Python-specific chunking strategy
 
-use tree_sitter::Node;
-use super::{ChunkingStrategy, line_numbers, get_breadcrumb};
-use crate::index::ast_chunker::types::{SemanticChunk, ChunkType, ChunkMetadata, compute_chunk_hash};
+use super::{get_breadcrumb, line_numbers, ChunkingStrategy};
 use crate::error::Result;
+use crate::index::ast_chunker::types::{
+    compute_chunk_hash, ChunkMetadata, ChunkType, SemanticChunk,
+};
+use tree_sitter::Node;
 
 const PYTHON_SEMANTIC_NODES: &[&str] = &[
     "function_definition",
@@ -86,7 +88,8 @@ fn extract_python_chunks(
             let text = source[node.start_byte()..node.end_byte()].to_string();
             let (start_line, end_line) = line_numbers(source, node.start_byte(), node.end_byte());
 
-            let name = actual_node.child_by_field_name("name")
+            let name = actual_node
+                .child_by_field_name("name")
                 .map(|n| source[n.start_byte()..n.end_byte()].to_string());
 
             let breadcrumb = match (parent_class, &name) {
@@ -95,11 +98,12 @@ fn extract_python_chunks(
                 _ => get_breadcrumb(source, node),
             };
 
-            let chunk_type = if parent_class.is_some() && actual_node.kind() == "function_definition" {
-                ChunkType::Method
-            } else {
-                strategy.chunk_type_for_node(node)
-            };
+            let chunk_type =
+                if parent_class.is_some() && actual_node.kind() == "function_definition" {
+                    ChunkType::Method
+                } else {
+                    strategy.chunk_type_for_node(node)
+                };
 
             let chunk_hash = compute_chunk_hash(&text, &leading, &trailing);
 
@@ -168,8 +172,8 @@ fn extract_docstring(source: &str, node: Node) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::index::ast_chunker::parser::parse;
     use crate::index::ast_chunker::language::Language;
+    use crate::index::ast_chunker::parser::parse;
 
     #[test]
     fn test_extract_function() {

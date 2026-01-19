@@ -1,19 +1,19 @@
 //! Language-specific chunking strategies
 
-mod rust;
-mod python;
-mod javascript;
 mod go;
+mod javascript;
+mod python;
+mod rust;
 
-pub use rust::RustStrategy;
-pub use python::PythonStrategy;
-pub use javascript::JavaScriptStrategy;
 pub use go::GoStrategy;
+pub use javascript::JavaScriptStrategy;
+pub use python::PythonStrategy;
+pub use rust::RustStrategy;
 
-use tree_sitter::Node;
-use super::types::{SemanticChunk, ChunkType};
 use super::language::Language;
+use super::types::{ChunkType, SemanticChunk};
 use crate::error::Result;
+use tree_sitter::Node;
 
 /// Trait for language-specific semantic chunking
 pub trait ChunkingStrategy: Send + Sync {
@@ -51,7 +51,9 @@ impl LanguageStrategy {
             Language::Rust => Self::Rust(RustStrategy),
             Language::Python => Self::Python(PythonStrategy),
             Language::JavaScript => Self::JavaScript(JavaScriptStrategy::javascript()),
-            Language::TypeScript | Language::TypeScriptTsx => Self::JavaScript(JavaScriptStrategy::typescript()),
+            Language::TypeScript | Language::TypeScriptTsx => {
+                Self::JavaScript(JavaScriptStrategy::typescript())
+            }
             Language::Go => Self::Go(GoStrategy),
         }
     }
@@ -102,15 +104,15 @@ pub fn extract_leading_comments(source: &str, node: Node) -> String {
 
 /// Check if a line is a comment
 fn is_comment_line(line: &str) -> bool {
-    line.starts_with("//") ||
-    line.starts_with('#') ||
-    line.starts_with("/*") ||
-    line.starts_with('*') ||
-    line.starts_with("*/") ||
-    line.starts_with("///") ||
-    line.starts_with("//!") ||
-    line.starts_with("\"\"\"") ||
-    line.starts_with("'''")
+    line.starts_with("//")
+        || line.starts_with('#')
+        || line.starts_with("/*")
+        || line.starts_with('*')
+        || line.starts_with("*/")
+        || line.starts_with("///")
+        || line.starts_with("//!")
+        || line.starts_with("\"\"\"")
+        || line.starts_with("'''")
 }
 
 /// Extract trailing comment on the same line
@@ -161,8 +163,11 @@ pub fn get_breadcrumb(source: &str, node: Node) -> Option<String> {
 fn extract_name_from_node(source: &str, node: Node) -> Option<String> {
     let kind = node.kind();
     let name_field = match kind {
-        "function_item" | "function_definition" | "function_declaration" |
-        "method_definition" | "method_declaration" => "name",
+        "function_item"
+        | "function_definition"
+        | "function_declaration"
+        | "method_definition"
+        | "method_declaration" => "name",
         "impl_item" => "type",
         "struct_item" | "class_definition" | "class_declaration" => "name",
         "enum_item" | "type_declaration" => "name",

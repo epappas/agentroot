@@ -1,11 +1,11 @@
 //! Embedding pipeline with smart cache invalidation
 
-use std::path::Path;
-use crate::db::{Database, CacheLookupResult};
-use crate::llm::Embedder;
+use super::ast_chunker::{compute_chunk_hash, SemanticChunk, SemanticChunker};
+use super::chunker::{chunk_by_chars, CHUNK_OVERLAP_CHARS, CHUNK_SIZE_CHARS};
+use crate::db::{CacheLookupResult, Database};
 use crate::error::Result;
-use super::ast_chunker::{SemanticChunk, SemanticChunker, compute_chunk_hash};
-use super::chunker::{chunk_by_chars, CHUNK_SIZE_CHARS, CHUNK_OVERLAP_CHARS};
+use crate::llm::Embedder;
+use std::path::Path;
 
 const BATCH_SIZE: usize = 32;
 
@@ -204,11 +204,11 @@ impl Database {
     pub fn get_all_content(&self) -> Result<Vec<(String, String)>> {
         let mut stmt = self.conn.prepare(
             "SELECT c.hash, c.doc FROM content c
-             JOIN documents d ON d.hash = c.hash AND d.active = 1"
+             JOIN documents d ON d.hash = c.hash AND d.active = 1",
         )?;
-        let results = stmt.query_map([], |row| {
-            Ok((row.get(0)?, row.get(1)?))
-        })?.collect::<std::result::Result<Vec<_>, _>>()?;
+        let results = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
         Ok(results)
     }
 
@@ -217,25 +217,27 @@ impl Database {
         let mut stmt = self.conn.prepare(
             "SELECT c.hash, c.doc, d.path FROM content c
              JOIN documents d ON d.hash = c.hash AND d.active = 1
-             GROUP BY c.hash"
+             GROUP BY c.hash",
         )?;
-        let results = stmt.query_map([], |row| {
-            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
-        })?.collect::<std::result::Result<Vec<_>, _>>()?;
+        let results = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
         Ok(results)
     }
 
     /// Get content needing embedding with file paths
-    pub fn get_content_needing_embedding_with_paths(&self) -> Result<Vec<(String, String, Option<String>)>> {
+    pub fn get_content_needing_embedding_with_paths(
+        &self,
+    ) -> Result<Vec<(String, String, Option<String>)>> {
         let mut stmt = self.conn.prepare(
             "SELECT c.hash, c.doc, d.path FROM content c
              JOIN documents d ON d.hash = c.hash AND d.active = 1
              WHERE c.hash NOT IN (SELECT DISTINCT hash FROM content_vectors)
-             GROUP BY c.hash"
+             GROUP BY c.hash",
         )?;
-        let results = stmt.query_map([], |row| {
-            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
-        })?.collect::<std::result::Result<Vec<_>, _>>()?;
+        let results = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
         Ok(results)
     }
 

@@ -81,7 +81,13 @@ impl SemanticChunk {
         }
     }
 
-    pub fn with_context(text: String, chunk_type: ChunkType, position: usize, leading: &str, trailing: &str) -> Self {
+    pub fn with_context(
+        text: String,
+        chunk_type: ChunkType,
+        position: usize,
+        leading: &str,
+        trailing: &str,
+    ) -> Self {
         let chunk_hash = compute_chunk_hash(&text, leading, trailing);
         Self {
             text,
@@ -98,7 +104,11 @@ impl SemanticChunk {
     }
 
     pub fn with_metadata(mut self, metadata: ChunkMetadata) -> Self {
-        self.chunk_hash = compute_chunk_hash(&self.text, &metadata.leading_trivia, &metadata.trailing_trivia);
+        self.chunk_hash = compute_chunk_hash(
+            &self.text,
+            &metadata.leading_trivia,
+            &metadata.trailing_trivia,
+        );
         self.metadata = metadata;
         self
     }

@@ -6,9 +6,9 @@
 //! - Hybrid search with RRF fusion
 
 mod bm25;
-mod vector;
 mod hybrid;
 mod snippet;
+mod vector;
 
 pub use hybrid::*;
 pub use snippet::*;

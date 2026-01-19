@@ -1,9 +1,9 @@
 //! Virtual path utilities for agentroot:// URIs
 
-use std::collections::HashMap;
-use std::path::PathBuf;
 use crate::error::{AgentRootError, Result};
 use crate::VIRTUAL_PATH_PREFIX;
+use std::collections::HashMap;
+use std::path::PathBuf;
 
 /// Check if a string is a virtual path
 pub fn is_virtual_path(path: &str) -> bool {
@@ -40,18 +40,20 @@ pub fn normalize_virtual_path(path: &str) -> String {
 /// Parse a virtual path into (collection, path) tuple
 pub fn parse_virtual_path(vpath: &str) -> Result<(String, String)> {
     if !is_virtual_path(vpath) {
-        return Err(AgentRootError::InvalidVirtualPath(
-            format!("Not a virtual path: {}", vpath)
-        ));
+        return Err(AgentRootError::InvalidVirtualPath(format!(
+            "Not a virtual path: {}",
+            vpath
+        )));
     }
 
     let rest = &vpath[VIRTUAL_PATH_PREFIX.len()..];
     let parts: Vec<&str> = rest.splitn(2, '/').collect();
 
     if parts.is_empty() || parts[0].is_empty() {
-        return Err(AgentRootError::InvalidVirtualPath(
-            format!("Missing collection in virtual path: {}", vpath)
-        ));
+        return Err(AgentRootError::InvalidVirtualPath(format!(
+            "Missing collection in virtual path: {}",
+            vpath
+        )));
     }
 
     let collection = parts[0].to_string();
@@ -75,10 +77,12 @@ pub fn to_virtual_path(
     let abs = std::path::Path::new(abs_path);
     let root = std::path::Path::new(collection_root);
 
-    let rel_path = abs.strip_prefix(root)
-        .map_err(|_| AgentRootError::InvalidVirtualPath(
-            format!("Path {} is not under collection root {}", abs_path, collection_root)
-        ))?;
+    let rel_path = abs.strip_prefix(root).map_err(|_| {
+        AgentRootError::InvalidVirtualPath(format!(
+            "Path {} is not under collection root {}",
+            abs_path, collection_root
+        ))
+    })?;
 
     let rel_str = rel_path.to_string_lossy();
     Ok(build_virtual_path(collection_name, &rel_str))
@@ -91,7 +95,8 @@ pub fn resolve_virtual_path(
 ) -> Result<PathBuf> {
     let (collection, path) = parse_virtual_path(vpath)?;
 
-    let collection_root = collections.get(&collection)
+    let collection_root = collections
+        .get(&collection)
         .ok_or_else(|| AgentRootError::CollectionNotFound(collection.clone()))?;
 
     Ok(collection_root.join(path))

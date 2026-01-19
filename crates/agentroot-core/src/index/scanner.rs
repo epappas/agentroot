@@ -1,9 +1,9 @@
 //! File scanning for indexing
 
+use crate::error::Result;
 use glob::Pattern;
 use std::path::{Path, PathBuf};
 use walkdir::{DirEntry, WalkDir};
-use crate::error::Result;
 
 /// Directories to exclude from scanning
 const EXCLUDE_DIRS: &[&str] = &[
@@ -62,7 +62,8 @@ pub fn scan_files(root: &Path, options: &ScanOptions) -> Result<Vec<ScanResult>>
         }
 
         let path = entry.path();
-        let relative = path.strip_prefix(root)
+        let relative = path
+            .strip_prefix(root)
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_else(|_| path.to_string_lossy().to_string());
 

@@ -1,9 +1,11 @@
 //! Go-specific chunking strategy
 
-use tree_sitter::Node;
-use super::{ChunkingStrategy, line_numbers, get_breadcrumb};
-use crate::index::ast_chunker::types::{SemanticChunk, ChunkType, ChunkMetadata, compute_chunk_hash};
+use super::{get_breadcrumb, line_numbers, ChunkingStrategy};
 use crate::error::Result;
+use crate::index::ast_chunker::types::{
+    compute_chunk_hash, ChunkMetadata, ChunkType, SemanticChunk,
+};
+use tree_sitter::Node;
 
 const GO_SEMANTIC_NODES: &[&str] = &[
     "function_declaration",
@@ -190,8 +192,8 @@ fn search_for_kind(cursor: &mut tree_sitter::TreeCursor, target_kind: &str) -> b
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::index::ast_chunker::parser::parse;
     use crate::index::ast_chunker::language::Language;
+    use crate::index::ast_chunker::parser::parse;
 
     #[test]
     fn test_extract_function() {
@@ -225,8 +227,16 @@ func (s *Server) Start() error {
         let chunks = strategy.extract_chunks(source, tree.root_node()).unwrap();
 
         assert!(chunks.iter().any(|c| c.chunk_type == ChunkType::Method));
-        let method = chunks.iter().find(|c| c.chunk_type == ChunkType::Method).unwrap();
-        assert!(method.metadata.breadcrumb.as_ref().unwrap().contains("Server"));
+        let method = chunks
+            .iter()
+            .find(|c| c.chunk_type == ChunkType::Method)
+            .unwrap();
+        assert!(method
+            .metadata
+            .breadcrumb
+            .as_ref()
+            .unwrap()
+            .contains("Server"));
     }
 
     #[test]

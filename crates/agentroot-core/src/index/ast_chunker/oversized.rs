@@ -1,9 +1,9 @@
 //! Oversized chunk handling via striding
 
+use super::super::chunker::{CHUNK_OVERLAP_CHARS, CHUNK_SIZE_CHARS};
 #[cfg(test)]
 use super::types::ChunkType;
-use super::types::{SemanticChunk, ChunkMetadata, compute_chunk_hash};
-use super::super::chunker::{CHUNK_SIZE_CHARS, CHUNK_OVERLAP_CHARS};
+use super::types::{compute_chunk_hash, ChunkMetadata, SemanticChunk};
 
 const STRIDE_SIZE: usize = CHUNK_SIZE_CHARS;
 const STRIDE_OVERLAP: usize = CHUNK_OVERLAP_CHARS;
@@ -37,7 +37,10 @@ pub fn split_oversized_chunk(chunk: SemanticChunk, max_chars: usize) -> Vec<Sema
         };
 
         let stride_text = text[start..end].to_string();
-        let breadcrumb = chunk.metadata.breadcrumb.as_ref()
+        let breadcrumb = chunk
+            .metadata
+            .breadcrumb
+            .as_ref()
             .map(|b| format!("{}[{}]", b, stride_idx));
 
         let leading = if stride_idx == 0 {
@@ -100,7 +103,8 @@ pub fn split_oversized_chunk(chunk: SemanticChunk, max_chars: usize) -> Vec<Sema
 
 /// Split all oversized chunks in a list
 pub fn split_oversized_chunks(chunks: Vec<SemanticChunk>, max_chars: usize) -> Vec<SemanticChunk> {
-    chunks.into_iter()
+    chunks
+        .into_iter()
         .flat_map(|c| split_oversized_chunk(c, max_chars))
         .collect()
 }
@@ -187,9 +191,19 @@ mod tests {
         chunk.metadata.breadcrumb = Some("my_function".to_string());
         let result = split_oversized_chunk(chunk, 1000);
 
-        assert!(result[0].metadata.breadcrumb.as_ref().unwrap().contains("[0]"));
+        assert!(result[0]
+            .metadata
+            .breadcrumb
+            .as_ref()
+            .unwrap()
+            .contains("[0]"));
         if result.len() > 1 {
-            assert!(result[1].metadata.breadcrumb.as_ref().unwrap().contains("[1]"));
+            assert!(result[1]
+                .metadata
+                .breadcrumb
+                .as_ref()
+                .unwrap()
+                .contains("[1]"));
         }
     }
 
