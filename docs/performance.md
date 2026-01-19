@@ -1,575 +1,433 @@
-# Performance
+# Performance Tuning Guide
 
-Performance characteristics and optimization guide for Agentroot.
+This guide covers performance optimization strategies for Agentroot when working with large codebases (10K+ files).
 
-## Overview
+## Table of Contents
 
-Agentroot is designed for fast local search across large codebases. Performance depends on:
-
-- Hardware (CPU, RAM, disk I/O)
-- Corpus size (number of files, total size)
-- Query complexity
-- Cache hit rates
+- [Indexing Performance](#indexing-performance)
+- [Search Performance](#search-performance)
+- [Memory Optimization](#memory-optimization)
+- [Database Tuning](#database-tuning)
+- [Benchmarking](#benchmarking)
+- [Large Codebase Best Practices](#large-codebase-best-practices)
 
 ## Indexing Performance
 
-### File Scanning
+### Chunking Configuration
 
-Directory scanning uses `walkdir` with minimal overhead:
+Agentroot uses semantic chunking with the following defaults:
 
-- Speed: ~1000-5000 files/second (disk I/O bound)
-- Memory: ~10KB per 1000 files in memory at once
-- Bottleneck: Disk I/O and filesystem metadata access
+```rust
+// Located in: crates/agentroot-core/src/index/chunker.rs
+pub const CHUNK_SIZE_TOKENS: usize = 800;
+pub const CHUNK_OVERLAP_TOKENS: usize = 120;
+pub const CHUNK_SIZE_CHARS: usize = 3200;
+pub const CHUNK_OVERLAP_CHARS: usize = 480;
+```
 
-Factors affecting scan speed:
-- SSD vs HDD: 5-10x difference
-- File count: More files = slower (filesystem overhead)
-- Network filesystems: 10-100x slower than local
+**For Large Files** (>10KB):
+- Increase `CHUNK_SIZE_TOKENS` to 1000 for better context
+- Reduce `CHUNK_OVERLAP_TOKENS` to 100 to speed up processing
 
-### AST Parsing
+**For Many Small Files** (<1KB):
+- Decrease `CHUNK_SIZE_TOKENS` to 500 for finer granularity
+- Keep overlap at default for better search recall
 
-tree-sitter parsing for semantic chunking:
+### AST Parsing Overhead
 
-- Speed: ~1-5ms per file (depends on file size)
-- Memory: Bounded by tree-sitter streaming parser
-- Supported languages: Rust, Python, JavaScript, TypeScript, Go
+AST-aware chunking has overhead (~1-5ms per file). For large codebases:
 
-Parsing overhead:
-- Small files (<5KB): 0.5-2ms
-- Medium files (5-50KB): 2-10ms
-- Large files (>50KB): 10-50ms
+**Option 1: Selective AST Chunking**
+```bash
+# Use AST for core code
+agentroot collection add ./src --mask '**/*.rs' --name core
 
-Fallback character-based chunking (unsupported languages):
-- Speed: ~0.1-1ms per file
-- No parsing overhead
+# Use character chunking for docs
+agentroot collection add ./docs --mask '**/*.md' --name docs
+```
 
-### Content Hashing
+**Option 2: Parallel Processing**
+```rust
+// Already implemented in scanner.rs
+// Processes files in parallel using walkdir
+```
 
-SHA-256 hashing for document deduplication:
+### Cache Hit Rates
 
-- Speed: ~500MB/s on modern CPUs
-- Overhead: <1ms per typical file
-- Benefit: Eliminates duplicate content
+Typical cache performance:
+- **Initial indexing**: 0% cache hits (all chunks computed)
+- **Minor edits**: 90-95% cache hits
+- **Feature additions**: 80-90% cache hits
+- **Major refactor**: 60-80% cache hits
 
-blake3 hashing for chunk cache:
-
-- Speed: ~2GB/s on modern CPUs
-- Overhead: <0.5ms per chunk
-- Benefit: 80-90% cache hit rates
-
-### Database Operations
-
-SQLite with WAL mode:
-
-- Insert: ~1-2ms per document
-- Transaction batch: ~100-500 documents/transaction
-- FTS5 index: Built incrementally, ~10-20% overhead
-
-### Embedding Generation
-
-Bottleneck for initial indexing:
-
-- Model: nomic-embed-text-v1.5 (768 dimensions)
-- Speed: 50-100 chunks/second (CPU-dependent)
-- Batch size: 32 chunks at a time
-- Memory: ~1-2GB for model
-
-Factors affecting embedding speed:
-- CPU: Modern x86-64 with AVX2 (2-3x faster than old CPUs)
-- Batch size: Larger batches = better throughput
-- Chunk size: Longer text = more computation
-
-Expected times for full corpus embedding:
-- 1,000 chunks: ~10-20 seconds
-- 10,000 chunks: ~2-3 minutes
-- 100,000 chunks: ~20-30 minutes
-
-### Cache Performance
-
-Content-addressable caching dramatically improves re-indexing:
-
-| Change Type | Cache Hit Rate | Expected Speedup |
-|-------------|----------------|------------------|
-| No changes | 100% | Instant (cache only) |
-| Minor bug fix (1-2 files) | 95-98% | 10-20x faster |
-| Feature addition (10-20 files) | 80-90% | 5-10x faster |
-| Major refactoring (50+ files) | 60-80% | 2-5x faster |
-| Complete rewrite | 0-20% | No speedup |
-
-Re-indexing with cache:
-- Cache lookup: <0.1ms per chunk
-- Only changed chunks re-embedded
-- Typical edit: 90% cache hit = 10x faster
-
-### Provider Performance
-
-Different providers have different performance characteristics:
-
-#### FileProvider (Local Files)
-
-- **Scanning**: ~1000-5000 files/second (disk I/O bound)
-- **Latency**: <1ms per file (local filesystem)
-- **Bottleneck**: Disk I/O, filesystem metadata
-- **Scalability**: Handles 100K+ files easily
-- **Cache-friendly**: High hit rates on re-index (80-90%)
-
-Best for:
-- Local development
-- Quick iteration
-- Large codebases on SSD
-
-#### GitHubProvider (GitHub API)
-
-- **API Rate Limits**:
-  - Without auth: 60 requests/hour
-  - With auth: 5,000 requests/hour
-- **Latency**: 100-500ms per API call
-- **Bottleneck**: Network latency and API rate limits
-- **Batch operations**: List files once, fetch individually
-- **ETags**: GitHub returns ETags for efficient updates
-
-Performance tips:
-- Always use GITHUB_TOKEN for authentication
-- Index during off-peak hours if hitting rate limits
-- Consider caching locally for frequent updates
-- Use specific file patterns to reduce API calls
-
-Example timings (with auth):
-- Small repo (<100 files): 2-5 minutes
-- Medium repo (100-1K files): 10-30 minutes
-- Large repo (>1K files): May hit rate limits
-
-Best for:
-- Public documentation
-- Reference implementations
-- Occasional updates
-
-#### Performance Comparison
-
-| Provider | Speed | Latency | Scalability | Cache Efficiency |
-|----------|-------|---------|-------------|------------------|
-| FileProvider | ⚡ Very Fast | <1ms | 100K+ files | ✅ Excellent (90%) |
-| GitHubProvider | 🐌 Slow | 100-500ms | Limited by API | ⚠️ Good (ETags) |
-| Future: URLProvider | 🐢 Moderate | 50-200ms | Varies | ⚠️ Moderate |
-| Future: PDFProvider | 🐢 Moderate | 10-100ms | Good | ✅ Good |
-
-#### Optimization Strategies
-
-**For FileProvider**:
-- Use SSD for best performance
-- Exclude large binary directories (node_modules, target)
-- Use specific glob patterns to reduce scanning
-- Enable symlink following only when needed
-
-**For GitHubProvider**:
-- Set GITHUB_TOKEN environment variable
-- Use specific file patterns (**/*.md vs **/*)
-- Index once, update periodically
-- Consider local caching for frequent access
-
-**For Mixed Sources**:
-- Index local files frequently (fast)
-- Update GitHub collections periodically (slow)
-- Use separate update commands when needed
-- Monitor API rate limits
+**Impact**: Re-indexing 10,000 files with 80% cache hit rate:
+- Without cache: ~30 minutes
+- With cache: ~6 minutes (5x faster)
 
 ## Search Performance
 
 ### BM25 Full-Text Search
 
-Using SQLite FTS5 with Porter stemming:
+**Performance**: <10ms for typical queries on 10K documents
 
-- Latency: <10ms for typical queries
-- Throughput: >100 queries/second
-- Bottleneck: Disk I/O for large result sets
+**Optimization Tips**:
+1. Use specific keywords over broad terms
+2. Limit results with `--limit` flag
+3. Use collection filters to narrow scope
 
-Query complexity impact:
-- Simple keyword: 1-5ms
-- Phrase search: 2-10ms
-- Complex boolean: 5-20ms
-- Prefix wildcard: 10-50ms
+```bash
+# Slow: searches all collections
+agentroot search "function"
 
-Corpus size impact:
-- 1K documents: <5ms
-- 10K documents: <10ms
-- 100K documents: <20ms
-- 1M documents: <50ms (needs testing)
+# Fast: searches specific collection
+agentroot search "function" --collection myproject
+```
 
 ### Vector Similarity Search
 
-Cosine similarity computed in Rust:
+**Performance**: ~100ms for 10K chunks
 
-- Latency: 10-200ms (depends on corpus size)
-- Algorithm: Brute-force cosine similarity
-- Memory: Loads embeddings into RAM
+**Optimization Tips**:
+1. **Reduce embedding dimensions** (requires model change)
+2. **Use min-score threshold** to filter low-quality matches
+3. **Enable provider filtering** for targeted search
 
-Corpus size impact (768-dim embeddings):
-- 1K chunks: ~10ms
-- 10K chunks: ~50-100ms
-- 100K chunks: ~500ms-1s
-- 1M chunks: ~5-10s (impractical)
-
-Memory usage:
-- Per chunk: 768 dims × 4 bytes = 3KB
-- 10K chunks: ~30MB
-- 100K chunks: ~300MB
-
-Optimization for large corpora:
-- Filter by collection: Reduces search space
-- Use approximate nearest neighbor (not implemented)
-- Shard by collection/topic
+```bash
+# Filter by provider for faster search
+agentroot vsearch "authentication" --provider file --min-score 0.5
+```
 
 ### Hybrid Search
 
-Combines BM25 and vector search:
+**Performance**: ~150ms (combines BM25 + Vector + Reranking)
 
-- Latency: Max of both methods + RRF overhead
-- RRF overhead: <1ms
-- Typically: 50-150ms total
+**Cost Breakdown**:
+- BM25: ~10ms
+- Vector search: ~100ms
+- RRF fusion: ~5ms
+- Reranking (if enabled): ~35ms
 
-Strong signal optimization:
-- If BM25 top result has score ≥0.85 and gap ≥0.15
-- Skip vector search entirely
-- Saves ~50-100ms
+**Tuning Constants** (in `crates/agentroot-core/src/search/hybrid.rs`):
+```rust
+const RRF_K: f64 = 60.0;               // Lower = more emphasis on top results
+const MAX_RERANK_DOCS: usize = 40;      // Reduce to 20 for faster reranking
+const STRONG_SIGNAL_SCORE: f64 = 0.85;  // Increase to 0.9 for stricter filtering
+```
 
-Expected latencies:
-- Small corpus (<1K docs): 20-50ms
-- Medium corpus (1-10K docs): 50-150ms
-- Large corpus (>10K docs): 150-500ms
+## Memory Optimization
 
-## Memory Usage
+### Embedding Cache
 
-### Indexing
+**Memory Usage**:
+- Per chunk: ~1.5KB (embedding) + metadata
+- 10K chunks: ~15MB memory
+- 100K chunks: ~150MB memory
 
-Memory consumption during indexing:
+**Configuration**:
+```sql
+-- Vacuum database to reclaim space
+agentroot cleanup
 
-- Base process: ~10-20MB
-- tree-sitter parser: ~5-10MB
-- Embedding model: ~1-2GB
-- Batch buffer: ~10MB
-- Peak usage: ~1.5-2GB
+-- Check database size
+ls -lh ~/.cache/agentroot/index.sqlite
+```
 
-### Search Operations
+### SQLite Pragma Settings
 
-Memory for search:
+For large databases, configure SQLite for performance:
 
-- BM25 search: ~50MB (query processing)
-- Vector search: ~30MB per 10K chunks (embedding storage)
-- Hybrid search: Sum of both
+```sql
+-- Located in: crates/agentroot-core/src/db/schema.rs
+PRAGMA journal_mode = WAL;         -- Write-Ahead Logging for concurrency
+PRAGMA synchronous = NORMAL;       -- Balance durability and speed
+PRAGMA cache_size = -64000;        -- 64MB cache
+PRAGMA temp_store = MEMORY;        -- Use RAM for temp tables
+```
 
-Database connection:
-- SQLite: ~10-20MB base
-- Page cache: Grows with queries (up to hundreds of MB)
+## Database Tuning
 
-### Database File Size
+### Index Optimization
 
-On-disk storage:
+**FTS5 Index Size**:
+- Documents table: ~500 bytes per document
+- FTS5 index: ~2-5x document size
+- Total for 10K docs: ~15-30MB
 
-- Documents: ~10KB per file (metadata + hash)
-- Content: Deduplicated by SHA-256 hash
-- FTS5 index: ~30% of total content size
-- Embeddings: ~3KB per chunk (768 × 4 bytes)
-- Chunk cache: ~3KB per unique chunk
+**Optimize Index**:
+```bash
+# Run after major updates
+agentroot cleanup
+```
 
-Example corpus (10,000 files, 5 chunks each):
-- Document metadata: ~100MB
-- Content (deduplicated): ~200MB
-- FTS5 index: ~60MB
-- Embeddings: ~150MB (50,000 chunks × 3KB)
-- Total: ~510MB
+### Content-Addressable Storage
 
-## Optimization Strategies
+Agentroot uses SHA-256 hashing for deduplication:
 
-### For Faster Indexing
+**Benefits**:
+- Duplicate content stored once
+- Incremental updates only process changed files
+- Reduced disk I/O
 
-1. **Exclude unnecessary files**:
-   ```bash
-   agentroot collection add ./src --name code \
-     --exclude '**/target/**' \
-     --exclude '**/node_modules/**' \
-     --exclude '**/test/**'
-   ```
-
-2. **Use specific file masks**:
-   ```bash
-   # Only source files
-   --mask '**/*.rs' --mask '**/*.py'
-   ```
-
-3. **Build release binary**:
-   ```bash
-   cargo build --release
-   # 20-30% faster than debug build
-   ```
-
-4. **Use SSD for database**:
-   ```bash
-   # Place on fast disk
-   export AGENTROOT_DB=/ssd/path/index.sqlite
-   ```
-
-5. **Leverage cache on re-index**:
-   ```bash
-   # Incremental updates are much faster
-   agentroot update
-   agentroot embed  # Only changed chunks re-embedded
-   ```
-
-### For Faster Search
-
-1. **Use BM25 for keyword queries**:
-   ```bash
-   # BM25 is 10x faster than vector search
-   agentroot search "function_name"
-   ```
-
-2. **Filter by collection**:
-   ```bash
-   # Reduces search space
-   agentroot query "pattern" -c specific-collection
-   ```
-
-3. **Set appropriate limits**:
-   ```bash
-   # Fewer results = faster
-   agentroot search "query" -n 10
-   ```
-
-4. **Use minimum score thresholds**:
-   ```bash
-   # Skip low-quality results
-   agentroot search "query" --min-score 0.5
-   ```
-
-5. **Vacuum database periodically**:
-   ```bash
-   # Optimize database file
-   agentroot cleanup --vacuum
-   ```
-
-### For Lower Memory Usage
-
-1. **Filter searches by collection**:
-   - Loads fewer embeddings into memory
-
-2. **Close other applications**:
-   - Embedding generation needs 1-2GB RAM
-
-3. **Use smaller batch sizes** (not currently configurable):
-   - Would reduce peak memory during embedding
-
-4. **Index in stages**:
-   ```bash
-   # Index collections separately
-   agentroot collection add ./src --name src
-   agentroot update -c src
-   agentroot embed -c src
-   ```
-
-### For Smaller Database
-
-1. **Clean up orphaned data**:
-   ```bash
-   agentroot cleanup
-   ```
-
-2. **Vacuum database**:
-   ```bash
-   agentroot cleanup --vacuum
-   # Reclaims unused space
-   ```
-
-3. **Remove old collections**:
-   ```bash
-   agentroot collection remove old-collection
-   ```
-
-4. **Exclude large files**:
-   ```bash
-   # Skip generated files, binaries, etc.
-   --exclude '**/dist/**'
-   --exclude '**/*.min.js'
-   ```
+**Trade-offs**:
+- Hash computation: ~1ms per document
+- Worth it for >1000 documents
 
 ## Benchmarking
 
-### Measuring Indexing Time
+### Running Benchmarks Locally
 
 ```bash
-# Time full indexing
-time agentroot update
-time agentroot embed
+# Run all benchmarks
+cargo bench
 
-# With verbose output
-time agentroot embed -v
+# Run specific benchmark
+cargo bench --bench indexing
+
+# Save baseline
+cargo bench --bench indexing -- --save-baseline main
+
+# Compare against baseline
+cargo bench --bench indexing -- --baseline main
 ```
 
-### Measuring Search Latency
+### Benchmark Script
 
 ```bash
-# Install hyperfine for benchmarking
-cargo install hyperfine
-
-# Benchmark BM25 search
-hyperfine "agentroot search 'error handling'"
-
-# Benchmark vector search
-hyperfine "agentroot vsearch 'error handling'"
-
-# Benchmark hybrid search
-hyperfine "agentroot query 'error handling'"
+# Compare current performance against main branch
+./scripts/bench-compare.sh main
 ```
 
-### Measuring Cache Hit Rate
+### Interpreting Results
+
+```
+scan_1000_files         time:   [45.234 ms 45.891 ms 46.612 ms]
+                        change: [-2.3421% -0.9234% +0.5123%]
+```
+
+- **time**: Current performance (min, avg, max)
+- **change**: Percentage change from baseline (negative = faster)
+- **Regression threshold**: >5% slower indicates potential issue
+
+### CI/CD Integration
+
+Benchmarks run automatically on:
+- Push to `master` branch
+- Pull requests
+- Weekly schedule (Sundays at midnight)
+
+**Access results**:
+1. Go to GitHub Actions tab
+2. Click "Benchmark Performance" workflow
+3. Download artifacts for detailed graphs
+
+## Large Codebase Best Practices
+
+### For 10K+ Files
+
+**1. Use Pattern-Based Exclusions**
+```bash
+agentroot collection add ./repo \
+  --mask '**/*.rs' \
+  --exclude '**/target/**' \
+  --exclude '**/node_modules/**'
+```
+
+**2. Split into Multiple Collections**
+```bash
+# Core codebase
+agentroot collection add ./src --name core
+
+# Documentation
+agentroot collection add ./docs --name docs
+
+# Tests (optional, separate)
+agentroot collection add ./tests --name tests
+```
+
+**3. Incremental Updates**
+```bash
+# First run: indexes everything
+agentroot update
+
+# Subsequent runs: only changed files (much faster)
+agentroot update
+```
+
+**4. Selective Embedding**
+```bash
+# Embed only core code for semantic search
+agentroot embed --collection core
+
+# Use BM25 for documentation (no embeddings needed)
+agentroot search "configuration" --collection docs
+```
+
+### For 100K+ Files
+
+**Additional Optimizations**:
+
+1. **Database Sharding**: Create multiple databases per project/module
+```bash
+# Frontend database
+AGENTROOT_DB=~/.cache/agentroot/frontend.sqlite agentroot collection add ./frontend
+
+# Backend database
+AGENTROOT_DB=~/.cache/agentroot/backend.sqlite agentroot collection add ./backend
+```
+
+2. **Batch Processing**: Process files in batches during off-peak hours
+```bash
+# Schedule large updates during low-activity periods
+0 2 * * * agentroot update && agentroot embed
+```
+
+3. **Provider Filtering**: Index different sources in separate collections
+```bash
+# Local files
+agentroot collection add ./local --provider file --name local
+
+# GitHub repos
+agentroot collection add https://github.com/org/repo --provider github --name remote
+
+# Search specific provider
+agentroot search "feature" --provider file
+```
+
+## Performance Metrics
+
+### Expected Throughput
+
+| Operation | Small (1K files) | Medium (10K files) | Large (100K files) |
+|-----------|------------------|--------------------|--------------------|
+| **Scanning** | 100ms | 1s | 10s |
+| **AST Parsing** | 1-5s | 10-50s | 100-500s |
+| **Embedding** | 20s | 200s | 2000s |
+| **BM25 Search** | <10ms | <10ms | <50ms |
+| **Vector Search** | 10ms | 100ms | 1s |
+| **Hybrid Search** | 15ms | 150ms | 1.5s |
+
+### Memory Usage
+
+| Database Size | RAM Usage | Disk Usage |
+|---------------|-----------|------------|
+| 1K documents | ~5MB | ~15MB |
+| 10K documents | ~50MB | ~150MB |
+| 100K documents | ~500MB | ~1.5GB |
+
+## Troubleshooting Performance Issues
+
+### Slow Indexing
+
+**Symptom**: Update takes >1 minute for 1000 files
+
+**Solutions**:
+1. Check file patterns exclude unnecessary directories
+2. Verify disk I/O is not bottleneck (use `iostat`)
+3. Ensure cache directory is on fast storage (SSD preferred)
+4. Reduce chunk overlap for faster processing
+
+### Slow Search
+
+**Symptom**: Queries take >1 second
+
+**Solutions**:
+1. Use `--min-score` to reduce result set
+2. Add `--collection` filter to search subset
+3. Run `agentroot cleanup` to optimize database
+4. Check SQLite pragma settings
+
+### High Memory Usage
+
+**Symptom**: Process uses >1GB RAM
+
+**Solutions**:
+1. Split large databases into multiple collections
+2. Clear embedding cache periodically
+3. Reduce `MAX_RERANK_DOCS` in hybrid search
+4. Use streaming API for large result sets
+
+## Advanced Configuration
+
+### Environment Variables
 
 ```bash
-# First embedding (no cache)
-agentroot embed -f
+# Override database path
+export AGENTROOT_DB=/fast/ssd/agentroot.sqlite
 
-# Make small edit to one file
-# Then re-embed
-agentroot embed -v
-# Output shows: Cached: X (Y%), Computed: Z (W%)
+# Override models directory
+export AGENTROOT_MODELS=/fast/ssd/models
+
+# Set log level for debugging
+export RUST_LOG=debug
 ```
 
 ### Profiling
 
-For detailed profiling:
-
 ```bash
-# Install flamegraph
+# Profile with cargo flamegraph
 cargo install flamegraph
+cargo flamegraph --bench indexing
 
-# Profile indexing
-sudo flamegraph -- agentroot update
-
-# Profile search
-sudo flamegraph -- agentroot query "pattern"
-
-# View flamegraph.svg in browser
+# Profile with perf (Linux)
+perf record cargo bench --bench search
+perf report
 ```
 
-## Scalability Limits
+## Benchmark Baseline Storage
 
-### Tested Configurations
+### Storing Baselines
 
-Agentroot has been tested with:
-- Up to 100,000 files
-- Up to 500,000 chunks
-- Database size up to 2GB
-- RAM usage up to 2GB (during embedding)
+```bash
+# Create baseline for current commit
+cargo bench --bench indexing --bench search -- --save-baseline $(git rev-parse --short HEAD)
 
-### Known Limitations
+# Compare feature branch against main
+git checkout feature-branch
+cargo bench --bench indexing -- --baseline main
+```
 
-1. **Vector search is O(n)**:
-   - Brute-force cosine similarity
-   - Linear with corpus size
-   - Becomes impractical beyond 100K chunks
-   - Solution: Filter by collection, or use approximate nearest neighbor (not implemented)
+### CI Baseline Management
 
-2. **Embeddings in memory**:
-   - Vector search loads all embeddings into RAM
-   - ~3KB per chunk
-   - 100K chunks = ~300MB
-   - Solution: Filter by collection to reduce working set
+Baselines are automatically stored in GitHub Actions cache:
+- **Key**: `criterion-{branch}-{sha}`
+- **Retention**: 30 days
+- **Size limit**: 400MB per cache
 
-3. **SQLite concurrency**:
-   - Single writer at a time
-   - Multiple readers OK (WAL mode)
-   - Concurrent indexing not supported
+## Monitoring
 
-4. **Model size**:
-   - nomic-embed-text-v1.5: 768 dimensions
-   - ~1-2GB RAM during inference
-   - Cannot be reduced without changing model
+### Metrics to Track
 
-### Recommendations by Scale
+1. **Indexing time** (per file, per collection)
+2. **Cache hit rate** (percentage)
+3. **Search latency** (p50, p95, p99)
+4. **Database size** (growth rate)
+5. **Memory usage** (peak, average)
 
-**Small (<1K files)**:
-- All operations fast (<1s)
-- No optimization needed
+### Example Monitoring
 
-**Medium (1-10K files)**:
-- Indexing: 10-60 seconds
-- Search: <100ms
-- Exclude test files
+```bash
+# Check current performance
+time agentroot update
+time agentroot search "test"
 
-**Large (10-100K files)**:
-- Indexing: 1-10 minutes
-- Search: 100-500ms
-- Use collection filters
-- Exclude generated files
+# Monitor database size
+du -sh ~/.cache/agentroot/index.sqlite
 
-**Very Large (>100K files)**:
-- Consider splitting into multiple databases
-- Use collection filters heavily
-- May need approximate nearest neighbor for vector search (not implemented)
+# Check cache effectiveness
+sqlite3 ~/.cache/agentroot/index.sqlite "SELECT COUNT(*) FROM chunk_embeddings;"
+```
 
-## Hardware Recommendations
+## Further Reading
 
-### Minimum Requirements
+- [Architecture Documentation](architecture.md) - System design
+- [Semantic Chunking](semantic-chunking.md) - Chunking algorithm details
+- [Embedding Cache](embedding-cache.md) - Cache implementation
+- [Provider System](providers.md) - Multi-source indexing
 
-- CPU: Modern x86-64 (2015+)
-- RAM: 4GB (2GB for Agentroot + 2GB for OS)
-- Disk: 1GB free space
-- OS: Linux, macOS, Windows
+## Contributing
 
-### Recommended
-
-- CPU: Modern x86-64 with AVX2 (2-3x faster embedding)
-- RAM: 8GB (comfortable headroom)
-- Disk: SSD (5-10x faster indexing)
-- OS: Linux or macOS (best tested)
-
-### Optimal
-
-- CPU: Modern x86-64 with AVX-512 or ARM with NEON
-- RAM: 16GB+ (large corpora)
-- Disk: NVMe SSD (minimal I/O wait)
-- OS: Linux (best performance)
-
-## Comparison to Alternatives
-
-Performance comparison (approximate, hardware-dependent):
-
-| Tool | Keyword Search | Semantic Search | Indexing | Cache |
-|------|---------------|----------------|----------|-------|
-| Agentroot | <10ms | ~100ms | ~5min/10K files | 80-90% |
-| ripgrep | <10ms | N/A | Instant (no index) | N/A |
-| GitHub Search | ~100ms | N/A | N/A (cloud) | N/A |
-| Basic vector DB | N/A | ~100ms | ~10min/10K files | No |
-
-Agentroot's advantage:
-- Hybrid search for best quality
-- Smart cache for fast re-indexing
-- Local-first (no network latency)
-
-## Future Improvements
-
-Potential optimizations (not implemented):
-
-1. **Approximate Nearest Neighbor (ANN)**:
-   - Replace brute-force with HNSW or FAISS
-   - 10-100x faster vector search
-   - Slight accuracy trade-off
-
-2. **Parallel indexing**:
-   - Multi-threaded file scanning
-   - Parallel embedding generation
-   - 2-4x faster indexing
-
-3. **Incremental FTS5 updates**:
-   - Only rebuild changed documents
-   - Faster `update` command
-
-4. **Streaming vector search**:
-   - Don't load all embeddings
-   - Lower memory usage
-   - Slightly slower
-
-5. **GPU acceleration**:
-   - Use GPU for embeddings
-   - 5-10x faster generation
-   - Requires CUDA/Metal support
-
-These may be added in future versions based on demand.
+Found a performance issue? Please [open an issue](https://github.com/spacejar/agentroot/issues) with:
+1. Benchmark results showing regression
+2. System information (OS, CPU, RAM, disk type)
+3. Dataset size (number of files, total size)
+4. Reproduction steps

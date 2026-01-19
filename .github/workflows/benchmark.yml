@@ -1,0 +1,172 @@
+name: Benchmark Performance
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+  schedule:
+    - cron: '0 0 * * 0'
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  benchmark:
+    name: Run Benchmarks
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache target directory
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-target-bench-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install criterion
+        run: cargo install cargo-criterion || true
+
+      - name: Run indexing benchmarks
+        run: cargo bench --bench indexing -- --save-baseline current
+
+      - name: Run search benchmarks
+        run: cargo bench --bench search -- --save-baseline current
+
+      - name: Download previous baseline
+        uses: actions/cache@v4
+        with:
+          path: target/criterion
+          key: ${{ runner.os }}-criterion-${{ github.ref_name }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-criterion-${{ github.ref_name }}-
+            ${{ runner.os }}-criterion-
+
+      - name: Compare with baseline
+        id: compare
+        continue-on-error: true
+        run: |
+          if [ -d "target/criterion/baseline" ]; then
+            cargo bench --bench indexing --bench search -- --baseline baseline > bench-output.txt 2>&1
+            cat bench-output.txt
+            
+            if grep -q "Performance has regressed" bench-output.txt; then
+              echo "regression=true" >> $GITHUB_OUTPUT
+            else
+              echo "regression=false" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "No baseline found, skipping comparison"
+            echo "regression=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Store benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results-${{ github.sha }}
+          path: |
+            target/criterion/
+            bench-output.txt
+          retention-days: 30
+
+      - name: Comment PR with results
+        if: github.event_name == 'pull_request' && steps.compare.outputs.regression == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const output = fs.readFileSync('bench-output.txt', 'utf8');
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.name,
+              body: `## ⚠️ Performance Regression Detected\n\n\`\`\`\n${output}\n\`\`\``
+            });
+
+      - name: Fail if regression detected
+        if: steps.compare.outputs.regression == 'true'
+        run: |
+          echo "Performance regression detected!"
+          exit 1
+
+  benchmark-report:
+    name: Generate Benchmark Report
+    runs-on: ubuntu-latest
+    needs: benchmark
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download benchmark results
+        uses: actions/download-artifact@v4
+        with:
+          name: benchmark-results-${{ github.sha }}
+          path: benchmark-results
+
+      - name: Generate HTML report
+        run: |
+          mkdir -p docs/benchmarks
+          cat > docs/benchmarks/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html>
+          <head>
+              <title>Agentroot Benchmark Results</title>
+              <style>
+                  body { font-family: Arial, sans-serif; margin: 20px; }
+                  h1 { color: #333; }
+                  .timestamp { color: #666; font-size: 14px; }
+                  .metric { margin: 10px 0; padding: 10px; background: #f5f5f5; border-radius: 4px; }
+                  .metric-name { font-weight: bold; }
+                  .metric-value { color: #0066cc; }
+              </style>
+          </head>
+          <body>
+              <h1>Agentroot Benchmark Results</h1>
+              <div class="timestamp">Last updated: $(date -u)</div>
+              <div class="timestamp">Commit: ${{ github.sha }}</div>
+              
+              <h2>Latest Results</h2>
+              <p>Benchmark results are stored in the artifacts. Download them for detailed analysis.</p>
+              
+              <h2>How to Use</h2>
+              <ol>
+                  <li>Download the latest benchmark artifact from GitHub Actions</li>
+                  <li>Extract the criterion directory</li>
+                  <li>Open target/criterion/report/index.html for detailed graphs</li>
+              </ol>
+          </body>
+          </html>
+          EOF
+
+      - name: Deploy to GitHub Pages
+        if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./docs/benchmarks
+          destination_dir: benchmarks

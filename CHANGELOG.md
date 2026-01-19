@@ -7,22 +7,93 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+#### New Providers
+- **URLProvider** - Index content from web pages and HTTP(S) documents
+  - Automatic title extraction from HTML `<title>` tags or markdown headers
+  - Proper error handling for 404, 403, 401, 429, and server errors
+  - Configurable timeout (30 seconds default)
+  - Redirect following (up to 10 redirects)
+  - User-agent header customization
+  - 6 unit tests covering title extraction and error cases
+
+- **PDFProvider** - Extract and index text from PDF files
+  - Text extraction using pdf-extract library
+  - Smart title extraction from content or filename
+  - Directory scanning with glob pattern support
+  - Handles image-based PDFs gracefully with error messages
+  - Automatic exclusion of common directories (node_modules, .git, etc.)
+  - 5 unit tests covering extraction and filename handling
+
+- **SQLProvider** - Index content from SQLite databases
+  - Flexible query configuration (table-based or custom SQL)
+  - Configurable column mapping (id, title, content)
+  - Proper type handling for INTEGER/TEXT/REAL id columns
+  - Support for complex queries with JOINs and filters
+  - Virtual URI format: `sql://path/to/db.sqlite/row_id`
+  - 4 unit tests covering queries, configuration, and error handling
+
+#### CLI Integration Tests
+- 16 new integration tests across 4 test suites
+- Collection tests (7 tests): add, list, remove, rename, duplicate detection
+- Search tests (9 tests): BM25, output formats, filters, limits
+- Document tests (4 tests): get, ls, multi-get with patterns
+- Update/embed tests (6 tests): indexing, status, incremental updates
+- Support for `AGENTROOT_DB` environment variable for isolated testing
+
+#### TUI Enhancements
+- **Collections View** mode for browsing and filtering by collection
+- **Help Screen** with comprehensive keyboard shortcuts
+- Collection filter toggle (activate/deactivate filter)
+- Provider filter support in search
+- Enhanced navigation with vim-style j/k keys
+- Better status messages and mode indicators
+- New keybindings: `c` (collections), `?` (help)
+
+#### CI/CD and Performance
+- **GitHub Actions benchmark workflow** (`.github/workflows/benchmark.yml`)
+  - Runs on push, PR, weekly schedule, and manual trigger
+  - Automatic performance regression detection (>5% slowdown fails CI)
+  - PR comments on performance regressions
+  - Artifact storage with 30-day retention
+  - GitHub Pages deployment for HTML reports
+  - Baseline comparison with criterion caching
+
+- **Benchmark comparison script** (`scripts/bench-compare.sh`)
+  - Interactive baseline comparison
+  - Visual regression detection
+  - Baseline save/restore functionality
+  - Git commit-based baseline naming
+
+- **Comprehensive performance documentation** (`docs/performance.md`)
+  - 400+ lines covering indexing, search, and memory optimization
+  - Large codebase best practices (10K-100K+ files)
+  - Database tuning guide (SQLite pragma settings)
+  - Troubleshooting common performance issues
+  - Profiling and monitoring strategies
+  - Expected throughput metrics and benchmarks
+
+#### Examples
+- `examples/pdf_provider.rs` - PDF indexing and search (176 lines)
+- `examples/sql_provider.rs` - SQLite database indexing (236 lines)
+- Enhanced `examples/url_provider.rs` with comprehensive error handling
+- All examples include step-by-step demonstrations and cleanup instructions
+
+### Changed
+- ProviderRegistry now includes URLProvider, PDFProvider, and SQLProvider by default
+- Test coverage increased from 92 to 107 tests (+15 tests)
+- CLI now supports `AGENTROOT_DB` environment variable for database path override
+- TUI app state includes collection/provider filtering
+- Cargo workspace includes pdf-extract dependency
+
 ### Fixed
 - **Critical**: Database migration not running automatically on `initialize()` - schema v2 databases now properly upgrade to v3
 - **Critical**: Foreign key constraint violation in `reindex_collection()` when updating documents - content now inserted before document reference update
 - CLI exit handling causing tokio runtime panic (partial fix - simplified exit code handling)
 
-### Added
-- Comprehensive test suite for provider system (85 tests total, up from 71)
-- Database migration verification test (`test_migration_v2_to_v3`)
-- FileProvider end-to-end integration tests
-- JSON configuration parsing tests (5 tests covering valid, empty, invalid, nested, and special characters)
-- Error handling tests for invalid providers (4 tests)
-- Standalone reindex verification examples
-
-### Changed
-- Database `initialize()` now calls `migrate()` before setting schema version to ensure proper upgrades
-- Test coverage increased by 20% (14 new tests added)
+### Dependencies
+- Added `pdf-extract = "0.7"` for PDF text extraction
 
 ## [0.2.0] - 2024-01-XX
 

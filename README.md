@@ -202,9 +202,9 @@ The provider system is extensible and designed to support:
 |----------|--------|-------------|
 | **FileProvider** | ✅ Available | Local file system with glob patterns |
 | **GitHubProvider** | ✅ Available | GitHub repositories and files |
-| **URLProvider** | 🔄 Planned | Web pages and documents |
-| **PDFProvider** | 🔄 Planned | PDF document extraction |
-| **SQLProvider** | 🔄 Planned | Database content indexing |
+| **URLProvider** | ✅ Available | Web pages and HTTP(S) documents |
+| **PDFProvider** | ✅ Available | PDF document text extraction |
+| **SQLProvider** | ✅ Available | SQLite database content indexing |
 | **CalendarProvider** | 🔄 Planned | Calendar events and notes |
 
 Adding a new provider is simple - implement the `SourceProvider` trait and register it. See [Provider Documentation](docs/providers.md) for details.
@@ -246,8 +246,12 @@ cargo run -p agentroot-core --example semantic_chunking
 # Custom indexing pipeline example
 cargo run -p agentroot-core --example custom_index
 
-# GitHub provider example (indexing from GitHub repositories)
-cargo run -p agentroot-core --example github_provider
+# Provider examples
+cargo run -p agentroot-core --example github_provider  # GitHub repositories
+cargo run -p agentroot-core --example url_provider     # Web pages/HTTP
+cargo run -p agentroot-core --example pdf_provider     # PDF documents
+cargo run -p agentroot-core --example sql_provider     # SQLite databases
+cargo run -p agentroot-core --example custom_provider  # Custom provider template
 ```
 
 All examples are production-ready, compile cleanly, and demonstrate real functionality. See [examples/README.md](examples/README.md) for details.
