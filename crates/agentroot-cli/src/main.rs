@@ -25,8 +25,11 @@ async fn main() -> Result<()> {
 
     let cli = Cli::parse();
 
-    // Open database
-    let db = Database::open(Database::default_path())?;
+    // Open database (use AGENTROOT_DB env var if set, otherwise use default)
+    let db_path = std::env::var("AGENTROOT_DB")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| Database::default_path());
+    let db = Database::open(&db_path)?;
     db.initialize()?;
 
     let result = match cli.command {
