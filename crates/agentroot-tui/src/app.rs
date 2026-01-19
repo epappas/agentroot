@@ -68,6 +68,7 @@ impl App {
             limit: 50,
             min_score: 0.0,
             collection: None,
+            provider: None,
             full_content: true,
         };
 

@@ -74,6 +74,7 @@ pub fn process_input(input: &str) -> Result<String, AppError> {
         limit: 10,
         min_score: 0.0,
         collection: None,
+        provider: None,
         full_content: false,
     };
 

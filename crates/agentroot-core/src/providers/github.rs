@@ -15,6 +15,9 @@ pub struct GitHubProvider {
     client: reqwest::Client,
 }
 
+const MAX_RETRIES: u32 = 3;
+const INITIAL_BACKOFF_MS: u64 = 1000;
+
 impl GitHubProvider {
     /// Create new GitHub provider
     pub fn new() -> Self {
@@ -59,7 +62,8 @@ impl GitHubProvider {
         }
 
         Err(AgentRootError::InvalidInput(format!(
-            "Invalid GitHub URL: {}",
+            "Invalid GitHub URL: {}. \
+             Expected format: https://github.com/owner/repo or https://github.com/owner/repo/blob/branch/path",
             url
         )))
     }
@@ -70,6 +74,76 @@ impl GitHubProvider {
             .get_option("github_token")
             .cloned()
             .or_else(|| std::env::var("GITHUB_TOKEN").ok())
+    }
+
+    /// Check rate limit from response headers and log warnings
+    fn check_rate_limit(&self, response: &reqwest::Response) {
+        if let Some(remaining) = response.headers().get("x-ratelimit-remaining") {
+            if let Ok(remaining_str) = remaining.to_str() {
+                if let Ok(remaining_count) = remaining_str.parse::<i32>() {
+                    if remaining_count < 10 {
+                        eprintln!(
+                            "Warning: GitHub API rate limit low ({} requests remaining). \
+                             Set GITHUB_TOKEN to increase limits.",
+                            remaining_count
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// Send request with retry logic for rate limits
+    async fn send_with_retry(&self, request: reqwest::RequestBuilder) -> Result<reqwest::Response> {
+        let mut retries = 0;
+        let mut backoff_ms = INITIAL_BACKOFF_MS;
+
+        loop {
+            let req = request.try_clone().ok_or_else(|| {
+                AgentRootError::ExternalError("Failed to clone request".to_string())
+            })?;
+
+            match req.send().await {
+                Ok(response) => {
+                    self.check_rate_limit(&response);
+
+                    if response.status() == 429 && retries < MAX_RETRIES {
+                        let retry_after = response
+                            .headers()
+                            .get("retry-after")
+                            .and_then(|v| v.to_str().ok())
+                            .and_then(|v| v.parse::<u64>().ok())
+                            .unwrap_or(backoff_ms / 1000);
+
+                        eprintln!(
+                            "Rate limit exceeded. Retrying after {} seconds (attempt {}/{})",
+                            retry_after,
+                            retries + 1,
+                            MAX_RETRIES
+                        );
+
+                        tokio::time::sleep(tokio::time::Duration::from_secs(retry_after)).await;
+                        retries += 1;
+                        backoff_ms *= 2;
+                        continue;
+                    }
+
+                    return Ok(response);
+                }
+                Err(e) if retries < MAX_RETRIES && e.is_timeout() => {
+                    eprintln!(
+                        "Request timeout. Retrying in {} seconds (attempt {}/{})",
+                        backoff_ms / 1000,
+                        retries + 1,
+                        MAX_RETRIES
+                    );
+                    tokio::time::sleep(tokio::time::Duration::from_millis(backoff_ms)).await;
+                    retries += 1;
+                    backoff_ms *= 2;
+                }
+                Err(e) => return Err(e.into()),
+            }
+        }
     }
 
     /// Fetch file from GitHub
@@ -92,16 +166,37 @@ impl GitHubProvider {
             request = request.header("Authorization", format!("token {}", token));
         }
 
-        let response = request.send().await?;
+        let response = self.send_with_retry(request).await.map_err(|e| {
+            AgentRootError::ExternalError(format!(
+                "Failed to fetch file from GitHub: {}. Check your internet connection.",
+                e
+            ))
+        })?;
 
-        if !response.status().is_success() {
-            return Err(AgentRootError::ExternalError(format!(
-                "GitHub API error: {}",
-                response.status()
-            )));
+        let status = response.status();
+        if !status.is_success() {
+            let error_msg = match status.as_u16() {
+                404 => format!(
+                    "File not found: {}/{}/{}/{}. Verify the repository, branch, and file path are correct.",
+                    owner, repo, branch, path
+                ),
+                403 => {
+                    "GitHub API rate limit exceeded or access forbidden. \
+                     Set GITHUB_TOKEN environment variable with a personal access token to increase rate limits. \
+                     Get token from: https://github.com/settings/tokens".to_string()
+                }
+                401 => {
+                    "Authentication failed. Your GITHUB_TOKEN may be invalid or expired. \
+                     Generate a new token at: https://github.com/settings/tokens".to_string()
+                }
+                _ => format!("GitHub API error {}: {}", status.as_u16(), status.canonical_reason().unwrap_or("Unknown error")),
+            };
+            return Err(AgentRootError::ExternalError(error_msg));
         }
 
-        Ok(response.text().await?)
+        response.text().await.map_err(|e| {
+            AgentRootError::ExternalError(format!("Failed to read file content: {}", e))
+        })
     }
 
     /// Fetch README from repository
@@ -121,16 +216,38 @@ impl GitHubProvider {
 
         request = request.header("Accept", "application/vnd.github.v3+json");
 
-        let response = request.send().await?;
+        let response = self.send_with_retry(request).await.map_err(|e| {
+            AgentRootError::ExternalError(format!(
+                "Failed to fetch README from GitHub: {}. Check your internet connection.",
+                e
+            ))
+        })?;
 
-        if !response.status().is_success() {
-            return Err(AgentRootError::ExternalError(format!(
-                "GitHub API error: {}",
-                response.status()
-            )));
+        let status = response.status();
+        if !status.is_success() {
+            let error_msg = match status.as_u16() {
+                404 => format!(
+                    "README not found for repository {}/{}. The repository may not have a README file, or it may not exist.",
+                    owner, repo
+                ),
+                403 => {
+                    "GitHub API rate limit exceeded or repository access forbidden. \
+                     For public repositories, set GITHUB_TOKEN environment variable to increase rate limits. \
+                     For private repositories, ensure your token has 'repo' scope. \
+                     Get token from: https://github.com/settings/tokens".to_string()
+                }
+                401 => {
+                    "Authentication failed. Your GITHUB_TOKEN may be invalid or expired. \
+                     Generate a new token at: https://github.com/settings/tokens".to_string()
+                }
+                _ => format!("GitHub API error {}: {}", status.as_u16(), status.canonical_reason().unwrap_or("Unknown error")),
+            };
+            return Err(AgentRootError::ExternalError(error_msg));
         }
 
-        let readme: ReadmeResponse = response.json().await?;
+        let readme: ReadmeResponse = response.json().await.map_err(|e| {
+            AgentRootError::ExternalError(format!("Failed to parse README response: {}", e))
+        })?;
         let content = String::from_utf8(
             base64::engine::general_purpose::STANDARD
                 .decode(readme.content.replace('\n', ""))
@@ -163,16 +280,42 @@ impl GitHubProvider {
 
         request = request.header("Accept", "application/vnd.github.v3+json");
 
-        let response = request.send().await?;
+        let response = self.send_with_retry(request).await.map_err(|e| {
+            AgentRootError::ExternalError(format!(
+                "Failed to list files from GitHub repository: {}. Check your internet connection.",
+                e
+            ))
+        })?;
 
-        if !response.status().is_success() {
-            return Err(AgentRootError::ExternalError(format!(
-                "GitHub API error: {}",
-                response.status()
-            )));
+        let status = response.status();
+        if !status.is_success() {
+            let error_msg = match status.as_u16() {
+                404 => format!(
+                    "Repository not found: {}/{}. Verify the repository owner and name are correct.",
+                    owner, repo
+                ),
+                403 => {
+                    "GitHub API rate limit exceeded or repository access forbidden. \
+                     For public repositories, set GITHUB_TOKEN environment variable to increase rate limits. \
+                     For private repositories, ensure your token has 'repo' scope. \
+                     Get token from: https://github.com/settings/tokens".to_string()
+                }
+                401 => {
+                    "Authentication failed. Your GITHUB_TOKEN may be invalid or expired. \
+                     Generate a new token at: https://github.com/settings/tokens".to_string()
+                }
+                409 => format!(
+                    "Repository {}/{} is empty or has no commits yet.",
+                    owner, repo
+                ),
+                _ => format!("GitHub API error {}: {}", status.as_u16(), status.canonical_reason().unwrap_or("Unknown error")),
+            };
+            return Err(AgentRootError::ExternalError(error_msg));
         }
 
-        let tree: TreeResponse = response.json().await?;
+        let tree: TreeResponse = response.json().await.map_err(|e| {
+            AgentRootError::ExternalError(format!("Failed to parse repository file tree: {}", e))
+        })?;
         Ok(tree.tree)
     }
 }

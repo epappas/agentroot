@@ -107,6 +107,7 @@ fn build_options(args: &SearchArgs) -> SearchOptions {
         limit: if args.all { usize::MAX } else { args.limit },
         min_score: args.min_score,
         collection: args.collection.clone(),
+        provider: None,
         full_content: args.full,
     }
 }

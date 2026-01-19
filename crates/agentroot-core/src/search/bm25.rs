@@ -22,6 +22,7 @@ impl Database {
             FROM documents_fts fts
             JOIN documents d ON d.id = fts.rowid
             JOIN content c ON c.hash = d.hash
+            JOIN collections coll ON coll.name = d.collection
             WHERE documents_fts MATCH ?1 AND d.active = 1
         "#,
         );
@@ -29,8 +30,15 @@ impl Database {
         let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(query.to_string())];
 
         if let Some(ref coll) = options.collection {
-            sql.push_str(" AND d.collection = ?2");
+            sql.push_str(" AND d.collection = ?");
+            sql.push_str(&(params_vec.len() + 1).to_string());
             params_vec.push(Box::new(coll.clone()));
+        }
+
+        if let Some(ref provider) = options.provider {
+            sql.push_str(" AND coll.provider_type = ?");
+            sql.push_str(&(params_vec.len() + 1).to_string());
+            params_vec.push(Box::new(provider.clone()));
         }
 
         sql.push_str(" ORDER BY score DESC");

@@ -104,6 +104,9 @@ impl<'a> McpServer<'a> {
             tools::get_tool_definition(),
             tools::multi_get_tool_definition(),
             tools::status_tool_definition(),
+            tools::collection_add_tool_definition(),
+            tools::collection_remove_tool_definition(),
+            tools::collection_update_tool_definition(),
         ];
 
         JsonRpcResponse::success(request.id.clone(), serde_json::json!({ "tools": tools }))
@@ -129,6 +132,9 @@ impl<'a> McpServer<'a> {
             "get" => tools::handle_get(self.db, arguments).await,
             "multi_get" => tools::handle_multi_get(self.db, arguments).await,
             "status" => tools::handle_status(self.db).await,
+            "collection_add" => tools::handle_collection_add(self.db, arguments).await,
+            "collection_remove" => tools::handle_collection_remove(self.db, arguments).await,
+            "collection_update" => tools::handle_collection_update(self.db, arguments).await,
             _ => Err(anyhow::anyhow!("Unknown tool: {}", name)),
         };
 

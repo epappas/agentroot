@@ -22,6 +22,8 @@ pub struct SearchOptions {
     pub min_score: f64,
     /// Filter by collection name
     pub collection: Option<String>,
+    /// Filter by provider type (e.g., "file", "github")
+    pub provider: Option<String>,
     /// Include full document content
     pub full_content: bool,
 }
@@ -32,6 +34,7 @@ impl Default for SearchOptions {
             limit: 20,
             min_score: 0.0,
             collection: None,
+            provider: None,
             full_content: false,
         }
     }

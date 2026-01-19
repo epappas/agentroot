@@ -123,6 +123,7 @@ fn main() -> agentroot_core::Result<()> {
             limit: 5,
             min_score: 0.0,
             collection: Some("custom".to_string()),
+            provider: None,
             full_content: false,
         };
 

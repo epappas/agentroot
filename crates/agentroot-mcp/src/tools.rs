@@ -29,6 +29,10 @@ pub fn search_tool_definition() -> ToolDefinition {
                 "collection": {
                     "type": "string",
                     "description": "Filter by collection name"
+                },
+                "provider": {
+                    "type": "string",
+                    "description": "Filter by provider type (file, github, url, etc.)"
                 }
             },
             "required": ["query"]
@@ -60,6 +64,10 @@ pub fn vsearch_tool_definition() -> ToolDefinition {
                 "collection": {
                     "type": "string",
                     "description": "Filter by collection name"
+                },
+                "provider": {
+                    "type": "string",
+                    "description": "Filter by provider type (file, github, url, etc.)"
                 }
             },
             "required": ["query"]
@@ -86,6 +94,10 @@ pub fn query_tool_definition() -> ToolDefinition {
                 "collection": {
                     "type": "string",
                     "description": "Filter by collection name"
+                },
+                "provider": {
+                    "type": "string",
+                    "description": "Filter by provider type (file, github, url, etc.)"
                 }
             },
             "required": ["query"]
@@ -165,6 +177,75 @@ pub fn status_tool_definition() -> ToolDefinition {
     }
 }
 
+pub fn collection_add_tool_definition() -> ToolDefinition {
+    ToolDefinition {
+        name: "collection_add".to_string(),
+        description: "Add a new collection to index".to_string(),
+        input_schema: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Collection name"
+                },
+                "path": {
+                    "type": "string",
+                    "description": "Path to local directory or URL"
+                },
+                "pattern": {
+                    "type": "string",
+                    "description": "Glob pattern for files (default: **/*.md)",
+                    "default": "**/*.md"
+                },
+                "provider": {
+                    "type": "string",
+                    "description": "Provider type: file, github, url (default: file)",
+                    "default": "file"
+                },
+                "config": {
+                    "type": "string",
+                    "description": "Provider-specific JSON configuration"
+                }
+            },
+            "required": ["name", "path"]
+        }),
+    }
+}
+
+pub fn collection_remove_tool_definition() -> ToolDefinition {
+    ToolDefinition {
+        name: "collection_remove".to_string(),
+        description: "Remove a collection and its documents".to_string(),
+        input_schema: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Collection name to remove"
+                }
+            },
+            "required": ["name"]
+        }),
+    }
+}
+
+pub fn collection_update_tool_definition() -> ToolDefinition {
+    ToolDefinition {
+        name: "collection_update".to_string(),
+        description: "Reindex a collection (scan for new/changed documents)".to_string(),
+        input_schema: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Collection name to update"
+                }
+            },
+            "required": ["name"]
+        }),
+    }
+}
+
 pub async fn handle_search(db: &Database, args: Value) -> Result<ToolResult> {
     let query = args
         .get("query")
@@ -176,6 +257,10 @@ pub async fn handle_search(db: &Database, args: Value) -> Result<ToolResult> {
         min_score: args.get("minScore").and_then(|v| v.as_f64()).unwrap_or(0.0),
         collection: args
             .get("collection")
+            .and_then(|v| v.as_str())
+            .map(String::from),
+        provider: args
+            .get("provider")
             .and_then(|v| v.as_str())
             .map(String::from),
         full_content: false,
@@ -290,10 +375,30 @@ pub async fn handle_status(db: &Database) -> Result<ToolResult> {
     let needs_embedding = db.count_hashes_needing_embedding()?;
     let has_vector = db.has_vector_index();
 
+    let mut provider_stats: std::collections::HashMap<String, (usize, usize)> =
+        std::collections::HashMap::new();
+    for coll in &collections {
+        let entry = provider_stats
+            .entry(coll.provider_type.clone())
+            .or_insert((0, 0));
+        entry.0 += 1;
+        entry.1 += coll.document_count;
+    }
+
+    let mut provider_summary = String::new();
+    for (provider, (coll_count, doc_count)) in &provider_stats {
+        provider_summary.push_str(&format!(
+            "\n  - {}: {} collections, {} documents",
+            provider, coll_count, doc_count
+        ));
+    }
+
     let summary = format!(
         "Index: {} documents across {} collections\n\
          Embeddings: {}\n\
-         Vector index: {}",
+         Vector index: {}\n\
+         \n\
+         Providers:{}",
         total_docs,
         collections.len(),
         if needs_embedding > 0 {
@@ -305,17 +410,31 @@ pub async fn handle_status(db: &Database) -> Result<ToolResult> {
             "Available"
         } else {
             "Not created"
-        }
+        },
+        provider_summary
     );
+
+    let provider_stats_json: Vec<_> = provider_stats
+        .iter()
+        .map(|(provider, (coll_count, doc_count))| {
+            serde_json::json!({
+                "provider": provider,
+                "collections": coll_count,
+                "documents": doc_count
+            })
+        })
+        .collect();
 
     let structured = serde_json::json!({
         "totalDocuments": total_docs,
         "needsEmbedding": needs_embedding,
         "hasVectorIndex": has_vector,
+        "providers": provider_stats_json,
         "collections": collections.iter().map(|c| serde_json::json!({
             "name": c.name,
             "path": c.path,
             "pattern": c.pattern,
+            "provider": c.provider_type,
             "documents": c.document_count
         })).collect::<Vec<_>>()
     });
@@ -323,6 +442,101 @@ pub async fn handle_status(db: &Database) -> Result<ToolResult> {
     Ok(ToolResult {
         content: vec![Content::Text { text: summary }],
         structured_content: Some(structured),
+        is_error: None,
+    })
+}
+
+pub async fn handle_collection_add(db: &Database, args: Value) -> Result<ToolResult> {
+    let name = args
+        .get("name")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing collection name"))?;
+
+    let path = args
+        .get("path")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing path"))?;
+
+    let pattern = args
+        .get("pattern")
+        .and_then(|v| v.as_str())
+        .unwrap_or("**/*.md");
+
+    let provider = args
+        .get("provider")
+        .and_then(|v| v.as_str())
+        .unwrap_or("file");
+
+    let config = args.get("config").and_then(|v| v.as_str());
+
+    db.add_collection(name, path, pattern, provider, config)?;
+
+    let summary = format!(
+        "Added collection '{}' (provider: {}, path: {})",
+        name, provider, path
+    );
+
+    Ok(ToolResult {
+        content: vec![Content::Text { text: summary }],
+        structured_content: Some(serde_json::json!({
+            "name": name,
+            "path": path,
+            "pattern": pattern,
+            "provider": provider
+        })),
+        is_error: None,
+    })
+}
+
+pub async fn handle_collection_remove(db: &Database, args: Value) -> Result<ToolResult> {
+    let name = args
+        .get("name")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing collection name"))?;
+
+    let removed = db.remove_collection(name)?;
+
+    if removed {
+        Ok(ToolResult {
+            content: vec![Content::Text {
+                text: format!("Removed collection '{}'", name),
+            }],
+            structured_content: Some(serde_json::json!({
+                "name": name,
+                "removed": true
+            })),
+            is_error: None,
+        })
+    } else {
+        Ok(ToolResult {
+            content: vec![Content::Text {
+                text: format!("Collection '{}' not found", name),
+            }],
+            structured_content: Some(serde_json::json!({
+                "name": name,
+                "removed": false
+            })),
+            is_error: Some(true),
+        })
+    }
+}
+
+pub async fn handle_collection_update(db: &Database, args: Value) -> Result<ToolResult> {
+    let name = args
+        .get("name")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing collection name"))?;
+
+    let updated = db.reindex_collection(name).await?;
+
+    let summary = format!("Updated collection '{}': {} files changed", name, updated);
+
+    Ok(ToolResult {
+        content: vec![Content::Text { text: summary }],
+        structured_content: Some(serde_json::json!({
+            "name": name,
+            "filesUpdated": updated
+        })),
         is_error: None,
     })
 }
