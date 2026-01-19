@@ -5,6 +5,6 @@
 mod protocol;
 mod resources;
 mod server;
-mod tools;
+pub mod tools;
 
 pub use server::start_server;

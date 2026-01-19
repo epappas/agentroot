@@ -33,6 +33,18 @@ pub fn search_tool_definition() -> ToolDefinition {
                 "provider": {
                     "type": "string",
                     "description": "Filter by provider type (file, github, url, etc.)"
+                },
+                "category": {
+                    "type": "string",
+                    "description": "Filter by document category (tutorial, reference, code, config, etc.)"
+                },
+                "difficulty": {
+                    "type": "string",
+                    "description": "Filter by difficulty level (beginner, intermediate, advanced)"
+                },
+                "concept": {
+                    "type": "string",
+                    "description": "Filter by concept/topic"
                 }
             },
             "required": ["query"]
@@ -68,6 +80,18 @@ pub fn vsearch_tool_definition() -> ToolDefinition {
                 "provider": {
                     "type": "string",
                     "description": "Filter by provider type (file, github, url, etc.)"
+                },
+                "category": {
+                    "type": "string",
+                    "description": "Filter by document category (tutorial, reference, code, config, etc.)"
+                },
+                "difficulty": {
+                    "type": "string",
+                    "description": "Filter by difficulty level (beginner, intermediate, advanced)"
+                },
+                "concept": {
+                    "type": "string",
+                    "description": "Filter by concept/topic"
                 }
             },
             "required": ["query"]
@@ -98,6 +122,18 @@ pub fn query_tool_definition() -> ToolDefinition {
                 "provider": {
                     "type": "string",
                     "description": "Filter by provider type (file, github, url, etc.)"
+                },
+                "category": {
+                    "type": "string",
+                    "description": "Filter by document category (tutorial, reference, code, config, etc.)"
+                },
+                "difficulty": {
+                    "type": "string",
+                    "description": "Filter by difficulty level (beginner, intermediate, advanced)"
+                },
+                "concept": {
+                    "type": "string",
+                    "description": "Filter by concept/topic"
                 }
             },
             "required": ["query"]
@@ -266,18 +302,61 @@ pub async fn handle_search(db: &Database, args: Value) -> Result<ToolResult> {
         full_content: false,
     };
 
-    let results = db.search_fts(query, &options)?;
+    let mut results = db.search_fts(query, &options)?;
+
+    // Apply metadata filters
+    let category_filter = args.get("category").and_then(|v| v.as_str());
+    let difficulty_filter = args.get("difficulty").and_then(|v| v.as_str());
+    let concept_filter = args.get("concept").and_then(|v| v.as_str());
+
+    if category_filter.is_some() || difficulty_filter.is_some() || concept_filter.is_some() {
+        results.retain(|r| {
+            let matches_category = category_filter.map_or(true, |cat| {
+                r.llm_category
+                    .as_ref()
+                    .map_or(false, |c| c.to_lowercase().contains(&cat.to_lowercase()))
+            });
+            let matches_difficulty = difficulty_filter.map_or(true, |diff| {
+                r.llm_difficulty
+                    .as_ref()
+                    .map_or(false, |d| d.to_lowercase() == diff.to_lowercase())
+            });
+            let matches_concept = concept_filter.map_or(true, |concept| {
+                r.llm_keywords.as_ref().map_or(false, |kws| {
+                    kws.iter()
+                        .any(|kw| kw.to_lowercase().contains(&concept.to_lowercase()))
+                })
+            });
+            matches_category && matches_difficulty && matches_concept
+        });
+    }
 
     let summary = format!("Found {} results for \"{}\"", results.len(), query);
     let structured: Vec<Value> = results
         .iter()
         .map(|r| {
-            serde_json::json!({
+            let mut result_json = serde_json::json!({
                 "docid": format!("#{}", r.docid),
                 "file": r.display_path,
                 "title": r.title,
                 "score": (r.score * 100.0).round() / 100.0
-            })
+            });
+
+            // Include metadata if available
+            if let Some(summary) = &r.llm_summary {
+                result_json["summary"] = Value::String(summary.clone());
+            }
+            if let Some(category) = &r.llm_category {
+                result_json["category"] = Value::String(category.clone());
+            }
+            if let Some(difficulty) = &r.llm_difficulty {
+                result_json["difficulty"] = Value::String(difficulty.clone());
+            }
+            if let Some(keywords) = &r.llm_keywords {
+                result_json["keywords"] = serde_json::to_value(keywords).unwrap();
+            }
+
+            result_json
         })
         .collect();
 
@@ -336,18 +415,61 @@ pub async fn handle_vsearch(db: &Database, args: Value) -> Result<ToolResult> {
         }
     };
 
-    let results = db.search_vec(query, &embedder, &options).await?;
+    let mut results = db.search_vec(query, &embedder, &options).await?;
+
+    // Apply metadata filters
+    let category_filter = args.get("category").and_then(|v| v.as_str());
+    let difficulty_filter = args.get("difficulty").and_then(|v| v.as_str());
+    let concept_filter = args.get("concept").and_then(|v| v.as_str());
+
+    if category_filter.is_some() || difficulty_filter.is_some() || concept_filter.is_some() {
+        results.retain(|r| {
+            let matches_category = category_filter.map_or(true, |cat| {
+                r.llm_category
+                    .as_ref()
+                    .map_or(false, |c| c.to_lowercase().contains(&cat.to_lowercase()))
+            });
+            let matches_difficulty = difficulty_filter.map_or(true, |diff| {
+                r.llm_difficulty
+                    .as_ref()
+                    .map_or(false, |d| d.to_lowercase() == diff.to_lowercase())
+            });
+            let matches_concept = concept_filter.map_or(true, |concept| {
+                r.llm_keywords.as_ref().map_or(false, |kws| {
+                    kws.iter()
+                        .any(|kw| kw.to_lowercase().contains(&concept.to_lowercase()))
+                })
+            });
+            matches_category && matches_difficulty && matches_concept
+        });
+    }
 
     let summary = format!("Found {} results for \"{}\"", results.len(), query);
     let structured: Vec<Value> = results
         .iter()
         .map(|r| {
-            serde_json::json!({
+            let mut result_json = serde_json::json!({
                 "docid": format!("#{}", r.docid),
                 "file": r.display_path,
                 "title": r.title,
                 "score": (r.score * 100.0).round() / 100.0
-            })
+            });
+
+            // Include metadata if available
+            if let Some(summary) = &r.llm_summary {
+                result_json["summary"] = Value::String(summary.clone());
+            }
+            if let Some(category) = &r.llm_category {
+                result_json["category"] = Value::String(category.clone());
+            }
+            if let Some(difficulty) = &r.llm_difficulty {
+                result_json["difficulty"] = Value::String(difficulty.clone());
+            }
+            if let Some(keywords) = &r.llm_keywords {
+                result_json["keywords"] = serde_json::to_value(keywords).unwrap();
+            }
+
+            result_json
         })
         .collect();
 
@@ -394,11 +516,38 @@ pub async fn handle_query(db: &Database, args: Value) -> Result<ToolResult> {
 
     let fused_results = agentroot_core::search::rrf_fusion(&bm25_results, &vec_results);
 
-    let final_results: Vec<_> = fused_results
+    let mut final_results: Vec<_> = fused_results
         .into_iter()
         .filter(|r| r.score >= options.min_score)
         .take(options.limit)
         .collect();
+
+    // Apply metadata filters
+    let category_filter = args.get("category").and_then(|v| v.as_str());
+    let difficulty_filter = args.get("difficulty").and_then(|v| v.as_str());
+    let concept_filter = args.get("concept").and_then(|v| v.as_str());
+
+    if category_filter.is_some() || difficulty_filter.is_some() || concept_filter.is_some() {
+        final_results.retain(|r| {
+            let matches_category = category_filter.map_or(true, |cat| {
+                r.llm_category
+                    .as_ref()
+                    .map_or(false, |c| c.to_lowercase().contains(&cat.to_lowercase()))
+            });
+            let matches_difficulty = difficulty_filter.map_or(true, |diff| {
+                r.llm_difficulty
+                    .as_ref()
+                    .map_or(false, |d| d.to_lowercase() == diff.to_lowercase())
+            });
+            let matches_concept = concept_filter.map_or(true, |concept| {
+                r.llm_keywords.as_ref().map_or(false, |kws| {
+                    kws.iter()
+                        .any(|kw| kw.to_lowercase().contains(&concept.to_lowercase()))
+                })
+            });
+            matches_category && matches_difficulty && matches_concept
+        });
+    }
 
     let summary = format!(
         "Found {} results for \"{}\" (hybrid search)",
@@ -408,12 +557,28 @@ pub async fn handle_query(db: &Database, args: Value) -> Result<ToolResult> {
     let structured: Vec<Value> = final_results
         .iter()
         .map(|r| {
-            serde_json::json!({
+            let mut result_json = serde_json::json!({
                 "docid": format!("#{}", r.docid),
                 "file": r.display_path,
                 "title": r.title,
                 "score": (r.score * 100.0).round() / 100.0
-            })
+            });
+
+            // Include metadata if available
+            if let Some(summary) = &r.llm_summary {
+                result_json["summary"] = Value::String(summary.clone());
+            }
+            if let Some(category) = &r.llm_category {
+                result_json["category"] = Value::String(category.clone());
+            }
+            if let Some(difficulty) = &r.llm_difficulty {
+                result_json["difficulty"] = Value::String(difficulty.clone());
+            }
+            if let Some(keywords) = &r.llm_keywords {
+                result_json["keywords"] = serde_json::to_value(keywords).unwrap();
+            }
+
+            result_json
         })
         .collect();
 
