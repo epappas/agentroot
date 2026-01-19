@@ -167,4 +167,57 @@ mod tests {
         assert_eq!(item.title, "Test Content");
         assert_eq!(item.source_type, "file");
     }
+
+    #[test]
+    fn test_file_provider_database_integration() {
+        use crate::{db::hash_content, Database};
+        use chrono::Utc;
+
+        let temp = TempDir::new().unwrap();
+        let base = temp.path();
+
+        fs::write(base.join("doc1.md"), "# Document 1\nContent for doc 1").unwrap();
+        fs::write(base.join("doc2.md"), "# Document 2\nContent for doc 2").unwrap();
+
+        let db = Database::open_in_memory().unwrap();
+        db.initialize().unwrap();
+
+        db.add_collection("test", &base.to_string_lossy(), "**/*.md", "file", None)
+            .unwrap();
+
+        let config = ProviderConfig::new(base.to_string_lossy().to_string(), "**/*.md".to_string())
+            .with_option("exclude_hidden".to_string(), "false".to_string());
+        let provider = FileProvider::new();
+        let items = provider.list_items(&config).unwrap();
+
+        assert_eq!(items.len(), 2, "Should find 2 .md files");
+
+        for item in &items {
+            let hash = hash_content(&item.content);
+            db.insert_content(&hash, &item.content).unwrap();
+
+            let now = Utc::now().to_rfc3339();
+            db.insert_document(
+                "test",
+                &item.uri,
+                &item.title,
+                &hash,
+                &now,
+                &now,
+                &item.source_type,
+                Some(&item.uri),
+            )
+            .unwrap();
+        }
+
+        let collections = db.list_collections().unwrap();
+        assert_eq!(collections.len(), 1);
+        assert_eq!(collections[0].name, "test");
+        assert_eq!(collections[0].provider_type, "file");
+        assert_eq!(
+            collections[0].document_count, 2,
+            "document_count should be 2"
+        );
+        assert_eq!(collections[0].provider_config, None);
+    }
 }

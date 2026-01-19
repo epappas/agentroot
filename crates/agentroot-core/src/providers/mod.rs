@@ -146,10 +146,90 @@ impl ProviderRegistry {
     pub fn get(&self, provider_type: &str) -> Option<Arc<dyn SourceProvider>> {
         self.providers.get(provider_type).cloned()
     }
+}
 
-    /// List all registered provider types
-    pub fn list_types(&self) -> Vec<String> {
-        self.providers.keys().cloned().collect()
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_provider_config_json_parsing() {
+        let json_config =
+            r#"{"exclude_hidden":"false","follow_symlinks":"true","custom_key":"custom_value"}"#;
+
+        let config_map: std::collections::HashMap<String, String> =
+            serde_json::from_str(json_config).unwrap();
+
+        assert_eq!(config_map.get("exclude_hidden"), Some(&"false".to_string()));
+        assert_eq!(config_map.get("follow_symlinks"), Some(&"true".to_string()));
+        assert_eq!(
+            config_map.get("custom_key"),
+            Some(&"custom_value".to_string())
+        );
+
+        let mut config = ProviderConfig::new("/tmp".to_string(), "**/*.md".to_string());
+        for (key, value) in config_map {
+            config = config.with_option(key, value);
+        }
+
+        assert_eq!(
+            config.get_option("exclude_hidden"),
+            Some(&"false".to_string())
+        );
+        assert_eq!(
+            config.get_option("follow_symlinks"),
+            Some(&"true".to_string())
+        );
+        assert_eq!(
+            config.get_option("custom_key"),
+            Some(&"custom_value".to_string())
+        );
+    }
+
+    #[test]
+    fn test_provider_config_json_empty() {
+        let json_config = r#"{}"#;
+        let config_map: std::collections::HashMap<String, String> =
+            serde_json::from_str(json_config).unwrap();
+        assert_eq!(config_map.len(), 0);
+    }
+
+    #[test]
+    fn test_provider_config_json_invalid() {
+        let json_config = r#"{"key": invalid}"#;
+        let result: std::result::Result<std::collections::HashMap<String, String>, _> =
+            serde_json::from_str(json_config);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_provider_config_json_nested_not_supported() {
+        let json_config = r#"{"key": {"nested": "value"}}"#;
+        let result: std::result::Result<std::collections::HashMap<String, String>, _> =
+            serde_json::from_str(json_config);
+        assert!(
+            result.is_err(),
+            "Nested JSON should not parse into HashMap<String, String>"
+        );
+    }
+
+    #[test]
+    fn test_provider_config_special_characters() {
+        let json_config =
+            r#"{"path":"/tmp/test with spaces","pattern":"**/*.{md,txt}","token":"ghp_abc123"}"#;
+
+        let config_map: std::collections::HashMap<String, String> =
+            serde_json::from_str(json_config).unwrap();
+
+        assert_eq!(
+            config_map.get("path"),
+            Some(&"/tmp/test with spaces".to_string())
+        );
+        assert_eq!(
+            config_map.get("pattern"),
+            Some(&"**/*.{md,txt}".to_string())
+        );
+        assert_eq!(config_map.get("token"), Some(&"ghp_abc123".to_string()));
     }
 }
 
