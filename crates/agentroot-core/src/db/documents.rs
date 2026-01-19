@@ -42,8 +42,12 @@ impl Database {
     /// Insert new document using struct parameters
     pub fn insert_doc(&self, doc: &DocumentInsert) -> Result<i64> {
         self.conn.execute(
-            "INSERT INTO documents (collection, path, title, hash, created_at, modified_at, active, source_type, source_uri)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1, ?7, ?8)",
+            "INSERT INTO documents (
+                collection, path, title, hash, created_at, modified_at, active, source_type, source_uri,
+                llm_summary, llm_title, llm_keywords, llm_category, llm_intent, llm_concepts,
+                llm_difficulty, llm_queries, llm_metadata_generated_at, llm_model
+             )
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
             params![
                 doc.collection,
                 doc.path,
@@ -52,7 +56,17 @@ impl Database {
                 doc.created_at,
                 doc.modified_at,
                 doc.source_type,
-                doc.source_uri
+                doc.source_uri,
+                doc.llm_summary,
+                doc.llm_title,
+                doc.llm_keywords,
+                doc.llm_category,
+                doc.llm_intent,
+                doc.llm_concepts,
+                doc.llm_difficulty,
+                doc.llm_queries,
+                doc.llm_metadata_generated_at,
+                doc.llm_model,
             ],
         )?;
         Ok(self.conn.last_insert_rowid())
@@ -80,6 +94,16 @@ impl Database {
             modified_at,
             source_type,
             source_uri,
+            llm_summary: None,
+            llm_title: None,
+            llm_keywords: None,
+            llm_category: None,
+            llm_intent: None,
+            llm_concepts: None,
+            llm_difficulty: None,
+            llm_queries: None,
+            llm_metadata_generated_at: None,
+            llm_model: None,
         };
         self.insert_doc(&doc)
     }
@@ -449,6 +473,16 @@ pub struct DocumentInsert<'a> {
     pub modified_at: &'a str,
     pub source_type: &'a str,
     pub source_uri: Option<&'a str>,
+    pub llm_summary: Option<&'a str>,
+    pub llm_title: Option<&'a str>,
+    pub llm_keywords: Option<&'a str>,
+    pub llm_category: Option<&'a str>,
+    pub llm_intent: Option<&'a str>,
+    pub llm_concepts: Option<&'a str>,
+    pub llm_difficulty: Option<&'a str>,
+    pub llm_queries: Option<&'a str>,
+    pub llm_metadata_generated_at: Option<&'a str>,
+    pub llm_model: Option<&'a str>,
 }
 
 impl<'a> DocumentInsert<'a> {
@@ -470,6 +504,16 @@ impl<'a> DocumentInsert<'a> {
             modified_at,
             source_type: "file",
             source_uri: None,
+            llm_summary: None,
+            llm_title: None,
+            llm_keywords: None,
+            llm_category: None,
+            llm_intent: None,
+            llm_concepts: None,
+            llm_difficulty: None,
+            llm_queries: None,
+            llm_metadata_generated_at: None,
+            llm_model: None,
         }
     }
 
@@ -482,6 +526,51 @@ impl<'a> DocumentInsert<'a> {
     /// Set source URI
     pub fn with_source_uri(mut self, source_uri: &'a str) -> Self {
         self.source_uri = Some(source_uri);
+        self
+    }
+
+    /// Set LLM metadata fields from DocumentMetadata
+    pub fn with_llm_metadata(
+        mut self,
+        metadata: &'a crate::llm::DocumentMetadata,
+        _metadata_json: &'a str,
+        model_name: &'a str,
+        generated_at: &'a str,
+    ) -> Self {
+        self.llm_summary = Some(&metadata.summary);
+        self.llm_title = Some(&metadata.semantic_title);
+        self.llm_category = Some(&metadata.category);
+        self.llm_intent = Some(&metadata.intent);
+        self.llm_difficulty = Some(&metadata.difficulty);
+        self.llm_metadata_generated_at = Some(generated_at);
+        self.llm_model = Some(model_name);
+        self
+    }
+
+    /// Set LLM metadata JSON strings (pre-serialized)
+    pub fn with_llm_metadata_strings(
+        mut self,
+        summary: &'a str,
+        title: &'a str,
+        keywords: &'a str,
+        category: &'a str,
+        intent: &'a str,
+        concepts: &'a str,
+        difficulty: &'a str,
+        queries: &'a str,
+        model_name: &'a str,
+        generated_at: &'a str,
+    ) -> Self {
+        self.llm_summary = Some(summary);
+        self.llm_title = Some(title);
+        self.llm_keywords = Some(keywords);
+        self.llm_category = Some(category);
+        self.llm_intent = Some(intent);
+        self.llm_concepts = Some(concepts);
+        self.llm_difficulty = Some(difficulty);
+        self.llm_queries = Some(queries);
+        self.llm_metadata_generated_at = Some(generated_at);
+        self.llm_model = Some(model_name);
         self
     }
 }

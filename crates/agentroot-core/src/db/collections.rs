@@ -196,6 +196,282 @@ impl Database {
         self.touch_collection(name)?;
         Ok(updated)
     }
+
+    /// Generate or fetch metadata from cache
+    pub async fn generate_or_fetch_metadata(
+        &self,
+        content_hash: &str,
+        content: &str,
+        context: crate::llm::MetadataContext,
+        generator: Option<&dyn crate::llm::MetadataGenerator>,
+    ) -> Result<Option<crate::llm::DocumentMetadata>> {
+        if generator.is_none() {
+            return Ok(None);
+        }
+
+        let cache_key = format!("metadata:v1:{}", content_hash);
+
+        if let Some(cached) = self.get_llm_cache(&cache_key)? {
+            if let Ok(metadata) = serde_json::from_str::<crate::llm::DocumentMetadata>(&cached) {
+                return Ok(Some(metadata));
+            }
+        }
+
+        let gen = generator.unwrap();
+        match gen.generate_metadata(content, &context).await {
+            Ok(metadata) => {
+                let cache_value = serde_json::to_string(&metadata)?;
+                self.set_llm_cache(&cache_key, &cache_value, gen.model_name())?;
+                Ok(Some(metadata))
+            }
+            Err(e) => {
+                eprintln!("Metadata generation failed: {}. Skipping metadata.", e);
+                Ok(None)
+            }
+        }
+    }
+
+    /// Get metadata from LLM cache
+    fn get_llm_cache(&self, key: &str) -> Result<Option<String>> {
+        let result = self.conn.query_row(
+            "SELECT value FROM llm_cache WHERE key = ?1",
+            params![key],
+            |row| row.get(0),
+        );
+
+        match result {
+            Ok(value) => Ok(Some(value)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// Set metadata in LLM cache
+    fn set_llm_cache(&self, key: &str, value: &str, model: &str) -> Result<()> {
+        let now = Utc::now().to_rfc3339();
+        self.conn.execute(
+            "INSERT OR REPLACE INTO llm_cache (key, value, model, created_at) VALUES (?1, ?2, ?3, ?4)",
+            params![key, value, model, now],
+        )?;
+        Ok(())
+    }
+
+    /// Build metadata context from source item
+    fn build_metadata_context(
+        &self,
+        item: &crate::providers::SourceItem,
+        collection_name: &str,
+        coll: &CollectionInfo,
+    ) -> crate::llm::MetadataContext {
+        let path = std::path::Path::new(&item.uri);
+        let extension = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|s| s.to_string());
+
+        crate::llm::MetadataContext::new(item.source_type.clone(), collection_name.to_string())
+            .with_extension(extension.unwrap_or_default())
+            .with_provider_config(coll.provider_config.clone().unwrap_or_default())
+    }
+
+    /// Insert document with metadata
+    fn insert_document_with_metadata(
+        &self,
+        collection: &str,
+        path: &str,
+        title: &str,
+        hash: &str,
+        created_at: &str,
+        modified_at: &str,
+        source_type: &str,
+        source_uri: Option<&str>,
+        metadata: &crate::llm::DocumentMetadata,
+        model_name: &str,
+    ) -> Result<i64> {
+        let keywords_json = serde_json::to_string(&metadata.keywords)?;
+        let concepts_json = serde_json::to_string(&metadata.concepts)?;
+        let queries_json = serde_json::to_string(&metadata.suggested_queries)?;
+        let now = Utc::now().to_rfc3339();
+
+        let doc = super::documents::DocumentInsert::new(
+            collection,
+            path,
+            title,
+            hash,
+            created_at,
+            modified_at,
+        )
+        .with_source_type(source_type)
+        .with_source_uri(source_uri.unwrap_or(""))
+        .with_llm_metadata_strings(
+            &metadata.summary,
+            &metadata.semantic_title,
+            &keywords_json,
+            &metadata.category,
+            &metadata.intent,
+            &concepts_json,
+            &metadata.difficulty,
+            &queries_json,
+            model_name,
+            &now,
+        );
+
+        self.insert_doc(&doc)
+    }
+
+    /// Update document with metadata
+    fn update_document_with_metadata(
+        &self,
+        id: i64,
+        title: &str,
+        hash: &str,
+        modified_at: &str,
+        metadata: &crate::llm::DocumentMetadata,
+        model_name: &str,
+    ) -> Result<()> {
+        let keywords_json = serde_json::to_string(&metadata.keywords)?;
+        let concepts_json = serde_json::to_string(&metadata.concepts)?;
+        let queries_json = serde_json::to_string(&metadata.suggested_queries)?;
+        let now = Utc::now().to_rfc3339();
+
+        self.conn.execute(
+            "UPDATE documents 
+             SET title = ?2, hash = ?3, modified_at = ?4,
+                 llm_summary = ?5, llm_title = ?6, llm_keywords = ?7, llm_category = ?8,
+                 llm_intent = ?9, llm_concepts = ?10, llm_difficulty = ?11, llm_queries = ?12,
+                 llm_metadata_generated_at = ?13, llm_model = ?14
+             WHERE id = ?1",
+            params![
+                id,
+                title,
+                hash,
+                modified_at,
+                metadata.summary,
+                metadata.semantic_title,
+                keywords_json,
+                metadata.category,
+                metadata.intent,
+                concepts_json,
+                metadata.difficulty,
+                queries_json,
+                now,
+                model_name
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Reindex all documents in a collection with optional metadata generation
+    pub async fn reindex_collection_with_metadata(
+        &self,
+        name: &str,
+        generator: Option<&dyn crate::llm::MetadataGenerator>,
+    ) -> Result<usize> {
+        let coll = self
+            .get_collection(name)?
+            .ok_or_else(|| crate::error::AgentRootError::CollectionNotFound(name.to_string()))?;
+
+        let registry = crate::providers::ProviderRegistry::with_defaults();
+        let provider = registry.get(&coll.provider_type).ok_or_else(|| {
+            crate::error::AgentRootError::InvalidInput(format!(
+                "Unknown provider type: {}",
+                coll.provider_type
+            ))
+        })?;
+
+        let mut config =
+            crate::providers::ProviderConfig::new(coll.path.clone(), coll.pattern.clone());
+
+        if let Some(provider_config) = &coll.provider_config {
+            if let Ok(config_map) =
+                serde_json::from_str::<std::collections::HashMap<String, String>>(provider_config)
+            {
+                for (key, value) in config_map {
+                    config = config.with_option(key, value);
+                }
+            }
+        }
+
+        let items = provider.list_items(&config).await?;
+        let mut updated = 0;
+
+        for item in items {
+            let now = Utc::now().to_rfc3339();
+
+            if let Some(existing) = self.find_active_document(name, &item.uri)? {
+                if existing.hash != item.hash {
+                    self.insert_content(&item.hash, &item.content)?;
+
+                    let metadata_opt = if generator.is_some() {
+                        let context = self.build_metadata_context(&item, name, &coll);
+                        self.generate_or_fetch_metadata(
+                            &item.hash,
+                            &item.content,
+                            context,
+                            generator,
+                        )
+                        .await?
+                    } else {
+                        None
+                    };
+
+                    if let Some(metadata) = metadata_opt {
+                        self.update_document_with_metadata(
+                            existing.id,
+                            &item.title,
+                            &item.hash,
+                            &now,
+                            &metadata,
+                            generator.unwrap().model_name(),
+                        )?;
+                    } else {
+                        self.update_document(existing.id, &item.title, &item.hash, &now)?;
+                    }
+                    updated += 1;
+                }
+            } else {
+                self.insert_content(&item.hash, &item.content)?;
+
+                let metadata_opt = if generator.is_some() {
+                    let context = self.build_metadata_context(&item, name, &coll);
+                    self.generate_or_fetch_metadata(&item.hash, &item.content, context, generator)
+                        .await?
+                } else {
+                    None
+                };
+
+                if let Some(metadata) = metadata_opt {
+                    self.insert_document_with_metadata(
+                        name,
+                        &item.uri,
+                        &item.title,
+                        &item.hash,
+                        &now,
+                        &now,
+                        &item.source_type,
+                        item.metadata.get("source_uri").map(|s| s.as_str()),
+                        &metadata,
+                        generator.unwrap().model_name(),
+                    )?;
+                } else {
+                    self.insert_document(
+                        name,
+                        &item.uri,
+                        &item.title,
+                        &item.hash,
+                        &now,
+                        &now,
+                        &item.source_type,
+                        item.metadata.get("source_uri").map(|s| s.as_str()),
+                    )?;
+                }
+                updated += 1;
+            }
+        }
+
+        self.touch_collection(name)?;
+        Ok(updated)
+    }
 }
 
 #[cfg(test)]
