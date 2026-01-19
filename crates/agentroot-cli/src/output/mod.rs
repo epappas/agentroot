@@ -1,14 +1,14 @@
 //! Output formatters
 
-pub mod json;
 pub mod csv;
-pub mod xml;
-pub mod markdown;
 pub mod files;
+pub mod json;
+pub mod markdown;
 pub mod terminal;
+pub mod xml;
 
-use agentroot_core::SearchResult;
 use crate::app::OutputFormat;
+use agentroot_core::SearchResult;
 
 /// Format options
 pub struct FormatOptions {

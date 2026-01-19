@@ -1,9 +1,9 @@
 //! Update command
 
-use anyhow::Result;
-use agentroot_core::Database;
 use crate::app::UpdateArgs;
 use crate::progress::ProgressReporter;
+use agentroot_core::Database;
+use anyhow::Result;
 
 pub async fn run(args: UpdateArgs, db: &Database) -> Result<()> {
     let collections = db.list_collections()?;

@@ -1,11 +1,11 @@
 //! CLI command handlers
 
+pub mod cleanup;
 pub mod collection;
 pub mod context;
-pub mod ls;
+pub mod embed;
 pub mod get;
+pub mod ls;
+pub mod search;
 pub mod status;
 pub mod update;
-pub mod embed;
-pub mod search;
-pub mod cleanup;

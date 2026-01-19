@@ -1,8 +1,8 @@
 //! Context management commands
 
-use anyhow::Result;
+use crate::app::{ContextAction, ContextArgs};
 use agentroot_core::Database;
-use crate::app::{ContextArgs, ContextAction};
+use anyhow::Result;
 
 pub async fn run(args: ContextArgs, db: &Database) -> Result<()> {
     match args.action {

@@ -1,7 +1,7 @@
 //! Cleanup command
 
-use anyhow::Result;
 use agentroot_core::Database;
+use anyhow::Result;
 
 pub async fn run(db: &Database) -> Result<()> {
     let orphaned = db.cleanup_orphaned_content()?;

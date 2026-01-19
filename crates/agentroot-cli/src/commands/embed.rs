@@ -1,9 +1,9 @@
 //! Embed command
 
-use anyhow::Result;
-use agentroot_core::{Database, Embedder, LlamaEmbedder, DEFAULT_EMBED_MODEL};
-use agentroot_core::index::{embed_documents, EmbedProgress};
 use crate::app::EmbedArgs;
+use agentroot_core::index::{embed_documents, EmbedProgress};
+use agentroot_core::{Database, Embedder, LlamaEmbedder, DEFAULT_EMBED_MODEL};
+use anyhow::Result;
 
 pub async fn run(args: EmbedArgs, db: &Database) -> Result<()> {
     // Run migration to ensure schema is up to date
@@ -21,7 +21,10 @@ pub async fn run(args: EmbedArgs, db: &Database) -> Result<()> {
     };
 
     if !model_path.exists() {
-        eprintln!("Error: Embedding model not found at {}", model_path.display());
+        eprintln!(
+            "Error: Embedding model not found at {}",
+            model_path.display()
+        );
         eprintln!();
         eprintln!("To use vector embeddings, download an embedding model:");
         eprintln!("  1. Create the models directory:");
@@ -39,7 +42,11 @@ pub async fn run(args: EmbedArgs, db: &Database) -> Result<()> {
 
     println!("Loading embedding model: {}", model_path.display());
     let embedder = LlamaEmbedder::new(&model_path)?;
-    println!("Model loaded: {} ({} dimensions)", embedder.model_name(), embedder.dimensions());
+    println!(
+        "Model loaded: {} ({} dimensions)",
+        embedder.model_name(),
+        embedder.dimensions()
+    );
 
     let model_name = embedder.model_name().to_string();
 
@@ -64,15 +71,18 @@ pub async fn run(args: EmbedArgs, db: &Database) -> Result<()> {
                 cache_pct
             );
         })),
-    ).await?;
+    )
+    .await?;
 
     eprintln!();
     println!("Embedding complete:");
-    println!("  Documents: {}/{}", stats.embedded_documents, stats.total_documents);
-    println!("  Chunks:    {} ({} cached, {} computed)",
-        stats.embedded_chunks,
-        stats.cached_chunks,
-        stats.computed_chunks
+    println!(
+        "  Documents: {}/{}",
+        stats.embedded_documents, stats.total_documents
+    );
+    println!(
+        "  Chunks:    {} ({} cached, {} computed)",
+        stats.embedded_chunks, stats.cached_chunks, stats.computed_chunks
     );
     if stats.embedded_chunks > 0 {
         println!("  Cache hit rate: {:.1}%", stats.cache_hit_rate());

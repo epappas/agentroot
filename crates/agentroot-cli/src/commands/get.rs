@@ -1,8 +1,8 @@
 //! Get document command
 
-use anyhow::Result;
-use agentroot_core::Database;
 use crate::app::{GetArgs, MultiGetArgs, OutputFormat};
+use agentroot_core::Database;
+use anyhow::Result;
 
 pub async fn run(args: GetArgs, db: &Database, format: OutputFormat) -> Result<()> {
     let content = db.get_document(&args.file)?;
@@ -11,7 +11,8 @@ pub async fn run(args: GetArgs, db: &Database, format: OutputFormat) -> Result<(
     let start = args.from.unwrap_or(1).saturating_sub(1);
     let end = args.l.map(|l| start + l).unwrap_or(lines.len());
 
-    let selected: Vec<&str> = lines.iter()
+    let selected: Vec<&str> = lines
+        .iter()
         .skip(start)
         .take(end - start)
         .copied()
@@ -45,12 +46,15 @@ pub async fn run_multi(args: MultiGetArgs, db: &Database, format: OutputFormat) 
 
     match format {
         OutputFormat::Json => {
-            let output: Vec<_> = docs.into_iter().map(|d| {
-                serde_json::json!({
-                    "path": d.path,
-                    "content": d.content,
+            let output: Vec<_> = docs
+                .into_iter()
+                .map(|d| {
+                    serde_json::json!({
+                        "path": d.path,
+                        "content": d.content,
+                    })
                 })
-            }).collect();
+                .collect();
             println!("{}", serde_json::to_string_pretty(&output)?);
         }
         _ => {

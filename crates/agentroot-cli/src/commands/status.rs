@@ -1,8 +1,8 @@
 //! Status command
 
-use anyhow::Result;
-use agentroot_core::Database;
 use crate::app::OutputFormat;
+use agentroot_core::Database;
+use anyhow::Result;
 
 pub async fn run(db: &Database, format: OutputFormat) -> Result<()> {
     let stats = db.get_stats()?;

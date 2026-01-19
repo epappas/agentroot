@@ -1,11 +1,15 @@
 //! CLI argument definitions
 
-use clap::{Parser, Subcommand, Args, ValueEnum};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(name = "agentroot")]
-#[command(author, version, about = "Fast local search for your markdown knowledge base")]
+#[command(
+    author,
+    version,
+    about = "Fast local search for your markdown knowledge base"
+)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,

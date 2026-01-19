@@ -1,7 +1,7 @@
 //! Terminal output formatter
 
-use agentroot_core::SearchResult;
 use super::FormatOptions;
+use agentroot_core::SearchResult;
 
 pub fn format_results(results: &[SearchResult], options: &FormatOptions) -> String {
     if results.is_empty() {
@@ -14,9 +14,7 @@ pub fn format_results(results: &[SearchResult], options: &FormatOptions) -> Stri
         let score_pct = (result.score * 100.0) as u32;
         output.push_str(&format!(
             "{:>3}% {} #{}\n",
-            score_pct,
-            result.display_path,
-            result.docid
+            score_pct, result.display_path, result.docid
         ));
 
         if options.full {

@@ -1,8 +1,8 @@
 //! List command
 
-use anyhow::Result;
-use agentroot_core::Database;
 use crate::app::{LsArgs, OutputFormat};
+use agentroot_core::Database;
+use anyhow::Result;
 
 pub async fn run(args: LsArgs, db: &Database, format: OutputFormat) -> Result<()> {
     match args.path {

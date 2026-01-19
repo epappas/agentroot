@@ -2,9 +2,9 @@
 //!
 //! Fast local search for your markdown knowledge base.
 
+use agentroot_core::Database;
 use anyhow::Result;
 use clap::Parser;
-use agentroot_core::Database;
 
 mod app;
 mod commands;
@@ -19,7 +19,7 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive(tracing::Level::WARN.into())
+                .add_directive(tracing::Level::WARN.into()),
         )
         .init();
 

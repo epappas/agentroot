@@ -1,9 +1,9 @@
 //! Search commands
 
-use anyhow::Result;
-use agentroot_core::{Database, SearchOptions, LlamaEmbedder, DEFAULT_EMBED_MODEL};
-use crate::app::{SearchArgs, OutputFormat};
+use crate::app::{OutputFormat, SearchArgs};
 use crate::output::{format_search_results, FormatOptions};
+use agentroot_core::{Database, LlamaEmbedder, SearchOptions, DEFAULT_EMBED_MODEL};
+use anyhow::Result;
 
 pub async fn run_bm25(args: SearchArgs, db: &Database, format: OutputFormat) -> Result<()> {
     let query = args.query.join(" ");
@@ -95,7 +95,10 @@ pub async fn run_hybrid(args: SearchArgs, db: &Database, format: OutputFormat) -
         line_numbers: args.line_numbers,
     };
 
-    print!("{}", format_search_results(&final_results, format, &format_opts));
+    print!(
+        "{}",
+        format_search_results(&final_results, format, &format_opts)
+    );
     Ok(())
 }
 
@@ -116,7 +119,10 @@ fn load_embedder() -> Result<LlamaEmbedder> {
     let model_path = model_dir.join(DEFAULT_EMBED_MODEL);
 
     if !model_path.exists() {
-        return Err(anyhow::anyhow!("Model not found at {}", model_path.display()));
+        return Err(anyhow::anyhow!(
+            "Model not found at {}",
+            model_path.display()
+        ));
     }
 
     Ok(LlamaEmbedder::new(&model_path)?)

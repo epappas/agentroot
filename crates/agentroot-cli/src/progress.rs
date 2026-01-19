@@ -26,6 +26,9 @@ impl ProgressReporter {
     }
 
     pub fn finish(&self) {
-        eprintln!("\rDone ({}/{})                    ", self.processed, self.total);
+        eprintln!(
+            "\rDone ({}/{})                    ",
+            self.processed, self.total
+        );
     }
 }
