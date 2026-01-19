@@ -436,15 +436,26 @@ See [AGENTS.md](AGENTS.md) for developer guidelines.
 
 ## Documentation
 
-- [Getting Started](docs/getting-started.md) - Step-by-step tutorial
-- [Provider System](docs/providers.md) - Multi-source indexing guide
+**Start Here:**
+- [Getting Started](docs/getting-started.md) - Step-by-step tutorial for new users
+- [How-To Guide](docs/howto-guide.md) - Practical recipes for common tasks
+
+**Reference:**
 - [CLI Reference](docs/cli-reference.md) - Complete command reference
+- [Provider System](docs/providers.md) - Multi-source indexing guide (files, GitHub, etc.)
+- [Troubleshooting](docs/troubleshooting.md) - Common issues and solutions
+
+**Technical Details:**
 - [Architecture](docs/architecture.md) - System design and components
 - [Semantic Chunking](docs/semantic-chunking.md) - AST-aware chunking details
 - [Embedding Cache](docs/embedding-cache.md) - Smart cache invalidation
-- [MCP Server](docs/mcp-server.md) - AI assistant integration
-- [Troubleshooting](docs/troubleshooting.md) - Common issues and solutions
 - [Performance](docs/performance.md) - Benchmarks and optimization
+
+**Integration:**
+- [MCP Server](docs/mcp-server.md) - AI assistant integration (Claude, Continue.dev)
+
+**Index:**
+- [Documentation Index](docs/README.md) - Complete documentation overview
 
 ## Contributing
 
