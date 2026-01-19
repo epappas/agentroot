@@ -80,3 +80,7 @@ harness = false
 name = "search"
 harness = false
 
+[[example]]
+name = "metadata_generation"
+path = "../../examples/metadata_generation.rs"
+
