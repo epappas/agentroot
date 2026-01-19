@@ -288,7 +288,7 @@ pub async fn handle_search(db: &Database, args: Value) -> Result<ToolResult> {
     })
 }
 
-pub async fn handle_vsearch(db: &Database, _args: Value) -> Result<ToolResult> {
+pub async fn handle_vsearch(db: &Database, args: Value) -> Result<ToolResult> {
     if !db.has_vector_index() {
         return Ok(ToolResult {
             content: vec![Content::Text {
@@ -299,19 +299,125 @@ pub async fn handle_vsearch(db: &Database, _args: Value) -> Result<ToolResult> {
         });
     }
 
-    // TODO: Implement when embedder is available
+    let query = args
+        .get("query")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing query"))?;
+
+    let options = SearchOptions {
+        limit: args.get("limit").and_then(|v| v.as_u64()).unwrap_or(20) as usize,
+        min_score: args.get("minScore").and_then(|v| v.as_f64()).unwrap_or(0.3),
+        collection: args
+            .get("collection")
+            .and_then(|v| v.as_str())
+            .map(String::from),
+        provider: args
+            .get("provider")
+            .and_then(|v| v.as_str())
+            .map(String::from),
+        full_content: false,
+    };
+
+    let embedder = match agentroot_core::LlamaEmbedder::from_default() {
+        Ok(e) => e,
+        Err(e) => {
+            return Ok(ToolResult {
+                content: vec![Content::Text {
+                    text: format!(
+                        "Could not load embedding model: {}. \
+                         Download an embedding model to use vector search. \
+                         See: https://github.com/epappas/agentroot#embedding-models",
+                        e
+                    ),
+                }],
+                structured_content: None,
+                is_error: Some(true),
+            });
+        }
+    };
+
+    let results = db.search_vec(query, &embedder, &options).await?;
+
+    let summary = format!("Found {} results for \"{}\"", results.len(), query);
+    let structured: Vec<Value> = results
+        .iter()
+        .map(|r| {
+            serde_json::json!({
+                "docid": format!("#{}", r.docid),
+                "file": r.display_path,
+                "title": r.title,
+                "score": (r.score * 100.0).round() / 100.0
+            })
+        })
+        .collect();
+
     Ok(ToolResult {
-        content: vec![Content::Text {
-            text: "Vector search not yet implemented".to_string(),
-        }],
-        structured_content: None,
-        is_error: Some(true),
+        content: vec![Content::Text { text: summary }],
+        structured_content: Some(serde_json::json!({ "results": structured })),
+        is_error: None,
     })
 }
 
 pub async fn handle_query(db: &Database, args: Value) -> Result<ToolResult> {
-    // Fallback to BM25 for now
-    handle_search(db, args).await
+    if !db.has_vector_index() {
+        return handle_search(db, args).await;
+    }
+
+    let query = args
+        .get("query")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing query"))?;
+
+    let options = SearchOptions {
+        limit: args.get("limit").and_then(|v| v.as_u64()).unwrap_or(20) as usize,
+        min_score: 0.0,
+        collection: args
+            .get("collection")
+            .and_then(|v| v.as_str())
+            .map(String::from),
+        provider: args
+            .get("provider")
+            .and_then(|v| v.as_str())
+            .map(String::from),
+        full_content: false,
+    };
+
+    let embedder = match agentroot_core::LlamaEmbedder::from_default() {
+        Ok(e) => e,
+        Err(_) => {
+            return handle_search(db, args).await;
+        }
+    };
+
+    let bm25_results = db.search_fts(query, &options)?;
+    let vec_results = db.search_vec(query, &embedder, &options).await?;
+
+    let fused_results = agentroot_core::search::rrf_fusion(&bm25_results, &vec_results);
+
+    let final_results: Vec<_> = fused_results.into_iter().take(options.limit).collect();
+
+    let summary = format!(
+        "Found {} results for \"{}\" (hybrid search)",
+        final_results.len(),
+        query
+    );
+    let structured: Vec<Value> = final_results
+        .iter()
+        .map(|r| {
+            serde_json::json!({
+                "docid": format!("#{}", r.docid),
+                "file": r.display_path,
+                "title": r.title,
+                "score": (r.score * 100.0).round() / 100.0
+            })
+        })
+        .collect();
+
+    Ok(ToolResult {
+        content: vec![Content::Text { text: summary }],
+        structured_content: Some(serde_json::json!({ "results": structured })),
+        is_error: None,
+    })
 }
 
 pub async fn handle_get(db: &Database, args: Value) -> Result<ToolResult> {
