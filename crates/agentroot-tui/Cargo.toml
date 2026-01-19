@@ -1,0 +1,19 @@
+[package]
+name = "agentroot-tui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "TUI for agentroot - local markdown search engine"
+
+[[bin]]
+name = "agentroot-tui"
+path = "src/main.rs"
+
+[dependencies]
+agentroot-core.workspace = true
+tokio.workspace = true
+ratatui.workspace = true
+crossterm.workspace = true
+arboard.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
