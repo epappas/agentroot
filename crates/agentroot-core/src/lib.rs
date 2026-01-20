@@ -22,9 +22,8 @@ pub use db::{Database, MetadataBuilder, MetadataFilter, MetadataValue, UserMetad
 pub use error::{AgentRootError, Error, Result};
 pub use index::{chunk_semantic, ChunkType, SemanticChunk, SemanticChunker};
 pub use llm::{
-    CandleEmbedder, DocumentMetadata, Embedder, LlamaEmbedder, LlamaMetadataGenerator,
-    MetadataContext, MetadataFilterHint, MetadataGenerator, ParsedQuery, QueryParser, SearchType,
-    TemporalFilter, DEFAULT_CANDLE_MODEL, DEFAULT_EMBED_MODEL, DEFAULT_METADATA_MODEL,
+    CandleEmbedder, DocumentMetadata, Embedder, MetadataContext, MetadataFilterHint,
+    MetadataGenerator, ParsedQuery, QueryParser, SearchType, TemporalFilter, DEFAULT_CANDLE_MODEL,
 };
 pub use providers::{
     CSVProvider, FileProvider, GitHubProvider, JSONProvider, PDFProvider, ProviderConfig,

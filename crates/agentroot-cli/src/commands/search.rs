@@ -2,7 +2,7 @@
 
 use crate::app::{OutputFormat, SearchArgs};
 use crate::output::{format_search_results, FormatOptions};
-use agentroot_core::{smart_search, Database, LlamaEmbedder, SearchOptions, DEFAULT_EMBED_MODEL};
+use agentroot_core::{smart_search, CandleEmbedder, Database, SearchOptions};
 use anyhow::Result;
 
 pub async fn run_bm25(args: SearchArgs, db: &Database, format: OutputFormat) -> Result<()> {
@@ -129,19 +129,6 @@ pub async fn run_smart(args: SearchArgs, db: &Database, format: OutputFormat) ->
     Ok(())
 }
 
-fn load_embedder() -> Result<LlamaEmbedder> {
-    let model_dir = dirs::data_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("agentroot")
-        .join("models");
-    let model_path = model_dir.join(DEFAULT_EMBED_MODEL);
-
-    if !model_path.exists() {
-        return Err(anyhow::anyhow!(
-            "Model not found at {}",
-            model_path.display()
-        ));
-    }
-
-    Ok(LlamaEmbedder::new(&model_path)?)
+fn load_embedder() -> Result<CandleEmbedder> {
+    Ok(CandleEmbedder::from_default()?)
 }

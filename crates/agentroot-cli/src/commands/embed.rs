@@ -2,7 +2,7 @@
 
 use crate::app::EmbedArgs;
 use agentroot_core::index::{embed_documents, EmbedProgress};
-use agentroot_core::{CandleEmbedder, Database, Embedder, DEFAULT_CANDLE_MODEL};
+use agentroot_core::{CandleEmbedder, Database, Embedder};
 use anyhow::Result;
 
 pub async fn run(args: EmbedArgs, db: &Database) -> Result<()> {

@@ -2,7 +2,7 @@
 
 use crate::db::Database;
 use crate::error::Result;
-use crate::llm::{LlamaEmbedder, QueryParser};
+use crate::llm::{CandleEmbedder, QueryParser};
 use crate::search::{hybrid_search, SearchOptions, SearchResult};
 
 /// Smart search that understands natural language queries
@@ -38,7 +38,7 @@ pub async fn smart_search(
             crate::llm::SearchType::Bm25 => db.search_fts(&parsed.search_terms, options)?,
             crate::llm::SearchType::Vector => {
                 // Vector search requires embedder
-                match LlamaEmbedder::from_default() {
+                match CandleEmbedder::from_default() {
                     Ok(embedder) => {
                         // Try vector search, fall back to BM25 if it fails (e.g., no embeddings yet)
                         match db
@@ -63,7 +63,7 @@ pub async fn smart_search(
             }
             crate::llm::SearchType::Hybrid => {
                 // Hybrid search requires embedder
-                match LlamaEmbedder::from_default() {
+                match CandleEmbedder::from_default() {
                     Ok(embedder) => {
                         // Try hybrid search, fall back to BM25 if it fails (e.g., no embeddings yet)
                         match hybrid_search(

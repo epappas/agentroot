@@ -6,12 +6,14 @@ use async_trait::async_trait;
 use candle_core::{Device, Tensor};
 use candle_nn::VarBuilder;
 use candle_transformers::models::bert::{BertModel, Config, DTYPE};
-use hf_hub::{api::sync::Api, Repo, RepoType};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use tokenizers::Tokenizer;
 
 /// Default embedding model (BERT-based)
 pub const DEFAULT_CANDLE_MODEL: &str = "sentence-transformers/all-MiniLM-L6-v2";
+
+/// Model dimensions for known models
+const MINILM_L6_DIM: usize = 384;
 
 /// Candle-based embedder using sentence-transformers models
 pub struct CandleEmbedder {
@@ -27,36 +29,68 @@ impl CandleEmbedder {
     pub fn new(model_path: impl AsRef<Path>) -> Result<Self> {
         let model_path = model_path.as_ref();
 
+        if !model_path.exists() {
+            return Err(AgentRootError::ModelNotFound(format!(
+                "Model directory not found: {}",
+                model_path.display()
+            )));
+        }
+
         // Load tokenizer
         let tokenizer_path = model_path.join("tokenizer.json");
+        if !tokenizer_path.exists() {
+            return Err(AgentRootError::ModelNotFound(format!(
+                "tokenizer.json not found in {}",
+                model_path.display()
+            )));
+        }
         let tokenizer = Tokenizer::from_file(&tokenizer_path)
             .map_err(|e| AgentRootError::Llm(format!("Failed to load tokenizer: {}", e)))?;
 
         // Load config
         let config_path = model_path.join("config.json");
-        let config_str = std::fs::read_to_string(&config_path)
-            .map_err(|e| AgentRootError::Llm(format!("Failed to read config: {}", e)))?;
+        if !config_path.exists() {
+            return Err(AgentRootError::ModelNotFound(format!(
+                "config.json not found in {}",
+                model_path.display()
+            )));
+        }
+        let config_str = std::fs::read_to_string(&config_path)?;
         let config: Config = serde_json::from_str(&config_str)
             .map_err(|e| AgentRootError::Llm(format!("Failed to parse config: {}", e)))?;
 
-        // MiniLM-L6-v2 has 384 dimensions
-        let dimensions = 384;
+        // Use known dimensions for MiniLM-L6-v2
+        let dimensions = MINILM_L6_DIM;
 
-        // Use CPU for now (GPU support can be added later)
+        // Use CPU
         let device = Device::Cpu;
 
         // Load model weights
         let weights_path = model_path.join("model.safetensors");
+        if !weights_path.exists() {
+            return Err(AgentRootError::ModelNotFound(format!(
+                "model.safetensors not found in {}",
+                model_path.display()
+            )));
+        }
+
         let vb = unsafe { VarBuilder::from_mmaped_safetensors(&[weights_path], DTYPE, &device)? };
 
         let model = BertModel::load(vb, &config)
-            .map_err(|e| AgentRootError::Llm(format!("Failed to load model: {}", e)))?;
+            .map_err(|e| AgentRootError::Llm(format!("Failed to load BERT model: {}", e)))?;
 
         let model_name = model_path
             .file_name()
             .and_then(|s| s.to_str())
             .unwrap_or("unknown")
             .to_string();
+
+        tracing::info!(
+            "Model loaded from {}: {} ({} dims)",
+            model_path.display(),
+            model_name,
+            dimensions
+        );
 
         Ok(Self {
             model,
@@ -69,59 +103,54 @@ impl CandleEmbedder {
 
     /// Create from Hugging Face model name (downloads if needed)
     pub fn from_hf(model_name: &str) -> Result<Self> {
-        tracing::info!("Downloading model from Hugging Face: {}", model_name);
+        tracing::info!("Loading model from Hugging Face: {}", model_name);
 
-        let api =
-            Api::new().map_err(|e| AgentRootError::Llm(format!("Failed to init HF API: {}", e)))?;
+        // Check if model exists in HF cache first
+        let cache_dir = dirs::cache_dir()
+            .ok_or_else(|| AgentRootError::Config("Cannot determine cache directory".to_string()))?
+            .join("huggingface")
+            .join("hub");
 
-        let repo = api.model(model_name.to_string());
+        // Convert model name to cache path (e.g., "sentence-transformers/all-MiniLM-L6-v2" -> "models--sentence-transformers--all-MiniLM-L6-v2")
+        let cache_model_name = format!("models--{}", model_name.replace('/', "--"));
+        let model_cache_path = cache_dir.join(&cache_model_name);
 
-        // Download required files
-        let config_path = repo
-            .get("config.json")
-            .map_err(|e| AgentRootError::Llm(format!("Failed to download config: {}", e)))?;
-        let tokenizer_path = repo
-            .get("tokenizer.json")
-            .map_err(|e| AgentRootError::Llm(format!("Failed to download tokenizer: {}", e)))?;
-        let weights_path = repo
-            .get("model.safetensors")
-            .map_err(|e| AgentRootError::Llm(format!("Failed to download weights: {}", e)))?;
+        // Check if snapshots directory exists (indicates model was previously downloaded)
+        let snapshots_dir = model_cache_path.join("snapshots");
+        if snapshots_dir.exists() {
+            // Find the first snapshot directory
+            if let Ok(mut entries) = std::fs::read_dir(&snapshots_dir) {
+                if let Some(Ok(entry)) = entries.next() {
+                    let snapshot_path = entry.path();
+                    tracing::info!("Found cached model at: {}", snapshot_path.display());
+                    return Self::new(&snapshot_path);
+                }
+            }
+        }
 
-        // Load tokenizer
-        let tokenizer = Tokenizer::from_file(&tokenizer_path)
-            .map_err(|e| AgentRootError::Llm(format!("Failed to load tokenizer: {}", e)))?;
+        // Model not in cache, download using our HTTP downloader
+        tracing::info!("Model not found in cache, downloading from Hugging Face...");
 
-        // Load config
-        let config_str = std::fs::read_to_string(&config_path)
-            .map_err(|e| AgentRootError::Llm(format!("Failed to read config: {}", e)))?;
-        let config: Config = serde_json::from_str(&config_str)
-            .map_err(|e| AgentRootError::Llm(format!("Failed to parse config: {}", e)))?;
+        let snapshot_path = super::download::download_sentence_transformer(model_name)?;
 
-        // MiniLM-L6-v2 has 384 dimensions
-        let dimensions = 384;
+        tracing::info!("Model downloaded successfully, loading...");
 
-        // Use CPU
-        let device = Device::Cpu;
-
-        // Load model weights
-        let vb = unsafe { VarBuilder::from_mmaped_safetensors(&[weights_path], DTYPE, &device)? };
-
-        let model = BertModel::load(vb, &config)
-            .map_err(|e| AgentRootError::Llm(format!("Failed to load model: {}", e)))?;
-
-        Ok(Self {
-            model,
-            tokenizer,
-            device,
-            model_name: model_name.to_string(),
-            dimensions,
-        })
+        Self::new(&snapshot_path)
     }
 
-    /// Create from default model location
+    /// Create from default model location  
     pub fn from_default() -> Result<Self> {
-        // Always download from Hugging Face (it caches locally)
-        Self::from_hf(DEFAULT_CANDLE_MODEL)
+        // Try downloading from HF, but provide helpful error message if it fails
+        Self::from_hf(DEFAULT_CANDLE_MODEL).map_err(|e| {
+            AgentRootError::ModelNotFound(format!(
+                "Failed to load embedding model: {}\n\n\
+                 To use embeddings, the model will be automatically downloaded from Hugging Face.\n\
+                 If download fails, you can manually download the model to:\n\
+                 ~/.cache/huggingface/hub/models--sentence-transformers--all-MiniLM-L6-v2/\n\n\
+                 Or use a different model with: agentroot embed --model <model-name>",
+                e
+            ))
+        })
     }
 
     fn embed_sync(&self, text: &str) -> Result<Vec<f32>> {
@@ -138,10 +167,13 @@ impl CandleEmbedder {
         let token_ids = token_ids.unsqueeze(0)?;
         let token_type_ids = token_ids.zeros_like()?;
 
-        // Forward pass
+        // Forward pass (returns [batch, tokens, features])
         let embeddings = self.model.forward(&token_ids, &token_type_ids, None)?;
 
-        // Mean pooling
+        // Remove batch dimension (squeeze first dimension)
+        let embeddings = embeddings.squeeze(0)?;
+
+        // Mean pooling over token dimension
         let (n_tokens, _n_features) = embeddings.dims2()?;
         let embeddings = (embeddings.sum(0)? / (n_tokens as f64))?;
 

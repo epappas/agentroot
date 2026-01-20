@@ -31,12 +31,11 @@ csv = "1.3"
 # CLI
 clap = { version = "4.5", features = ["derive", "env"] }
 
-# LLM
-llama-cpp-2 = "0.1"
+# LLM (Candle-based, pure Rust)
 candle-core = { version = "0.8", default-features = false }
 candle-nn = { version = "0.8", default-features = false }
 candle-transformers = { version = "0.8", default-features = false }
-hf-hub = { version = "0.3", features = ["tokio"] }
+hf-hub = "0.3"
 tokenizers = "0.21"
 
 # HTTP (for model downloads)
