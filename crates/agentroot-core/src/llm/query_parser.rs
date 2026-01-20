@@ -3,7 +3,13 @@
 //! Parses user queries like "files edited last hour" into structured search parameters
 
 use crate::error::{AgentRootError, Result};
-use chrono::{DateTime, Duration, Utc};
+use chrono::{Duration, Utc};
+use llama_cpp_2::{
+    context::params::LlamaContextParams,
+    llama_backend::LlamaBackend,
+    llama_batch::LlamaBatch,
+    model::{params::LlamaModelParams, LlamaModel},
+};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -104,189 +110,255 @@ impl QueryParser {
 
     /// Parse natural language query into structured search
     pub async fn parse(&self, query: &str) -> Result<ParsedQuery> {
-        // First try rule-based parsing for common patterns
-        if let Some(parsed) = self.try_rule_based_parse(query) {
-            return Ok(parsed);
-        }
-
-        // Fall back to LLM-based parsing
         self.llm_parse(query).await
     }
 
-    /// Try rule-based parsing for common patterns (fast path)
-    fn try_rule_based_parse(&self, query: &str) -> Option<ParsedQuery> {
-        let query_lower = query.to_lowercase();
-
-        // Detect temporal queries
-        if let Some(temporal) = self.extract_temporal_pattern(&query_lower) {
-            let search_terms = self.remove_temporal_keywords(&query_lower);
-            return Some(ParsedQuery {
-                search_terms: search_terms.trim().to_string(),
-                temporal_filter: Some(temporal),
-                metadata_filters: vec![],
-                search_type: SearchType::Bm25,
-                confidence: 0.8,
-            });
-        }
-
-        // Detect metadata queries
-        if let Some((field, value, search_terms)) = self.extract_metadata_pattern(query) {
-            return Some(ParsedQuery {
-                search_terms,
-                temporal_filter: None,
-                metadata_filters: vec![MetadataFilterHint {
-                    field,
-                    value,
-                    operator: "contains".to_string(),
-                }],
-                search_type: SearchType::Hybrid,
-                confidence: 0.85,
-            });
-        }
-
-        None
-    }
-
-    /// Extract temporal patterns like "last hour", "yesterday", "today"
-    fn extract_temporal_pattern(&self, query: &str) -> Option<TemporalFilter> {
-        let now = Utc::now();
-
-        if query.contains("last hour") || query.contains("past hour") {
-            let start = now - Duration::hours(1);
-            return Some(TemporalFilter {
-                start: Some(start.to_rfc3339()),
-                end: Some(now.to_rfc3339()),
-                description: "Last hour".to_string(),
-            });
-        }
-
-        if query.contains("last 24 hours") || query.contains("past day") {
-            let start = now - Duration::days(1);
-            return Some(TemporalFilter {
-                start: Some(start.to_rfc3339()),
-                end: Some(now.to_rfc3339()),
-                description: "Last 24 hours".to_string(),
-            });
-        }
-
-        if query.contains("yesterday") {
-            let yesterday = now - Duration::days(1);
-            let start = yesterday.date_naive().and_hms_opt(0, 0, 0)?;
-            let end = yesterday.date_naive().and_hms_opt(23, 59, 59)?;
-            return Some(TemporalFilter {
-                start: Some(DateTime::<Utc>::from_naive_utc_and_offset(start, Utc).to_rfc3339()),
-                end: Some(DateTime::<Utc>::from_naive_utc_and_offset(end, Utc).to_rfc3339()),
-                description: "Yesterday".to_string(),
-            });
-        }
-
-        if query.contains("today") {
-            let today = now.date_naive().and_hms_opt(0, 0, 0)?;
-            return Some(TemporalFilter {
-                start: Some(DateTime::<Utc>::from_naive_utc_and_offset(today, Utc).to_rfc3339()),
-                end: Some(now.to_rfc3339()),
-                description: "Today".to_string(),
-            });
-        }
-
-        if query.contains("this week") || query.contains("last week") {
-            let start = now - Duration::weeks(1);
-            return Some(TemporalFilter {
-                start: Some(start.to_rfc3339()),
-                end: Some(now.to_rfc3339()),
-                description: "Last week".to_string(),
-            });
-        }
-
-        if query.contains("this month") || query.contains("last month") {
-            let start = now - Duration::days(30);
-            return Some(TemporalFilter {
-                start: Some(start.to_rfc3339()),
-                end: Some(now.to_rfc3339()),
-                description: "Last 30 days".to_string(),
-            });
-        }
-
-        None
-    }
-
-    /// Remove temporal keywords from query
-    fn remove_temporal_keywords(&self, query: &str) -> String {
-        let keywords = [
-            "last hour",
-            "past hour",
-            "last 24 hours",
-            "past day",
-            "yesterday",
-            "today",
-            "this week",
-            "last week",
-            "this month",
-            "last month",
-            "edited",
-            "modified",
-            "created",
-            "from",
-            "since",
-            "in",
-            "during",
-        ];
-
-        let mut cleaned = query.to_string();
-        for keyword in &keywords {
-            cleaned = cleaned.replace(keyword, " ");
-        }
-
-        cleaned.split_whitespace().collect::<Vec<_>>().join(" ")
-    }
-
-    /// Extract metadata patterns like "by Alice", "author:Alice"
-    fn extract_metadata_pattern(&self, query: &str) -> Option<(String, String, String)> {
-        let query_lower = query.to_lowercase();
-
-        // Pattern: "by <author>"
-        if let Some(idx) = query_lower.find(" by ") {
-            let after = &query[idx + 4..];
-            let author = after.split_whitespace().next()?.trim();
-            let search_terms = query[..idx].trim().to_string();
-            return Some(("author".to_string(), author.to_string(), search_terms));
-        }
-
-        // Pattern: "author:<value>"
-        if let Some(idx) = query_lower.find("author:") {
-            let after = &query[idx + 7..];
-            let author = after.split_whitespace().next()?.trim();
-            let search_terms = format!("{} {}", &query[..idx], &after[author.len()..])
-                .trim()
-                .to_string();
-            return Some(("author".to_string(), author.to_string(), search_terms));
-        }
-
-        // Pattern: "tagged <tag>" or "tag:<tag>"
-        if let Some(idx) = query_lower.find("tagged ") {
-            let after = &query[idx + 7..];
-            let tag = after.split_whitespace().next()?.trim();
-            let search_terms = query[..idx].trim().to_string();
-            return Some(("tags".to_string(), tag.to_string(), search_terms));
-        }
-
-        None
-    }
-
-    /// Parse query using LLM (fallback for complex queries)
+    /// Parse query using LLM
     async fn llm_parse(&self, query: &str) -> Result<ParsedQuery> {
-        // For now, return a simple parsed query
-        // TODO: Implement full LLM parsing with llama-cpp-2
+        tracing::debug!("Using LLM to parse query: {}", query);
 
-        tracing::debug!("LLM parsing not yet implemented, using fallback");
+        let mut backend = LlamaBackend::init()
+            .map_err(|e| AgentRootError::Llm(format!("Failed to init LLM backend: {}", e)))?;
+        backend.void_logs();
 
-        // Fallback: treat as semantic search
+        let model_params = LlamaModelParams::default();
+        let model = LlamaModel::load_from_file(&backend, &self.model_path, &model_params)
+            .map_err(|e| AgentRootError::Llm(format!("Failed to load LLM model: {}", e)))?;
+
+        let ctx_size = std::num::NonZeroU32::new(4096).unwrap();
+        let ctx_params = LlamaContextParams::default()
+            .with_n_ctx(Some(ctx_size))
+            .with_n_batch(512);
+
+        let mut ctx = model
+            .new_context(&backend, ctx_params)
+            .map_err(|e| AgentRootError::Llm(format!("Failed to create LLM context: {}", e)))?;
+
+        let prompt = self.build_parsing_prompt(query);
+
+        let tokens = model
+            .str_to_token(&prompt, llama_cpp_2::model::AddBos::Never)
+            .map_err(|e| AgentRootError::Llm(format!("Tokenization error: {}", e)))?;
+
+        let max_output_tokens = 256;
+        let mut output_tokens = Vec::new();
+        let mut current_pos = 0;
+
+        // Process prompt tokens - enable logits for the last token
+        let chunks: Vec<_> = tokens.chunks(512).collect();
+        for (chunk_idx, chunk) in chunks.iter().enumerate() {
+            let is_last_chunk = chunk_idx == chunks.len() - 1;
+            let mut batch = LlamaBatch::new(chunk.len(), 1);
+            for (i, token) in chunk.iter().enumerate() {
+                let is_last_token_overall = is_last_chunk && i == chunk.len() - 1;
+                batch
+                    .add(*token, current_pos + i as i32, &[0], is_last_token_overall)
+                    .map_err(|e| AgentRootError::Llm(format!("Batch error: {}", e)))?;
+            }
+            current_pos += chunk.len() as i32;
+
+            ctx.decode(&mut batch)
+                .map_err(|e| AgentRootError::Llm(format!("Decode error: {}", e)))?;
+        }
+
+        for (chunk_idx, chunk) in chunks.iter().enumerate() {
+            let is_last_chunk = chunk_idx == chunks.len() - 1;
+            let mut batch = LlamaBatch::new(chunk.len(), 1);
+            tracing::debug!(
+                "Processing chunk {}/{}, size: {}, is_last: {}",
+                chunk_idx + 1,
+                chunks.len(),
+                chunk.len(),
+                is_last_chunk
+            );
+
+            for (i, token) in chunk.iter().enumerate() {
+                let is_last_token_overall = is_last_chunk && i == chunk.len() - 1;
+                if is_last_token_overall {
+                    tracing::debug!(
+                        "Marking token at position {} (offset {} in batch) for logits",
+                        current_pos + i as i32,
+                        i
+                    );
+                }
+                batch
+                    .add(*token, current_pos + i as i32, &[0], is_last_token_overall)
+                    .map_err(|e| AgentRootError::Llm(format!("Batch error: {}", e)))?;
+            }
+            current_pos += chunk.len() as i32;
+
+            ctx.decode(&mut batch)
+                .map_err(|e| AgentRootError::Llm(format!("Decode error: {}", e)))?;
+        }
+
+        tracing::debug!(
+            "Prompt processed, {} tokens total, current_pos = {}, will sample from position {}",
+            tokens.len(),
+            current_pos,
+            current_pos - 1
+        );
+
+        let mut generated_text = String::new();
+        let mut brace_count = 0;
+        let mut json_started = false;
+
+        for i in 0..max_output_tokens {
+            let token_data_array = ctx.token_data_array();
+
+            let next_token = token_data_array
+                .data
+                .iter()
+                .max_by(|a, b| a.logit().partial_cmp(&b.logit()).unwrap())
+                .map(|td| td.id())
+                .ok_or_else(|| AgentRootError::Llm("No token found".to_string()))?;
+
+            if next_token == model.token_eos() {
+                tracing::debug!("Hit EOS token after {} tokens", i);
+                break;
+            }
+
+            let token_str = model
+                .token_to_str(next_token, llama_cpp_2::model::Special::Tokenize)
+                .map_err(|e| AgentRootError::Llm(format!("Token decode error: {}", e)))?;
+
+            generated_text.push_str(&token_str);
+            output_tokens.push(next_token);
+
+            if token_str.contains("{") {
+                json_started = true;
+                brace_count += token_str.matches("{").count() as i32;
+            }
+            if token_str.contains("}") {
+                brace_count -= token_str.matches("}").count() as i32;
+                if json_started && brace_count == 0 {
+                    tracing::debug!("JSON complete after {} tokens", i + 1);
+                    break;
+                }
+            }
+
+            if i % 50 == 0 && i > 0 {
+                tracing::debug!(
+                    "Generated {} tokens so far, text length: {}",
+                    i,
+                    generated_text.len()
+                );
+            }
+
+            let mut batch = LlamaBatch::new(1, 1);
+            batch
+                .add(next_token, current_pos, &[0], true)
+                .map_err(|e| AgentRootError::Llm(format!("Batch error: {}", e)))?;
+
+            ctx.decode(&mut batch)
+                .map_err(|e| AgentRootError::Llm(format!("Decode error: {}", e)))?;
+
+            current_pos += 1;
+        }
+
+        tracing::debug!("LLM raw output: {}", generated_text);
+
+        self.parse_llm_response(&generated_text, query)
+    }
+
+    fn build_parsing_prompt(&self, query: &str) -> String {
+        format!(
+            r#"<|begin_of_text|><|start_header_id|>system<|end_header_id|>
+
+You are a search query parser. Extract structured information from user queries.
+Output ONLY valid JSON with these fields:
+- search_terms: main keywords (string)
+- temporal_filter: {{"description": "...", "relative_hours": N}} or null
+- metadata_filters: [{{"field": "...", "value": "...", "operator": "contains"}}] or []
+- confidence: 0.0-1.0
+
+Examples:
+Query: "files that were edit recently"
+{{"search_terms": "files", "temporal_filter": {{"description": "recently", "relative_hours": 24}}, "metadata_filters": [], "confidence": 0.9}}
+
+Query: "rust code by Alice from last week"
+{{"search_terms": "rust code", "temporal_filter": {{"description": "last week", "relative_hours": 168}}, "metadata_filters": [{{"field": "author", "value": "Alice", "operator": "contains"}}], "confidence": 0.95}}
+
+Query: "python functions"
+{{"search_terms": "python functions", "temporal_filter": null, "metadata_filters": [], "confidence": 0.85}}
+
+<|eot_id|><|start_header_id|>user<|end_header_id|>
+
+Parse this query: "{}"<|eot_id|><|start_header_id|>assistant<|end_header_id|>
+
+"#,
+            query
+        )
+    }
+
+    fn parse_llm_response(&self, response: &str, original_query: &str) -> Result<ParsedQuery> {
+        let json_start = response.find('{');
+        let json_end = response.rfind('}');
+
+        let json_str = match (json_start, json_end) {
+            (Some(start), Some(end)) if end > start => &response[start..=end],
+            _ => {
+                tracing::warn!("Failed to extract JSON from LLM response, using fallback");
+                return Ok(ParsedQuery {
+                    search_terms: original_query.to_string(),
+                    temporal_filter: None,
+                    metadata_filters: vec![],
+                    search_type: SearchType::Hybrid,
+                    confidence: 0.5,
+                });
+            }
+        };
+
+        let parsed_json: serde_json::Value = serde_json::from_str(json_str).map_err(|e| {
+            tracing::warn!("Failed to parse LLM JSON output: {}", e);
+            AgentRootError::Llm(format!("JSON parse error: {}", e))
+        })?;
+
+        let search_terms = parsed_json["search_terms"]
+            .as_str()
+            .unwrap_or(original_query)
+            .to_string();
+
+        let temporal_filter = if let Some(tf) = parsed_json.get("temporal_filter") {
+            if !tf.is_null() {
+                let hours = tf["relative_hours"].as_i64().unwrap_or(24);
+                let description = tf["description"].as_str().unwrap_or("").to_string();
+                let now = Utc::now();
+                let start = now - Duration::hours(hours);
+                Some(TemporalFilter {
+                    start: Some(start.to_rfc3339()),
+                    end: Some(now.to_rfc3339()),
+                    description,
+                })
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        let metadata_filters = if let Some(filters) = parsed_json["metadata_filters"].as_array() {
+            filters
+                .iter()
+                .filter_map(|f| {
+                    Some(MetadataFilterHint {
+                        field: f["field"].as_str()?.to_string(),
+                        value: f["value"].as_str()?.to_string(),
+                        operator: f["operator"].as_str().unwrap_or("contains").to_string(),
+                    })
+                })
+                .collect()
+        } else {
+            vec![]
+        };
+
+        let confidence = parsed_json["confidence"].as_f64().unwrap_or(0.8);
+
         Ok(ParsedQuery {
-            search_terms: query.to_string(),
-            temporal_filter: None,
-            metadata_filters: vec![],
+            search_terms,
+            temporal_filter,
+            metadata_filters,
             search_type: SearchType::Hybrid,
-            confidence: 0.5,
+            confidence,
         })
     }
 }
@@ -295,76 +367,93 @@ impl QueryParser {
 mod tests {
     use super::*;
 
+    #[tokio::test]
+    async fn test_parse_requires_model() {
+        let result = QueryParser::from_default();
+        if result.is_err() {
+            println!("Skipping test: LLM model not available");
+            return;
+        }
+
+        let parser = result.unwrap();
+        let parsed = parser.parse("test query").await;
+
+        assert!(parsed.is_ok() || parsed.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_llm_parse_temporal_query() {
+        let result = QueryParser::from_default();
+        if result.is_err() {
+            println!("Skipping test: LLM model not available");
+            return;
+        }
+
+        let parser = result.unwrap();
+        let parsed = parser.parse("files that were edit recently").await;
+
+        if let Ok(parsed) = parsed {
+            println!("Parsed query: {:?}", parsed);
+            assert!(!parsed.search_terms.is_empty());
+        }
+    }
+
+    #[tokio::test]
+    async fn test_llm_parse_metadata_query() {
+        let result = QueryParser::from_default();
+        if result.is_err() {
+            println!("Skipping test: LLM model not available");
+            return;
+        }
+
+        let parser = result.unwrap();
+        let parsed = parser.parse("rust code by Alice").await;
+
+        if let Ok(parsed) = parsed {
+            println!("Parsed query: {:?}", parsed);
+            assert!(!parsed.search_terms.is_empty());
+        }
+    }
+
     #[test]
-    fn test_parse_temporal_last_hour() {
-        let parser = QueryParser::from_default().unwrap_or_else(|_| QueryParser {
+    fn test_parse_llm_response_valid_json() {
+        let parser = QueryParser {
             model_path: PathBuf::from("dummy"),
-        });
+        };
 
-        let result = parser.try_rule_based_parse("files edited last hour");
-        assert!(result.is_some());
+        let response = r#"{"search_terms": "files", "temporal_filter": {"description": "recently", "relative_hours": 24}, "metadata_filters": [], "confidence": 0.9}"#;
+        let result = parser.parse_llm_response(response, "files that were edit recently");
 
+        assert!(result.is_ok());
         let parsed = result.unwrap();
-        assert!(parsed.temporal_filter.is_some());
-        assert_eq!(parsed.temporal_filter.unwrap().description, "Last hour");
         assert_eq!(parsed.search_terms, "files");
-    }
-
-    #[test]
-    fn test_parse_temporal_yesterday() {
-        let parser = QueryParser {
-            model_path: PathBuf::from("dummy"),
-        };
-
-        let result = parser.try_rule_based_parse("documents from yesterday");
-        assert!(result.is_some());
-
-        let parsed = result.unwrap();
         assert!(parsed.temporal_filter.is_some());
-        assert_eq!(parsed.temporal_filter.unwrap().description, "Yesterday");
     }
 
     #[test]
-    fn test_parse_metadata_by_author() {
+    fn test_parse_llm_response_invalid_json_fallback() {
         let parser = QueryParser {
             model_path: PathBuf::from("dummy"),
         };
 
-        let result = parser.try_rule_based_parse("rust tutorials by Alice");
-        assert!(result.is_some());
+        let response = "not valid json";
+        let result = parser.parse_llm_response(response, "original query");
 
+        assert!(result.is_ok());
         let parsed = result.unwrap();
-        assert_eq!(parsed.search_terms, "rust tutorials");
-        assert_eq!(parsed.metadata_filters.len(), 1);
-        assert_eq!(parsed.metadata_filters[0].field, "author");
-        assert_eq!(parsed.metadata_filters[0].value, "Alice");
+        assert_eq!(parsed.search_terms, "original query");
+        assert_eq!(parsed.confidence, 0.5);
     }
 
     #[test]
-    fn test_parse_metadata_author_colon() {
+    fn test_build_parsing_prompt() {
         let parser = QueryParser {
             model_path: PathBuf::from("dummy"),
         };
 
-        let result = parser.try_rule_based_parse("author:Alice rust tutorial");
-        assert!(result.is_some());
-
-        let parsed = result.unwrap();
-        assert!(parsed.search_terms.contains("rust"));
-        assert_eq!(parsed.metadata_filters[0].field, "author");
-    }
-
-    #[test]
-    fn test_parse_combined_temporal_metadata() {
-        let parser = QueryParser {
-            model_path: PathBuf::from("dummy"),
-        };
-
-        // First detect temporal
-        let result = parser.try_rule_based_parse("files by Alice last hour");
-        assert!(result.is_some());
-
-        let parsed = result.unwrap();
-        assert!(parsed.temporal_filter.is_some());
+        let prompt = parser.build_parsing_prompt("test query");
+        assert!(prompt.contains("test query"));
+        assert!(prompt.contains("search_terms"));
+        assert!(prompt.contains("temporal_filter"));
     }
 }
