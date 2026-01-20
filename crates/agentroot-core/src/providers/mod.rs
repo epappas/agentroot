@@ -14,14 +14,18 @@ use crate::error::Result;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+pub mod csv;
 pub mod file;
 pub mod github;
+pub mod json;
 pub mod pdf;
 pub mod sql;
 pub mod url;
 
+pub use csv::CSVProvider;
 pub use file::FileProvider;
 pub use github::GitHubProvider;
+pub use json::JSONProvider;
 pub use pdf::PDFProvider;
 pub use sql::SQLProvider;
 pub use url::URLProvider;
@@ -138,8 +142,10 @@ impl ProviderRegistry {
     /// Create registry with default providers
     pub fn with_defaults() -> Self {
         let mut registry = Self::new();
+        registry.register(Arc::new(CSVProvider::new()));
         registry.register(Arc::new(FileProvider::new()));
         registry.register(Arc::new(GitHubProvider::new()));
+        registry.register(Arc::new(JSONProvider::new()));
         registry.register(Arc::new(PDFProvider::new()));
         registry.register(Arc::new(SQLProvider::new()));
         registry.register(Arc::new(URLProvider::new()));

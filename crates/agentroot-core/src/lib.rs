@@ -26,8 +26,8 @@ pub use llm::{
     MetadataGenerator, DEFAULT_EMBED_MODEL, DEFAULT_METADATA_MODEL,
 };
 pub use providers::{
-    FileProvider, GitHubProvider, PDFProvider, ProviderConfig, ProviderRegistry, SQLProvider,
-    SourceItem, SourceProvider, URLProvider,
+    CSVProvider, FileProvider, GitHubProvider, JSONProvider, PDFProvider, ProviderConfig,
+    ProviderRegistry, SQLProvider, SourceItem, SourceProvider, URLProvider,
 };
 pub use search::{SearchOptions, SearchResult, SearchSource};
 

@@ -70,6 +70,9 @@ pub enum AgentRootError {
     #[error("Glob pattern error: {0}")]
     GlobPattern(#[from] glob::PatternError),
 
+    #[error("CSV error: {0}")]
+    Csv(String),
+
     #[error("Invalid input: {0}")]
     InvalidInput(String),
 
@@ -88,5 +91,11 @@ impl AgentRootError {
             Self::InvalidVirtualPath(_) | Self::Config(_) => exit_codes::INVALID_INPUT,
             _ => exit_codes::GENERAL_ERROR,
         }
+    }
+}
+
+impl From<csv::Error> for AgentRootError {
+    fn from(err: csv::Error) -> Self {
+        Self::Csv(err.to_string())
     }
 }
