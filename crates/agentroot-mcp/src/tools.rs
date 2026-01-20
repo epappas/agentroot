@@ -141,6 +141,37 @@ pub fn query_tool_definition() -> ToolDefinition {
     }
 }
 
+pub fn smart_search_tool_definition() -> ToolDefinition {
+    ToolDefinition {
+        name: "smart_search".to_string(),
+        description: "Intelligent natural language search with automatic query understanding and filtering. Understands temporal filters like 'last hour', metadata filters like 'by Alice', and automatically falls back to BM25 if models are unavailable.".to_string(),
+        input_schema: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Natural language search query (e.g., 'files edited last hour', 'rust tutorials by Alice')"
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum results (default: 20)",
+                    "default": 20
+                },
+                "minScore": {
+                    "type": "number",
+                    "description": "Minimum relevance score 0-1 (default: 0)",
+                    "default": 0
+                },
+                "collection": {
+                    "type": "string",
+                    "description": "Filter by collection name"
+                }
+            },
+            "required": ["query"]
+        }),
+    }
+}
+
 pub fn get_tool_definition() -> ToolDefinition {
     ToolDefinition {
         name: "get".to_string(),
@@ -573,6 +604,75 @@ pub async fn handle_query(db: &Database, args: Value) -> Result<ToolResult> {
         query
     );
     let structured: Vec<Value> = final_results
+        .iter()
+        .map(|r| {
+            let mut result_json = serde_json::json!({
+                "docid": format!("#{}", r.docid),
+                "file": r.display_path,
+                "title": r.title,
+                "score": (r.score * 100.0).round() / 100.0
+            });
+
+            // Include LLM metadata if available
+            if let Some(summary) = &r.llm_summary {
+                result_json["summary"] = Value::String(summary.clone());
+            }
+            if let Some(category) = &r.llm_category {
+                result_json["category"] = Value::String(category.clone());
+            }
+            if let Some(difficulty) = &r.llm_difficulty {
+                result_json["difficulty"] = Value::String(difficulty.clone());
+            }
+            if let Some(keywords) = &r.llm_keywords {
+                result_json["keywords"] = serde_json::to_value(keywords).unwrap();
+            }
+
+            // Include user metadata if available
+            if let Some(user_meta) = &r.user_metadata {
+                if let Ok(json_str) = user_meta.to_json() {
+                    if let Ok(parsed) = serde_json::from_str::<Value>(&json_str) {
+                        result_json["userMetadata"] = parsed;
+                    }
+                }
+            }
+
+            result_json
+        })
+        .collect();
+
+    Ok(ToolResult {
+        content: vec![Content::Text { text: summary }],
+        structured_content: Some(serde_json::json!({ "results": structured })),
+        is_error: None,
+    })
+}
+
+pub async fn handle_smart_search(db: &Database, args: Value) -> Result<ToolResult> {
+    let query = args
+        .get("query")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing query"))?;
+
+    let options = SearchOptions {
+        limit: args.get("limit").and_then(|v| v.as_u64()).unwrap_or(20) as usize,
+        min_score: args.get("minScore").and_then(|v| v.as_f64()).unwrap_or(0.0),
+        collection: args
+            .get("collection")
+            .and_then(|v| v.as_str())
+            .map(String::from),
+        provider: None,
+        full_content: false,
+    };
+
+    // Use smart_search which handles parsing and fallbacks
+    let results = agentroot_core::smart_search(db, query, &options).await?;
+
+    let summary = format!(
+        "Found {} results for \"{}\" (smart search)",
+        results.len(),
+        query
+    );
+    let structured: Vec<Value> = results
         .iter()
         .map(|r| {
             let mut result_json = serde_json::json!({
