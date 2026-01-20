@@ -88,3 +88,11 @@ harness = false
 name = "metadata_generation"
 path = "../../examples/metadata_generation.rs"
 
+[[example]]
+name = "metadata_demo"
+path = "../../examples/metadata_demo.rs"
+
+[[example]]
+name = "show_metadata_direct"
+path = "../../examples/show_metadata_direct.rs"
+

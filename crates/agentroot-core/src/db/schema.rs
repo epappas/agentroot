@@ -9,7 +9,7 @@ pub struct Database {
     pub(crate) conn: Connection,
 }
 
-const SCHEMA_VERSION: i32 = 4;
+const SCHEMA_VERSION: i32 = 5;
 
 const CREATE_TABLES: &str = r#"
 -- Content storage (content-addressable by SHA-256 hash)
@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS documents (
     llm_queries TEXT,
     llm_metadata_generated_at TEXT,
     llm_model TEXT,
+    user_metadata TEXT,
     UNIQUE(collection, path)
 );
 
@@ -245,6 +246,10 @@ impl Database {
 
         if current < 4 {
             self.migrate_to_v4()?;
+        }
+
+        if current < 5 {
+            self.migrate_to_v5()?;
         }
 
         Ok(())
@@ -516,6 +521,37 @@ impl Database {
 
         Ok(())
     }
+
+    fn migrate_to_v5(&self) -> Result<()> {
+        // Add user_metadata column to documents table
+        let has_user_metadata: bool = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('documents') WHERE name = 'user_metadata'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+
+        if !has_user_metadata {
+            self.conn
+                .execute("ALTER TABLE documents ADD COLUMN user_metadata TEXT", [])?;
+        }
+
+        // Create index on user_metadata for efficient queries
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_documents_user_metadata ON documents(user_metadata)",
+            [],
+        )?;
+
+        // Update schema version
+        self.conn.execute(
+            "INSERT OR REPLACE INTO schema_version (version) VALUES (?1)",
+            params![5],
+        )?;
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -562,7 +598,7 @@ mod tests {
 
         db.initialize().unwrap();
 
-        assert_eq!(db.schema_version().unwrap(), Some(4));
+        assert_eq!(db.schema_version().unwrap(), Some(5));
 
         let has_provider_type: bool = db.conn.query_row(
             "SELECT COUNT(*) > 0 FROM pragma_table_info('collections') WHERE name = 'provider_type'",
@@ -639,7 +675,7 @@ mod tests {
 
         db.initialize().unwrap();
 
-        assert_eq!(db.schema_version().unwrap(), Some(4));
+        assert_eq!(db.schema_version().unwrap(), Some(5));
 
         let metadata_columns = vec![
             "llm_summary",
@@ -665,5 +701,94 @@ mod tests {
                 .unwrap();
             assert!(has_column, "documents should have {} column", column);
         }
+    }
+
+    #[test]
+    fn test_migration_v4_to_v5() {
+        let db = Database::open_in_memory().unwrap();
+
+        db.conn
+            .execute_batch(
+                "CREATE TABLE collections (
+                name TEXT PRIMARY KEY,
+                path TEXT NOT NULL,
+                pattern TEXT NOT NULL DEFAULT '**/*.md',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                provider_type TEXT NOT NULL DEFAULT 'file',
+                provider_config TEXT
+            );
+            CREATE TABLE documents (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                collection TEXT NOT NULL,
+                path TEXT NOT NULL,
+                title TEXT NOT NULL,
+                hash TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                modified_at TEXT NOT NULL,
+                active INTEGER NOT NULL DEFAULT 1,
+                source_type TEXT NOT NULL DEFAULT 'file',
+                source_uri TEXT,
+                llm_summary TEXT,
+                llm_title TEXT,
+                llm_keywords TEXT,
+                llm_category TEXT,
+                llm_intent TEXT,
+                llm_concepts TEXT,
+                llm_difficulty TEXT,
+                llm_queries TEXT,
+                llm_metadata_generated_at TEXT,
+                llm_model TEXT,
+                UNIQUE(collection, path)
+            );
+            CREATE TABLE content (
+                hash TEXT PRIMARY KEY,
+                doc TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            CREATE VIRTUAL TABLE documents_fts USING fts5(
+                filepath,
+                title,
+                body,
+                llm_summary,
+                llm_title,
+                llm_keywords,
+                llm_intent,
+                llm_concepts,
+                tokenize='porter unicode61'
+            );
+            CREATE TABLE schema_version (version INTEGER PRIMARY KEY);
+            INSERT INTO schema_version VALUES (4);",
+            )
+            .unwrap();
+
+        assert_eq!(db.schema_version().unwrap(), Some(4));
+
+        db.initialize().unwrap();
+
+        assert_eq!(db.schema_version().unwrap(), Some(5));
+
+        let has_user_metadata: bool = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('documents') WHERE name = 'user_metadata'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(
+            has_user_metadata,
+            "documents should have user_metadata column"
+        );
+
+        let has_index: bool = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type = 'index' AND name = 'idx_documents_user_metadata'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(has_index, "user_metadata should have index");
     }
 }

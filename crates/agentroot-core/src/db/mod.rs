@@ -9,14 +9,17 @@ mod collections;
 mod content;
 mod context;
 mod documents;
+pub mod metadata;
 mod schema;
 mod stats;
+mod user_metadata;
 pub mod vectors;
 
 pub use collections::CollectionInfo;
 pub use content::{docid_from_hash, hash_content};
 pub use context::ContextInfo;
 pub use documents::DocumentInsert;
+pub use metadata::{MetadataBuilder, MetadataFilter, MetadataValue, UserMetadata};
 pub use schema::Database;
 use std::path::PathBuf;
 pub use vectors::CacheLookupResult;

@@ -18,7 +18,7 @@ pub mod providers;
 pub mod search;
 
 pub use config::{CollectionConfig, Config};
-pub use db::Database;
+pub use db::{Database, MetadataBuilder, MetadataFilter, MetadataValue, UserMetadata};
 pub use error::{AgentRootError, Error, Result};
 pub use index::{chunk_semantic, ChunkType, SemanticChunk, SemanticChunker};
 pub use llm::{
