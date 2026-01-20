@@ -1,7 +1,9 @@
 //! Metadata command
 
 use crate::app::{MetadataAction, MetadataArgs, OutputFormat};
-use agentroot_core::{Database, MetadataBuilder, MetadataFilter, MetadataValue};
+use agentroot_core::{
+    Database, LlamaMetadataGenerator, MetadataBuilder, MetadataFilter, MetadataValue,
+};
 use anyhow::Result;
 
 pub async fn run(args: MetadataArgs, db: &Database, format: OutputFormat) -> Result<()> {
@@ -46,14 +48,48 @@ pub async fn run(args: MetadataArgs, db: &Database, format: OutputFormat) -> Res
 }
 
 async fn run_refresh(
-    _db: &Database,
-    _collection: Option<String>,
-    _all: bool,
-    _doc: Option<String>,
-    _force: bool,
-    _model_path: Option<std::path::PathBuf>,
+    db: &Database,
+    collection: Option<String>,
+    all: bool,
+    doc: Option<String>,
+    force: bool,
+    model_path: Option<std::path::PathBuf>,
 ) -> Result<()> {
-    anyhow::bail!("LLM-based metadata generation is temporarily disabled during Candle migration. User metadata (add/get/remove/query) still works.");
+    let generator = if let Some(path) = model_path {
+        LlamaMetadataGenerator::new(path)?
+    } else {
+        LlamaMetadataGenerator::from_default()?
+    };
+
+    if let Some(doc_path) = doc {
+        println!("Refreshing metadata for document: {}", doc_path);
+        anyhow::bail!("Single document metadata refresh not yet implemented");
+    } else if all {
+        println!("Refreshing metadata for all collections...");
+        let collections = db.list_collections()?;
+        for coll in collections {
+            println!("Processing collection: {}", coll.name);
+            let updated = db
+                .reindex_collection_with_metadata(&coll.name, Some(&generator))
+                .await?;
+            println!("  Updated {} documents", updated);
+        }
+        println!("Done!");
+    } else if let Some(coll_name) = collection {
+        println!("Refreshing metadata for collection: {}", coll_name);
+        let updated = db
+            .reindex_collection_with_metadata(&coll_name, Some(&generator))
+            .await?;
+        println!("Updated {} documents", updated);
+    } else {
+        anyhow::bail!("Must specify --all, a collection name, or --doc <path>");
+    }
+
+    if force {
+        println!("Note: --force flag not yet implemented (cache clearing)");
+    }
+
+    Ok(())
 }
 
 async fn run_show(db: &Database, docid: &str, format: OutputFormat) -> Result<()> {

@@ -99,9 +99,3 @@ impl From<csv::Error> for AgentRootError {
         Self::Csv(err.to_string())
     }
 }
-
-impl From<candle_core::Error> for AgentRootError {
-    fn from(err: candle_core::Error) -> Self {
-        Self::Llm(format!("Candle error: {}", err))
-    }
-}

@@ -437,7 +437,7 @@ pub async fn handle_vsearch(db: &Database, args: Value) -> Result<ToolResult> {
         full_content: false,
     };
 
-    let embedder = match agentroot_core::CandleEmbedder::from_default() {
+    let embedder = match agentroot_core::LlamaEmbedder::from_default() {
         Ok(e) => e,
         Err(e) => {
             return Ok(ToolResult {
@@ -553,7 +553,7 @@ pub async fn handle_query(db: &Database, args: Value) -> Result<ToolResult> {
         full_content: false,
     };
 
-    let embedder = match agentroot_core::CandleEmbedder::from_default() {
+    let embedder = match agentroot_core::LlamaEmbedder::from_default() {
         Ok(e) => e,
         Err(_) => {
             return handle_search(db, args).await;
