@@ -97,3 +97,11 @@ path = "../../examples/metadata_demo.rs"
 name = "show_metadata_direct"
 path = "../../examples/show_metadata_direct.rs"
 
+[[example]]
+name = "csv_provider"
+path = "../../examples/csv_provider.rs"
+
+[[example]]
+name = "json_provider"
+path = "../../examples/json_provider.rs"
+
