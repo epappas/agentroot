@@ -58,6 +58,9 @@ pub enum Commands {
     /// Hybrid search with reranking
     Query(SearchArgs),
 
+    /// Smart natural language search with auto fallback
+    Smart(SearchArgs),
+
     /// Database cleanup
     Cleanup,
 

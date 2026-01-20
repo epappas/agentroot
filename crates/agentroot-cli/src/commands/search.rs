@@ -2,7 +2,7 @@
 
 use crate::app::{OutputFormat, SearchArgs};
 use crate::output::{format_search_results, FormatOptions};
-use agentroot_core::{Database, LlamaEmbedder, SearchOptions, DEFAULT_EMBED_MODEL};
+use agentroot_core::{smart_search, Database, LlamaEmbedder, SearchOptions, DEFAULT_EMBED_MODEL};
 use anyhow::Result;
 
 pub async fn run_bm25(args: SearchArgs, db: &Database, format: OutputFormat) -> Result<()> {
@@ -110,6 +110,23 @@ fn build_options(args: &SearchArgs) -> SearchOptions {
         provider: None,
         full_content: args.full,
     }
+}
+
+pub async fn run_smart(args: SearchArgs, db: &Database, format: OutputFormat) -> Result<()> {
+    let query = args.query.join(" ");
+    let options = build_options(&args);
+
+    // Smart search handles fallbacks internally
+    let results = smart_search(db, &query, &options).await?;
+
+    let format_opts = FormatOptions {
+        full: args.full,
+        query: Some(query),
+        line_numbers: args.line_numbers,
+    };
+
+    print!("{}", format_search_results(&results, format, &format_opts));
+    Ok(())
 }
 
 fn load_embedder() -> Result<LlamaEmbedder> {
