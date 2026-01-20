@@ -815,3 +815,236 @@ pub async fn handle_collection_update(db: &Database, args: Value) -> Result<Tool
         is_error: None,
     })
 }
+
+pub fn metadata_add_tool_definition() -> ToolDefinition {
+    ToolDefinition {
+        name: "metadata_add".to_string(),
+        description: "Add custom user metadata to a document".to_string(),
+        input_schema: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "docid": {
+                    "type": "string",
+                    "description": "Document ID (#abc123) or path"
+                },
+                "metadata": {
+                    "type": "object",
+                    "description": "Metadata fields as key-value pairs. Values can be strings, numbers, booleans, or arrays",
+                    "additionalProperties": true
+                }
+            },
+            "required": ["docid", "metadata"]
+        }),
+    }
+}
+
+pub fn metadata_get_tool_definition() -> ToolDefinition {
+    ToolDefinition {
+        name: "metadata_get".to_string(),
+        description: "Get custom user metadata from a document".to_string(),
+        input_schema: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "docid": {
+                    "type": "string",
+                    "description": "Document ID (#abc123) or path"
+                }
+            },
+            "required": ["docid"]
+        }),
+    }
+}
+
+pub fn metadata_query_tool_definition() -> ToolDefinition {
+    ToolDefinition {
+        name: "metadata_query".to_string(),
+        description: "Query documents by custom user metadata".to_string(),
+        input_schema: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "field": {
+                    "type": "string",
+                    "description": "Metadata field name to query"
+                },
+                "operator": {
+                    "type": "string",
+                    "enum": ["eq", "contains", "gt", "lt", "has", "exists"],
+                    "description": "Comparison operator"
+                },
+                "value": {
+                    "type": "string",
+                    "description": "Value to compare against (not needed for 'exists' operator)"
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum results (default: 20)",
+                    "default": 20
+                }
+            },
+            "required": ["field", "operator"]
+        }),
+    }
+}
+
+pub async fn handle_metadata_add(db: &Database, args: Value) -> Result<ToolResult> {
+    use agentroot_core::MetadataBuilder;
+
+    let docid = args
+        .get("docid")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing docid"))?;
+
+    let metadata_obj = args
+        .get("metadata")
+        .and_then(|v| v.as_object())
+        .ok_or_else(|| anyhow::anyhow!("Missing or invalid metadata"))?;
+
+    let mut builder = MetadataBuilder::new();
+
+    for (key, value) in metadata_obj {
+        match value {
+            Value::String(s) => {
+                builder = builder.text(key, s.clone());
+            }
+            Value::Number(n) => {
+                if let Some(i) = n.as_i64() {
+                    builder = builder.integer(key, i);
+                } else if let Some(f) = n.as_f64() {
+                    builder = builder.float(key, f);
+                }
+            }
+            Value::Bool(b) => {
+                builder = builder.boolean(key, *b);
+            }
+            Value::Array(arr) => {
+                let tags: Vec<String> = arr
+                    .iter()
+                    .filter_map(|v| v.as_str())
+                    .map(|s| s.to_string())
+                    .collect();
+                builder = builder.tags(key, tags);
+            }
+            _ => {}
+        }
+    }
+
+    let metadata = builder.build();
+    db.add_metadata(docid, &metadata)?;
+
+    let summary = format!("Added metadata to document: {}", docid);
+
+    Ok(ToolResult {
+        content: vec![Content::Text { text: summary }],
+        structured_content: Some(serde_json::json!({
+            "docid": docid,
+            "added": true
+        })),
+        is_error: None,
+    })
+}
+
+pub async fn handle_metadata_get(db: &Database, args: Value) -> Result<ToolResult> {
+    let docid = args
+        .get("docid")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing docid"))?;
+
+    match db.get_metadata(docid)? {
+        Some(metadata) => {
+            let json = metadata.to_json()?;
+            let parsed: serde_json::Value = serde_json::from_str(&json)?;
+
+            Ok(ToolResult {
+                content: vec![Content::Text {
+                    text: format!("User metadata for {}: {}", docid, json),
+                }],
+                structured_content: Some(serde_json::json!({
+                    "docid": docid,
+                    "metadata": parsed
+                })),
+                is_error: None,
+            })
+        }
+        None => Ok(ToolResult {
+            content: vec![Content::Text {
+                text: format!("No user metadata found for document: {}", docid),
+            }],
+            structured_content: Some(serde_json::json!({
+                "docid": docid,
+                "metadata": null
+            })),
+            is_error: None,
+        }),
+    }
+}
+
+pub async fn handle_metadata_query(db: &Database, args: Value) -> Result<ToolResult> {
+    use agentroot_core::MetadataFilter;
+
+    let field = args
+        .get("field")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing field"))?
+        .to_string();
+
+    let operator = args
+        .get("operator")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing operator"))?;
+
+    let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(20) as usize;
+
+    let filter = match operator {
+        "exists" => MetadataFilter::Exists(field),
+        _ => {
+            let value = args
+                .get("value")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| anyhow::anyhow!("Missing value for operator"))?;
+
+            match operator {
+                "eq" => MetadataFilter::TextEq(field, value.to_string()),
+                "contains" => MetadataFilter::TextContains(field, value.to_string()),
+                "gt" => {
+                    if let Ok(num) = value.parse::<i64>() {
+                        MetadataFilter::IntegerGt(field, num)
+                    } else if let Ok(num) = value.parse::<f64>() {
+                        MetadataFilter::FloatGt(field, num)
+                    } else {
+                        return Err(anyhow::anyhow!("Invalid numeric value for gt"));
+                    }
+                }
+                "lt" => {
+                    if let Ok(num) = value.parse::<i64>() {
+                        MetadataFilter::IntegerLt(field, num)
+                    } else if let Ok(num) = value.parse::<f64>() {
+                        MetadataFilter::FloatLt(field, num)
+                    } else {
+                        return Err(anyhow::anyhow!("Invalid numeric value for lt"));
+                    }
+                }
+                "has" => MetadataFilter::TagsContain(field, value.to_string()),
+                _ => return Err(anyhow::anyhow!("Invalid operator")),
+            }
+        }
+    };
+
+    let docids = db.find_by_metadata(&filter, limit)?;
+
+    let summary = if docids.is_empty() {
+        "No documents found matching filter".to_string()
+    } else {
+        format!("Found {} document(s) matching filter", docids.len())
+    };
+
+    Ok(ToolResult {
+        content: vec![Content::Text {
+            text: format!("{}\n{}", summary, docids.join("\n")),
+        }],
+        structured_content: Some(serde_json::json!({
+            "count": docids.len(),
+            "documents": docids
+        })),
+        is_error: None,
+    })
+}
