@@ -7,10 +7,12 @@
 
 mod bm25;
 mod hybrid;
+mod smart;
 mod snippet;
 mod vector;
 
 pub use hybrid::*;
+pub use smart::smart_search;
 pub use snippet::*;
 
 /// Search options
