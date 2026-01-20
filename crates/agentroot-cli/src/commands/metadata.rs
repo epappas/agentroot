@@ -1,7 +1,9 @@
 //! Metadata command
 
 use crate::app::{MetadataAction, MetadataArgs, OutputFormat};
-use agentroot_core::{Database, LlamaMetadataGenerator};
+use agentroot_core::{
+    Database, LlamaMetadataGenerator, MetadataBuilder, MetadataFilter, MetadataValue,
+};
 use anyhow::Result;
 
 pub async fn run(args: MetadataArgs, db: &Database, format: OutputFormat) -> Result<()> {
@@ -14,6 +16,34 @@ pub async fn run(args: MetadataArgs, db: &Database, format: OutputFormat) -> Res
             model,
         } => run_refresh(db, collection, all, doc, force, model).await,
         MetadataAction::Show { docid } => run_show(db, &docid, format).await,
+        MetadataAction::Add {
+            docid,
+            text,
+            integer,
+            float,
+            boolean,
+            datetime,
+            tags,
+            enum_value,
+            qualitative,
+            quantitative,
+        } => run_add(
+            db,
+            &docid,
+            text,
+            integer,
+            float,
+            boolean,
+            datetime,
+            tags,
+            enum_value,
+            qualitative,
+            quantitative,
+        ),
+        MetadataAction::Get { docid } => run_get(db, &docid, format),
+        MetadataAction::Remove { docid, fields } => run_remove(db, &docid, fields),
+        MetadataAction::Clear { docid } => run_clear(db, &docid),
+        MetadataAction::Query { filter, limit } => run_query(db, &filter, limit, format),
     }
 }
 
@@ -125,4 +155,244 @@ fn fetch_metadata_for_hash(
     }
 
     Ok(None)
+}
+
+fn run_add(
+    db: &Database,
+    docid: &str,
+    text: Vec<String>,
+    integer: Vec<String>,
+    float: Vec<String>,
+    boolean: Vec<String>,
+    datetime: Vec<String>,
+    tags: Vec<String>,
+    enum_value: Vec<String>,
+    qualitative: Vec<String>,
+    quantitative: Vec<String>,
+) -> Result<()> {
+    let mut builder = MetadataBuilder::new();
+
+    for item in text {
+        let (key, value) = parse_key_value(&item)?;
+        builder = builder.text(&key, value);
+    }
+
+    for item in integer {
+        let (key, value) = parse_key_value(&item)?;
+        let num: i64 = value.parse()?;
+        builder = builder.integer(&key, num);
+    }
+
+    for item in float {
+        let (key, value) = parse_key_value(&item)?;
+        let num: f64 = value.parse()?;
+        builder = builder.float(&key, num);
+    }
+
+    for item in boolean {
+        let (key, value) = parse_key_value(&item)?;
+        let bool_val = value
+            .parse::<bool>()
+            .or_else(|_| match value.to_lowercase().as_str() {
+                "yes" | "y" | "1" => Ok(true),
+                "no" | "n" | "0" => Ok(false),
+                _ => Err(anyhow::anyhow!("Invalid boolean value: {}", value)),
+            })?;
+        builder = builder.boolean(&key, bool_val);
+    }
+
+    for item in datetime {
+        let (key, value) = parse_key_value(&item)?;
+        let dt = if value == "now" {
+            chrono::Utc::now()
+        } else {
+            chrono::DateTime::parse_from_rfc3339(&value).map(|dt| dt.with_timezone(&chrono::Utc))?
+        };
+        builder = builder.datetime(&key, dt);
+    }
+
+    for item in tags {
+        let (key, value) = parse_key_value(&item)?;
+        let tag_list: Vec<String> = value.split(',').map(|s| s.trim().to_string()).collect();
+        builder = builder.tags(&key, tag_list);
+    }
+
+    for item in enum_value {
+        let (key, rest) = parse_key_value(&item)?;
+        let parts: Vec<&str> = rest.splitn(2, ':').collect();
+        if parts.len() != 2 {
+            anyhow::bail!("Enum format: key=value:option1,option2,...");
+        }
+        let value = parts[0].to_string();
+        let options: Vec<String> = parts[1].split(',').map(|s| s.trim().to_string()).collect();
+        builder = builder.enum_value(&key, value, options)?;
+    }
+
+    for item in qualitative {
+        let (key, rest) = parse_key_value(&item)?;
+        let parts: Vec<&str> = rest.splitn(2, ':').collect();
+        if parts.len() != 2 {
+            anyhow::bail!("Qualitative format: key=value:scale1,scale2,...");
+        }
+        let value = parts[0].to_string();
+        let scale: Vec<String> = parts[1].split(',').map(|s| s.trim().to_string()).collect();
+        builder = builder.qualitative(&key, value, scale)?;
+    }
+
+    for item in quantitative {
+        let (key, rest) = parse_key_value(&item)?;
+        let parts: Vec<&str> = rest.splitn(2, ':').collect();
+        if parts.len() != 2 {
+            anyhow::bail!("Quantitative format: key=value:unit");
+        }
+        let value: f64 = parts[0].parse()?;
+        let unit = parts[1].to_string();
+        builder = builder.quantitative(&key, value, unit);
+    }
+
+    let metadata = builder.build();
+    db.add_metadata(docid, &metadata)?;
+    println!("Added metadata to document: {}", docid);
+    Ok(())
+}
+
+fn run_get(db: &Database, docid: &str, format: OutputFormat) -> Result<()> {
+    let metadata = db.get_metadata(docid)?;
+
+    match metadata {
+        Some(meta) => match format {
+            OutputFormat::Json => {
+                let json = meta.to_json()?;
+                println!("{}", json);
+            }
+            _ => {
+                println!("User Metadata for: {}", docid);
+                println!();
+                for (key, value) in &meta.fields {
+                    println!("{}: {}", key, format_metadata_value(value));
+                }
+            }
+        },
+        None => {
+            println!("No user metadata found for document: {}", docid);
+        }
+    }
+
+    Ok(())
+}
+
+fn run_remove(db: &Database, docid: &str, fields: Vec<String>) -> Result<()> {
+    db.remove_metadata_fields(docid, &fields)?;
+    println!("Removed {} field(s) from document: {}", fields.len(), docid);
+    Ok(())
+}
+
+fn run_clear(db: &Database, docid: &str) -> Result<()> {
+    db.clear_metadata(docid)?;
+    println!("Cleared all user metadata from document: {}", docid);
+    Ok(())
+}
+
+fn run_query(db: &Database, filter_str: &str, limit: usize, format: OutputFormat) -> Result<()> {
+    let filter = parse_filter(filter_str)?;
+    let docids = db.find_by_metadata(&filter, limit)?;
+
+    match format {
+        OutputFormat::Json => {
+            let json = serde_json::to_string_pretty(&docids)?;
+            println!("{}", json);
+        }
+        _ => {
+            if docids.is_empty() {
+                println!("No documents found matching filter: {}", filter_str);
+            } else {
+                println!("Found {} document(s):", docids.len());
+                for docid in docids {
+                    println!("  {}", docid);
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn parse_key_value(input: &str) -> Result<(String, String)> {
+    let parts: Vec<&str> = input.splitn(2, '=').collect();
+    if parts.len() != 2 {
+        anyhow::bail!("Invalid format: {}. Expected key=value", input);
+    }
+    Ok((parts[0].to_string(), parts[1].to_string()))
+}
+
+fn format_metadata_value(value: &MetadataValue) -> String {
+    match value {
+        MetadataValue::Text(s) => s.clone(),
+        MetadataValue::Integer(n) => n.to_string(),
+        MetadataValue::Float(f) => f.to_string(),
+        MetadataValue::Boolean(b) => b.to_string(),
+        MetadataValue::DateTime(dt) => dt.clone(),
+        MetadataValue::Tags(tags) => tags.join(", "),
+        MetadataValue::Enum { value, options } => {
+            format!("{} (options: {})", value, options.join(", "))
+        }
+        MetadataValue::Qualitative { value, scale } => {
+            format!("{} (scale: {})", value, scale.join(", "))
+        }
+        MetadataValue::Quantitative { value, unit } => {
+            format!("{} {}", value, unit)
+        }
+        MetadataValue::Json(json) => {
+            serde_json::to_string(json).unwrap_or_else(|_| "{}".to_string())
+        }
+    }
+}
+
+fn parse_filter(filter_str: &str) -> Result<MetadataFilter> {
+    let parts: Vec<&str> = filter_str.splitn(2, ':').collect();
+    if parts.len() != 2 {
+        anyhow::bail!("Invalid filter format. Expected field:operator=value");
+    }
+
+    let field = parts[0].to_string();
+    let operation = parts[1];
+
+    let op_parts: Vec<&str> = operation.splitn(2, '=').collect();
+    if op_parts.len() != 2 {
+        anyhow::bail!("Invalid filter format. Expected field:operator=value");
+    }
+
+    let operator = op_parts[0];
+    let value = op_parts[1];
+
+    match operator {
+        "eq" => Ok(MetadataFilter::TextEq(field, value.to_string())),
+        "contains" => Ok(MetadataFilter::TextContains(field, value.to_string())),
+        "gt" => {
+            if let Ok(num) = value.parse::<i64>() {
+                Ok(MetadataFilter::IntegerGt(field, num))
+            } else if let Ok(num) = value.parse::<f64>() {
+                Ok(MetadataFilter::FloatGt(field, num))
+            } else {
+                anyhow::bail!("Invalid numeric value for gt: {}", value)
+            }
+        }
+        "lt" => {
+            if let Ok(num) = value.parse::<i64>() {
+                Ok(MetadataFilter::IntegerLt(field, num))
+            } else if let Ok(num) = value.parse::<f64>() {
+                Ok(MetadataFilter::FloatLt(field, num))
+            } else {
+                anyhow::bail!("Invalid numeric value for lt: {}", value)
+            }
+        }
+        "after" => Ok(MetadataFilter::DateTimeAfter(field, value.to_string())),
+        "before" => Ok(MetadataFilter::DateTimeBefore(field, value.to_string())),
+        "has" => Ok(MetadataFilter::TagsContain(field, value.to_string())),
+        "exists" => Ok(MetadataFilter::Exists(field)),
+        _ => anyhow::bail!(
+            "Unknown operator: {}. Supported: eq, contains, gt, lt, after, before, has, exists",
+            operator
+        ),
+    }
 }

@@ -106,7 +106,8 @@ impl Database {
                 d.llm_title,
                 d.llm_keywords,
                 d.llm_category,
-                d.llm_difficulty
+                d.llm_difficulty,
+                d.user_metadata
              FROM documents d
              JOIN content c ON c.hash = d.hash
              JOIN content_vectors cv ON cv.hash = d.hash
@@ -117,6 +118,10 @@ impl Database {
                 let keywords_json: Option<String> = row.get(11)?;
                 let keywords =
                     keywords_json.and_then(|json| serde_json::from_str::<Vec<String>>(&json).ok());
+
+                let user_metadata_json: Option<String> = row.get(14)?;
+                let user_metadata = user_metadata_json
+                    .and_then(|json| crate::db::UserMetadata::from_json(&json).ok());
 
                 Ok(SearchResult {
                     filepath: row.get(0)?,
@@ -141,6 +146,7 @@ impl Database {
                     llm_keywords: keywords,
                     llm_category: row.get(12)?,
                     llm_difficulty: row.get(13)?,
+                    user_metadata,
                 })
             },
         );

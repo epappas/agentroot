@@ -228,7 +228,7 @@ pub struct MetadataArgs {
 
 #[derive(Subcommand)]
 pub enum MetadataAction {
-    /// Regenerate metadata for a collection
+    /// Regenerate LLM metadata for a collection
     Refresh {
         /// Collection name (or --all for all collections)
         collection: Option<String>,
@@ -249,10 +249,78 @@ pub enum MetadataAction {
         #[arg(short, long)]
         model: Option<std::path::PathBuf>,
     },
-    /// Show metadata for a document
+    /// Show all metadata for a document (LLM + user)
     Show {
         /// Document ID (#abc123) or path
         docid: String,
+    },
+    /// Add user metadata to a document
+    Add {
+        /// Document ID (#abc123) or path
+        docid: String,
+
+        /// Text metadata (key=value)
+        #[arg(long)]
+        text: Vec<String>,
+
+        /// Integer metadata (key=value)
+        #[arg(long)]
+        integer: Vec<String>,
+
+        /// Float metadata (key=value)
+        #[arg(long)]
+        float: Vec<String>,
+
+        /// Boolean metadata (key=value)
+        #[arg(long)]
+        boolean: Vec<String>,
+
+        /// DateTime metadata (key=value)
+        #[arg(long)]
+        datetime: Vec<String>,
+
+        /// Tags metadata (key=value1,value2,...)
+        #[arg(long)]
+        tags: Vec<String>,
+
+        /// Enum metadata (key=value:option1,option2,...)
+        #[arg(long)]
+        enum_value: Vec<String>,
+
+        /// Qualitative metadata (key=value:scale1,scale2,...)
+        #[arg(long)]
+        qualitative: Vec<String>,
+
+        /// Quantitative metadata (key=value:unit)
+        #[arg(long)]
+        quantitative: Vec<String>,
+    },
+    /// Get user metadata for a document
+    Get {
+        /// Document ID (#abc123) or path
+        docid: String,
+    },
+    /// Remove specific user metadata fields from a document
+    Remove {
+        /// Document ID (#abc123) or path
+        docid: String,
+
+        /// Field names to remove
+        fields: Vec<String>,
+    },
+    /// Clear all user metadata from a document
+    Clear {
+        /// Document ID (#abc123) or path
+        docid: String,
+    },
+    /// Query documents by user metadata
+    Query {
+        /// Metadata filter expression (e.g., "tags:contains=rust" or "score:gt=10")
+        filter: String,
+
+        /// Maximum number of results
+        #[arg(short, long, default_value = "20")]
+        limit: usize,
     },
 }
 

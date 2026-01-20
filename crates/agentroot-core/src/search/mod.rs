@@ -40,6 +40,8 @@ impl Default for SearchOptions {
     }
 }
 
+use crate::db::UserMetadata;
+
 /// Search result
 #[derive(Debug, Clone)]
 pub struct SearchResult {
@@ -61,6 +63,7 @@ pub struct SearchResult {
     pub llm_keywords: Option<Vec<String>>,
     pub llm_category: Option<String>,
     pub llm_difficulty: Option<String>,
+    pub user_metadata: Option<UserMetadata>,
 }
 
 /// Source of search result
