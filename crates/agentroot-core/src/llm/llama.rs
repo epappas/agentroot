@@ -115,6 +115,19 @@ impl LlamaEmbedder {
             return Ok(vec![0.0; self.dimensions]);
         }
 
+        // Truncate to context size if needed (embeddings models typically have 2048 ctx)
+        let max_tokens = 2048;
+        let tokens = if tokens.len() > max_tokens {
+            tracing::warn!(
+                "Text has {} tokens, truncating to {}",
+                tokens.len(),
+                max_tokens
+            );
+            &tokens[..max_tokens]
+        } else {
+            &tokens[..]
+        };
+
         // Create batch
         let mut batch = LlamaBatch::new(tokens.len(), 1);
 

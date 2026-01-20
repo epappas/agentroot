@@ -57,17 +57,21 @@ pub async fn embed_documents(
     force: bool,
     progress: Option<Box<dyn Fn(EmbedProgress) + Send + Sync>>,
 ) -> Result<EmbedStats> {
+    tracing::debug!("Getting documents for embedding (force={})", force);
     let docs = if force {
         db.get_all_content_with_paths()?
     } else {
         db.get_content_needing_embedding_with_paths()?
     };
 
+    tracing::debug!("Found {} documents to embed", docs.len());
+
     if docs.is_empty() {
         return Ok(EmbedStats::default());
     }
 
     let dimensions = embedder.dimensions();
+    tracing::debug!("Ensuring vec table with {} dimensions", dimensions);
     db.ensure_vec_table(dimensions)?;
 
     // Check model compatibility once upfront
@@ -80,17 +84,29 @@ pub async fn embed_documents(
         ..Default::default()
     };
 
+    tracing::debug!("Creating semantic chunker");
     let chunker = SemanticChunker::new();
 
     for (doc_idx, (hash, content, path)) in docs.iter().enumerate() {
+        tracing::debug!(
+            "Processing doc {}/{}: hash={}, path={:?}",
+            doc_idx + 1,
+            total_docs,
+            hash,
+            path
+        );
+
         let title = db.get_document_title_by_hash(hash)?;
+        tracing::debug!("Title: {:?}", title);
 
         // Use semantic chunking if we have a file path
+        tracing::debug!("Starting chunking for {} bytes of content", content.len());
         let semantic_chunks = if let Some(p) = path {
             chunker.chunk(content, Path::new(p))?
         } else {
             fallback_to_semantic_chunks(content)
         };
+        tracing::debug!("Got {} chunks", semantic_chunks.len());
 
         stats.total_chunks += semantic_chunks.len();
 
@@ -140,9 +156,12 @@ pub async fn embed_documents(
         }
 
         // Batch embed new chunks
+        tracing::debug!("Need to compute {} new chunks", to_compute.len());
         for batch in to_compute.chunks(BATCH_SIZE) {
             let texts: Vec<String> = batch.iter().map(|c| c.text.clone()).collect();
+            tracing::debug!("Embedding batch of {} texts", texts.len());
             let embeddings = embedder.embed_batch(&texts).await?;
+            tracing::debug!("Got {} embeddings back", embeddings.len());
 
             for (chunk, embedding) in batch.iter().zip(embeddings.iter()) {
                 db.insert_chunk_embedding(

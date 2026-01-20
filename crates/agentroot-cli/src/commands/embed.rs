@@ -2,46 +2,23 @@
 
 use crate::app::EmbedArgs;
 use agentroot_core::index::{embed_documents, EmbedProgress};
-use agentroot_core::{Database, Embedder, LlamaEmbedder, DEFAULT_EMBED_MODEL};
+use agentroot_core::{CandleEmbedder, Database, Embedder, DEFAULT_CANDLE_MODEL};
 use anyhow::Result;
 
 pub async fn run(args: EmbedArgs, db: &Database) -> Result<()> {
     // Run migration to ensure schema is up to date
     db.migrate()?;
 
-    // Determine model path
-    let model_path = if let Some(path) = args.model {
-        path
+    // Use Candle-based embedder
+    println!("Loading embedding model...");
+    let embedder = if let Some(model_name) = args.model.as_ref().and_then(|p| p.to_str()) {
+        // Try loading from custom model name/path
+        CandleEmbedder::from_hf(model_name)?
     } else {
-        let model_dir = dirs::data_dir()
-            .unwrap_or_else(|| std::path::PathBuf::from("."))
-            .join("agentroot")
-            .join("models");
-        model_dir.join(DEFAULT_EMBED_MODEL)
+        // Use default (downloads from HuggingFace if needed)
+        CandleEmbedder::from_default()?
     };
 
-    if !model_path.exists() {
-        eprintln!(
-            "Error: Embedding model not found at {}",
-            model_path.display()
-        );
-        eprintln!();
-        eprintln!("To use vector embeddings, download an embedding model:");
-        eprintln!("  1. Create the models directory:");
-        eprintln!("     mkdir -p ~/.local/share/agentroot/models");
-        eprintln!();
-        eprintln!("  2. Download a GGUF embedding model, e.g.:");
-        eprintln!("     - nomic-embed-text-v1.5.Q4_K_M.gguf");
-        eprintln!("     - bge-small-en-v1.5.Q4_K_M.gguf");
-        eprintln!();
-        eprintln!("  3. Place it in ~/.local/share/agentroot/models/");
-        eprintln!();
-        eprintln!("Or specify a model path with: agentroot embed --model /path/to/model.gguf");
-        return Err(anyhow::anyhow!("Model not found"));
-    }
-
-    println!("Loading embedding model: {}", model_path.display());
-    let embedder = LlamaEmbedder::new(&model_path)?;
     println!(
         "Model loaded: {} ({} dimensions)",
         embedder.model_name(),
@@ -49,6 +26,8 @@ pub async fn run(args: EmbedArgs, db: &Database) -> Result<()> {
     );
 
     let model_name = embedder.model_name().to_string();
+
+    println!("Starting embedding pipeline...");
 
     // Run embedding pipeline
     let stats = embed_documents(
