@@ -40,8 +40,20 @@ pub async fn smart_search(
                 // Vector search requires embedder
                 match LlamaEmbedder::from_default() {
                     Ok(embedder) => {
-                        db.search_vec(&parsed.search_terms, &embedder, options)
-                            .await?
+                        // Try vector search, fall back to BM25 if it fails (e.g., no embeddings yet)
+                        match db
+                            .search_vec(&parsed.search_terms, &embedder, options)
+                            .await
+                        {
+                            Ok(results) => results,
+                            Err(e) => {
+                                tracing::warn!(
+                                    "Vector search failed ({}), falling back to BM25",
+                                    e
+                                );
+                                db.search_fts(&parsed.search_terms, options)?
+                            }
+                        }
                     }
                     Err(_) => {
                         tracing::warn!("Embedder not available, falling back to BM25");
@@ -53,8 +65,26 @@ pub async fn smart_search(
                 // Hybrid search requires embedder
                 match LlamaEmbedder::from_default() {
                     Ok(embedder) => {
-                        hybrid_search(db, &parsed.search_terms, options, &embedder, None, None)
-                            .await?
+                        // Try hybrid search, fall back to BM25 if it fails (e.g., no embeddings yet)
+                        match hybrid_search(
+                            db,
+                            &parsed.search_terms,
+                            options,
+                            &embedder,
+                            None,
+                            None,
+                        )
+                        .await
+                        {
+                            Ok(results) => results,
+                            Err(e) => {
+                                tracing::warn!(
+                                    "Hybrid search failed ({}), falling back to BM25",
+                                    e
+                                );
+                                db.search_fts(&parsed.search_terms, options)?
+                            }
+                        }
                     }
                     Err(_) => {
                         tracing::warn!("Embedder not available, falling back to BM25");
