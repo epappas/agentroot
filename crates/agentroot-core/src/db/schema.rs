@@ -9,7 +9,7 @@ pub struct Database {
     pub(crate) conn: Connection,
 }
 
-const SCHEMA_VERSION: i32 = 5;
+const SCHEMA_VERSION: i32 = 6;
 
 const CREATE_TABLES: &str = r#"
 -- Content storage (content-addressable by SHA-256 hash)
@@ -55,6 +55,8 @@ CREATE VIRTUAL TABLE IF NOT EXISTS documents_fts USING fts5(
     llm_keywords,
     llm_intent,
     llm_concepts,
+    user_metadata,
+    modified_at,
     tokenize='porter unicode61'
 );
 
@@ -132,7 +134,7 @@ CREATE TRIGGER IF NOT EXISTS documents_ai
 AFTER INSERT ON documents
 WHEN new.active = 1
 BEGIN
-    INSERT INTO documents_fts(rowid, filepath, title, body, llm_summary, llm_title, llm_keywords, llm_intent, llm_concepts)
+    INSERT INTO documents_fts(rowid, filepath, title, body, llm_summary, llm_title, llm_keywords, llm_intent, llm_concepts, user_metadata, modified_at)
     SELECT
         new.id,
         new.collection || '/' || new.path,
@@ -142,7 +144,9 @@ BEGIN
         new.llm_title,
         new.llm_keywords,
         new.llm_intent,
-        new.llm_concepts;
+        new.llm_concepts,
+        new.user_metadata,
+        new.modified_at;
 END;
 
 -- Sync FTS on update: handle activation/deactivation/content change
@@ -150,7 +154,7 @@ CREATE TRIGGER IF NOT EXISTS documents_au
 AFTER UPDATE ON documents
 BEGIN
     DELETE FROM documents_fts WHERE rowid = old.id;
-    INSERT INTO documents_fts(rowid, filepath, title, body, llm_summary, llm_title, llm_keywords, llm_intent, llm_concepts)
+    INSERT INTO documents_fts(rowid, filepath, title, body, llm_summary, llm_title, llm_keywords, llm_intent, llm_concepts, user_metadata, modified_at)
     SELECT
         new.id,
         new.collection || '/' || new.path,
@@ -160,7 +164,9 @@ BEGIN
         new.llm_title,
         new.llm_keywords,
         new.llm_intent,
-        new.llm_concepts
+        new.llm_concepts,
+        new.user_metadata,
+        new.modified_at
     WHERE new.active = 1;
 END;
 
@@ -250,6 +256,10 @@ impl Database {
 
         if current < 5 {
             self.migrate_to_v5()?;
+        }
+
+        if current < 6 {
+            self.migrate_to_v6()?;
         }
 
         Ok(())
@@ -552,6 +562,123 @@ impl Database {
 
         Ok(())
     }
+
+    fn migrate_to_v6(&self) -> Result<()> {
+        // Rebuild FTS index to include user_metadata and modified_at
+        // This makes user metadata and timestamps full-text searchable
+
+        // Drop and recreate FTS table with new columns
+        self.conn
+            .execute("DROP TABLE IF EXISTS documents_fts", [])?;
+
+        self.conn.execute(
+            "CREATE VIRTUAL TABLE documents_fts USING fts5(
+                filepath,
+                title,
+                body,
+                llm_summary,
+                llm_title,
+                llm_keywords,
+                llm_intent,
+                llm_concepts,
+                user_metadata,
+                modified_at,
+                tokenize='porter unicode61'
+            )",
+            [],
+        )?;
+
+        // Rebuild FTS data from existing documents
+        self.conn.execute(
+            "INSERT INTO documents_fts(rowid, filepath, title, body, llm_summary, llm_title, llm_keywords, llm_intent, llm_concepts, user_metadata, modified_at)
+             SELECT
+                d.id,
+                d.collection || '/' || d.path,
+                d.title,
+                c.doc,
+                d.llm_summary,
+                d.llm_title,
+                d.llm_keywords,
+                d.llm_intent,
+                d.llm_concepts,
+                d.user_metadata,
+                d.modified_at
+             FROM documents d
+             JOIN content c ON c.hash = d.hash
+             WHERE d.active = 1",
+            [],
+        )?;
+
+        // Recreate triggers with user_metadata and modified_at support
+        self.conn
+            .execute("DROP TRIGGER IF EXISTS documents_ai", [])?;
+        self.conn
+            .execute("DROP TRIGGER IF EXISTS documents_au", [])?;
+        self.conn
+            .execute("DROP TRIGGER IF EXISTS documents_ad", [])?;
+
+        self.conn.execute(
+            "CREATE TRIGGER documents_ai
+             AFTER INSERT ON documents
+             WHEN new.active = 1
+             BEGIN
+                 INSERT INTO documents_fts(rowid, filepath, title, body, llm_summary, llm_title, llm_keywords, llm_intent, llm_concepts, user_metadata, modified_at)
+                 SELECT
+                     new.id,
+                     new.collection || '/' || new.path,
+                     new.title,
+                     (SELECT doc FROM content WHERE hash = new.hash),
+                     new.llm_summary,
+                     new.llm_title,
+                     new.llm_keywords,
+                     new.llm_intent,
+                     new.llm_concepts,
+                     new.user_metadata,
+                     new.modified_at;
+             END",
+            [],
+        )?;
+
+        self.conn.execute(
+            "CREATE TRIGGER documents_au
+             AFTER UPDATE ON documents
+             BEGIN
+                 DELETE FROM documents_fts WHERE rowid = old.id;
+                 INSERT INTO documents_fts(rowid, filepath, title, body, llm_summary, llm_title, llm_keywords, llm_intent, llm_concepts, user_metadata, modified_at)
+                 SELECT
+                     new.id,
+                     new.collection || '/' || new.path,
+                     new.title,
+                     (SELECT doc FROM content WHERE hash = new.hash),
+                     new.llm_summary,
+                     new.llm_title,
+                     new.llm_keywords,
+                     new.llm_intent,
+                     new.llm_concepts,
+                     new.user_metadata,
+                     new.modified_at
+                 WHERE new.active = 1;
+             END",
+            [],
+        )?;
+
+        self.conn.execute(
+            "CREATE TRIGGER documents_ad
+             AFTER DELETE ON documents
+             BEGIN
+                 DELETE FROM documents_fts WHERE rowid = old.id;
+             END",
+            [],
+        )?;
+
+        // Update schema version
+        self.conn.execute(
+            "INSERT OR REPLACE INTO schema_version (version) VALUES (?1)",
+            params![6],
+        )?;
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -598,7 +725,7 @@ mod tests {
 
         db.initialize().unwrap();
 
-        assert_eq!(db.schema_version().unwrap(), Some(5));
+        assert_eq!(db.schema_version().unwrap(), Some(6));
 
         let has_provider_type: bool = db.conn.query_row(
             "SELECT COUNT(*) > 0 FROM pragma_table_info('collections') WHERE name = 'provider_type'",
@@ -675,7 +802,7 @@ mod tests {
 
         db.initialize().unwrap();
 
-        assert_eq!(db.schema_version().unwrap(), Some(5));
+        assert_eq!(db.schema_version().unwrap(), Some(6));
 
         let metadata_columns = vec![
             "llm_summary",
@@ -766,7 +893,7 @@ mod tests {
 
         db.initialize().unwrap();
 
-        assert_eq!(db.schema_version().unwrap(), Some(5));
+        assert_eq!(db.schema_version().unwrap(), Some(6));
 
         let has_user_metadata: bool = db
             .conn
