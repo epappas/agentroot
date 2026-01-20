@@ -342,7 +342,7 @@ pub async fn handle_search(db: &Database, args: Value) -> Result<ToolResult> {
                 "score": (r.score * 100.0).round() / 100.0
             });
 
-            // Include metadata if available
+            // Include LLM metadata if available
             if let Some(summary) = &r.llm_summary {
                 result_json["summary"] = Value::String(summary.clone());
             }
@@ -354,6 +354,15 @@ pub async fn handle_search(db: &Database, args: Value) -> Result<ToolResult> {
             }
             if let Some(keywords) = &r.llm_keywords {
                 result_json["keywords"] = serde_json::to_value(keywords).unwrap();
+            }
+
+            // Include user metadata if available
+            if let Some(user_meta) = &r.user_metadata {
+                if let Ok(json_str) = user_meta.to_json() {
+                    if let Ok(parsed) = serde_json::from_str::<Value>(&json_str) {
+                        result_json["userMetadata"] = parsed;
+                    }
+                }
             }
 
             result_json
@@ -455,7 +464,7 @@ pub async fn handle_vsearch(db: &Database, args: Value) -> Result<ToolResult> {
                 "score": (r.score * 100.0).round() / 100.0
             });
 
-            // Include metadata if available
+            // Include LLM metadata if available
             if let Some(summary) = &r.llm_summary {
                 result_json["summary"] = Value::String(summary.clone());
             }
@@ -467,6 +476,15 @@ pub async fn handle_vsearch(db: &Database, args: Value) -> Result<ToolResult> {
             }
             if let Some(keywords) = &r.llm_keywords {
                 result_json["keywords"] = serde_json::to_value(keywords).unwrap();
+            }
+
+            // Include user metadata if available
+            if let Some(user_meta) = &r.user_metadata {
+                if let Ok(json_str) = user_meta.to_json() {
+                    if let Ok(parsed) = serde_json::from_str::<Value>(&json_str) {
+                        result_json["userMetadata"] = parsed;
+                    }
+                }
             }
 
             result_json
@@ -564,7 +582,7 @@ pub async fn handle_query(db: &Database, args: Value) -> Result<ToolResult> {
                 "score": (r.score * 100.0).round() / 100.0
             });
 
-            // Include metadata if available
+            // Include LLM metadata if available
             if let Some(summary) = &r.llm_summary {
                 result_json["summary"] = Value::String(summary.clone());
             }
@@ -576,6 +594,15 @@ pub async fn handle_query(db: &Database, args: Value) -> Result<ToolResult> {
             }
             if let Some(keywords) = &r.llm_keywords {
                 result_json["keywords"] = serde_json::to_value(keywords).unwrap();
+            }
+
+            // Include user metadata if available
+            if let Some(user_meta) = &r.user_metadata {
+                if let Ok(json_str) = user_meta.to_json() {
+                    if let Ok(parsed) = serde_json::from_str::<Value>(&json_str) {
+                        result_json["userMetadata"] = parsed;
+                    }
+                }
             }
 
             result_json
