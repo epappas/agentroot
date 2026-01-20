@@ -23,7 +23,8 @@ pub use error::{AgentRootError, Error, Result};
 pub use index::{chunk_semantic, ChunkType, SemanticChunk, SemanticChunker};
 pub use llm::{
     DocumentMetadata, Embedder, LlamaEmbedder, LlamaMetadataGenerator, MetadataContext,
-    MetadataGenerator, DEFAULT_EMBED_MODEL, DEFAULT_METADATA_MODEL,
+    MetadataFilterHint, MetadataGenerator, ParsedQuery, QueryParser, SearchType, TemporalFilter,
+    DEFAULT_EMBED_MODEL, DEFAULT_METADATA_MODEL,
 };
 pub use providers::{
     CSVProvider, FileProvider, GitHubProvider, JSONProvider, PDFProvider, ProviderConfig,
