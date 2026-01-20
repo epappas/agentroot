@@ -68,6 +68,7 @@ pub enum SearchType {
 
 /// Query parser using local LLM
 pub struct QueryParser {
+    #[allow(dead_code)]
     model_path: PathBuf,
 }
 

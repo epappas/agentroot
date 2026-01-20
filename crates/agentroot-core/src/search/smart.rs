@@ -105,8 +105,8 @@ fn apply_temporal_filter(
         if let Ok(modified_at) = DateTime::parse_from_rfc3339(&result.modified_at) {
             let modified_utc = modified_at.with_timezone(&Utc);
 
-            let after_start = start_time.map_or(true, |start| modified_utc >= start);
-            let before_end = end_time.map_or(true, |end| modified_utc <= end);
+            let after_start = start_time.is_none_or(|start| modified_utc >= start);
+            let before_end = end_time.is_none_or(|end| modified_utc <= end);
 
             after_start && before_end
         } else {

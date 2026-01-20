@@ -343,11 +343,11 @@ impl MetadataFilter {
                 matches!(metadata.get(key), Some(MetadataValue::Tags(tags)) if tags.contains(tag))
             }
             MetadataFilter::TagsContainAll(key, search_tags) => {
-                matches!(metadata.get(key), Some(MetadataValue::Tags(tags)) 
+                matches!(metadata.get(key), Some(MetadataValue::Tags(tags))
                     if search_tags.iter().all(|t| tags.contains(t)))
             }
             MetadataFilter::TagsContainAny(key, search_tags) => {
-                matches!(metadata.get(key), Some(MetadataValue::Tags(tags)) 
+                matches!(metadata.get(key), Some(MetadataValue::Tags(tags))
                     if search_tags.iter().any(|t| tags.contains(t)))
             }
             MetadataFilter::EnumEq(key, value) => {
