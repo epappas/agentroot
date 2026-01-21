@@ -126,8 +126,21 @@ Hybrid combines both for best results
 - **AST-Aware Chunking**: Intelligently chunks code by semantic units (functions, classes, methods) using tree-sitter
 - **Smart Cache Invalidation**: Content-addressable chunk hashing achieves 80-90% cache hit rates on re-indexing
 - **Multi-Language Support**: Rust, Python, JavaScript/TypeScript, Go (with fallback for other languages)
-- **Local-First or Cloud**: Run entirely offline with local models, or connect to vLLM endpoints for GPU acceleration
+- **Local-First or Cloud**: Run entirely offline with local models, or connect to [Basilica](https://basilica.ai) for GPU-accelerated inference
 - **MCP Server**: Model Context Protocol support for AI assistant integration
+
+### Powered by Basilica
+
+AgentRoot integrates seamlessly with **[Basilica](https://basilica.ai)** ([GitHub](https://github.com/one-covenant/basilica)) - a trustless GPU compute marketplace built on Bittensor's decentralized infrastructure. Basilica provides production-grade AI inference with verified hardware, automatic failover, and 99.9% uptime. When connected to Basilica, AgentRoot achieves 10x faster embeddings and GPU-accelerated search while maintaining privacy through decentralized compute verification.
+
+**Why Basilica works so well with AgentRoot:**
+- ⚡ OpenAI-compatible API - zero custom integration needed
+- 🔒 Trustless verification - binary validation of GPU compute
+- 🚀 10x faster - GPU acceleration with intelligent load balancing
+- 💾 Smart caching - AgentRoot + Basilica layers for 7,000x speedup
+- 🌐 Decentralized - 100+ verified GPU nodes on Bittensor Subnet 39
+
+See [VLLM_SETUP.md](VLLM_SETUP.md) for Basilica integration details.
 
 ## Installation
 
@@ -172,13 +185,14 @@ agentroot vsearch "error handling"     # Vector similarity search
 agentroot query "error handling"       # Hybrid search (best quality)
 ```
 
-### Option 2: AI-Powered with vLLM (Recommended)
+### Option 2: AI-Powered with Basilica (Recommended)
 
 ```bash
-# 1. Configure vLLM endpoints (see VLLM_SETUP.md for details)
-export AGENTROOT_LLM_URL="https://your-llm-endpoint.com"
+# 1. Get Basilica endpoints at https://basilica.ai (instant access)
+# 2. Configure endpoints (see VLLM_SETUP.md for details)
+export AGENTROOT_LLM_URL="https://your-id.deployments.basilica.ai"
 export AGENTROOT_LLM_MODEL="Qwen/Qwen2.5-7B-Instruct"
-export AGENTROOT_EMBEDDING_URL="https://your-embed-endpoint.com"
+export AGENTROOT_EMBEDDING_URL="https://your-id.deployments.basilica.ai"
 export AGENTROOT_EMBEDDING_MODEL="intfloat/e5-mistral-7b-instruct"
 export AGENTROOT_EMBEDDING_DIMS="4096"
 
@@ -196,13 +210,15 @@ agentroot metadata refresh myproject
 agentroot smart "show me files dealing with error handling"
 ```
 
-**Benefits of vLLM Integration:**
-- 🚀 10x faster with GPU acceleration
+**Benefits of Basilica Integration:**
+- 🚀 10x faster with GPU acceleration (decentralized Bittensor network)
 - 🧠 Smarter queries with LLM understanding
 - 📊 Rich metadata generation
 - ⚡ 7,000x speedup for cached queries
+- 🔒 Trustless compute with hardware verification
+- 🌐 99.9% uptime with automatic failover
 
-See [Complete Workflow Guide](WORKFLOW.md) for step-by-step tutorials and [VLLM_SETUP.md](VLLM_SETUP.md) for vLLM configuration.
+See [Complete Workflow Guide](WORKFLOW.md) for step-by-step tutorials and [VLLM_SETUP.md](VLLM_SETUP.md) for Basilica setup.
 
 ## Multi-Source Indexing
 
@@ -504,37 +520,40 @@ export AGENTROOT_MODELS=/custom/path/models
 export RUST_LOG=debug
 ```
 
-#### vLLM Integration (Optional)
+#### Basilica Integration (Optional - Recommended)
 
-For AI-powered features with external LLM endpoints:
+For AI-powered features with Basilica's decentralized GPU network:
 
 ```bash
+# Get endpoints at https://basilica.ai (instant access)
+
 # LLM Service (for query parsing, metadata generation)
-export AGENTROOT_LLM_URL="https://your-llm-endpoint.com"
+export AGENTROOT_LLM_URL="https://your-id.deployments.basilica.ai"
 export AGENTROOT_LLM_MODEL="Qwen/Qwen2.5-7B-Instruct"
 
 # Embedding Service (for vector search)
-export AGENTROOT_EMBEDDING_URL="https://your-embed-endpoint.com"
+export AGENTROOT_EMBEDDING_URL="https://your-id.deployments.basilica.ai"
 export AGENTROOT_EMBEDDING_MODEL="intfloat/e5-mistral-7b-instruct"
 export AGENTROOT_EMBEDDING_DIMS="4096"
 
-# Optional: Timeouts and API keys
+# Optional: Timeouts
 export AGENTROOT_LLM_TIMEOUT="120"
-export AGENTROOT_LLM_API_KEY="your-api-key"  # if required
 ```
 
-**When to use vLLM:**
+**When to use Basilica:**
 - ✅ Want GPU-accelerated search (10x faster)
 - ✅ Need AI metadata generation
 - ✅ Natural language queries
+- ✅ Trust decentralized compute verification
 - ✅ Team with shared infrastructure
+- ✅ Production reliability (99.9% uptime)
 
 **When to use Local:**
-- ✅ Privacy-critical code
+- ✅ Privacy-critical code (air-gapped)
 - ✅ Offline development
 - ✅ No external dependencies
 
-See [VLLM_SETUP.md](VLLM_SETUP.md) for complete configuration guide.
+See [VLLM_SETUP.md](VLLM_SETUP.md) for complete Basilica integration guide.
 
 ## Development
 

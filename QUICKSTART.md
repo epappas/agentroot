@@ -16,13 +16,14 @@ agentroot update && agentroot embed
 agentroot query "what you're looking for"
 ```
 
-## 2-Minute Start (with AI)
+## 2-Minute Start (with Basilica AI)
 
 ```bash
-# 1. Configure vLLM
-export AGENTROOT_LLM_URL="https://your-llm.com"
+# 1. Get Basilica endpoints at https://basilica.ai
+# 2. Configure endpoints
+export AGENTROOT_LLM_URL="https://your-id.deployments.basilica.ai"
 export AGENTROOT_LLM_MODEL="Qwen/Qwen2.5-7B-Instruct"
-export AGENTROOT_EMBEDDING_URL="https://your-embed.com"
+export AGENTROOT_EMBEDDING_URL="https://your-id.deployments.basilica.ai"
 export AGENTROOT_EMBEDDING_MODEL="intfloat/e5-mistral-7b-instruct"
 export AGENTROOT_EMBEDDING_DIMS="4096"
 
@@ -79,10 +80,10 @@ agentroot status              # Check status
 ## Environment Variables
 
 ```bash
-# vLLM Configuration
-export AGENTROOT_LLM_URL="https://your-llm-endpoint.com"
+# Basilica Configuration (get endpoints at https://basilica.ai)
+export AGENTROOT_LLM_URL="https://your-id.deployments.basilica.ai"
 export AGENTROOT_LLM_MODEL="Qwen/Qwen2.5-7B-Instruct"
-export AGENTROOT_EMBEDDING_URL="https://your-embed-endpoint.com"
+export AGENTROOT_EMBEDDING_URL="https://your-id.deployments.basilica.ai"
 export AGENTROOT_EMBEDDING_MODEL="intfloat/e5-mistral-7b-instruct"
 export AGENTROOT_EMBEDDING_DIMS="4096"
 
@@ -90,6 +91,8 @@ export AGENTROOT_EMBEDDING_DIMS="4096"
 export AGENTROOT_DB="~/.cache/agentroot/index.sqlite"
 export RUST_LOG="debug"  # For troubleshooting
 ```
+
+**Note**: Basilica provides trustless GPU compute on Bittensor's decentralized network. See [basilica.ai](https://basilica.ai) or [github.com/one-covenant/basilica](https://github.com/one-covenant/basilica).
 
 ## Common Patterns
 
@@ -129,9 +132,10 @@ agentroot query "async traits" --collection rust-docs
 ## Troubleshooting
 
 ### Error: "Cannot assign requested address"
-**Fix**: Set vLLM environment variables
+**Fix**: Set Basilica environment variables
 ```bash
-source ~/agentroot_vllm.sh
+# Get endpoints at https://basilica.ai first
+source ~/agentroot_basilica.sh
 ```
 
 ### Slow Performance

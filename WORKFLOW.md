@@ -285,31 +285,35 @@ agentroot ls rust-docs
 
 ---
 
-## AI-Powered Workflow: vLLM Integration
+## AI-Powered Workflow: Basilica Integration
 
-This workflow demonstrates the most advanced features using external vLLM endpoints.
+This workflow demonstrates the most advanced features using Basilica's decentralized GPU network.
 
-### Scenario: AI-Enhanced Search with Remote LLM
+### Scenario: AI-Enhanced Search with Basilica
 
-**Goal**: Use powerful external LLMs for query understanding, metadata generation, and intelligent reranking.
+**Goal**: Use Basilica's verified GPU compute for query understanding, metadata generation, and intelligent reranking.
 
 #### Prerequisites
 
-You need:
-1. A vLLM endpoint for LLM (e.g., Qwen 7B)
-2. A vLLM endpoint for embeddings (e.g., e5-mistral-7b)
+You need Basilica endpoints:
+1. **Option A (Recommended)**: Sign up at [basilica.ai](https://basilica.ai) for instant access
+2. **Option B**: Self-host using [github.com/one-covenant/basilica](https://github.com/one-covenant/basilica)
+3. **Option C**: Contact team@basilica.ai for enterprise deployments
 
-#### Step 1: Configure vLLM Endpoints
+Basilica provides both LLM and embedding endpoints on its decentralized Bittensor network.
+
+#### Step 1: Configure Basilica Endpoints
 
 **Option A: Add to shell profile (permanent)**
 
 Add to `~/.bashrc` or `~/.zshrc`:
 
 ```bash
-# vLLM Configuration
-export AGENTROOT_LLM_URL="https://your-llm-endpoint.basilica.ai"
+# Basilica Configuration
+# Get your deployment IDs from https://basilica.ai/deployments
+export AGENTROOT_LLM_URL="https://your-id.deployments.basilica.ai"
 export AGENTROOT_LLM_MODEL="Qwen/Qwen2.5-7B-Instruct"
-export AGENTROOT_EMBEDDING_URL="https://your-embed-endpoint.basilica.ai"
+export AGENTROOT_EMBEDDING_URL="https://your-id.deployments.basilica.ai"
 export AGENTROOT_EMBEDDING_MODEL="intfloat/e5-mistral-7b-instruct"
 export AGENTROOT_EMBEDDING_DIMS="4096"
 ```
@@ -323,25 +327,25 @@ source ~/.bashrc
 
 ```bash
 # Create setup script
-cat > ~/agentroot_vllm.sh << 'EOF'
+cat > ~/agentroot_basilica.sh << 'EOF'
 #!/bin/bash
-export AGENTROOT_LLM_URL="https://your-llm-endpoint.basilica.ai"
+export AGENTROOT_LLM_URL="https://your-id.deployments.basilica.ai"
 export AGENTROOT_LLM_MODEL="Qwen/Qwen2.5-7B-Instruct"
-export AGENTROOT_EMBEDDING_URL="https://your-embed-endpoint.basilica.ai"
+export AGENTROOT_EMBEDDING_URL="https://your-id.deployments.basilica.ai"
 export AGENTROOT_EMBEDDING_MODEL="intfloat/e5-mistral-7b-instruct"
 export AGENTROOT_EMBEDDING_DIMS="4096"
-echo "✅ vLLM endpoints configured"
+echo "✅ Basilica endpoints configured"
 EOF
 
-chmod +x ~/agentroot_vllm.sh
+chmod +x ~/agentroot_basilica.sh
 
 # Source before using agentroot
-source ~/agentroot_vllm.sh
+source ~/agentroot_basilica.sh
 ```
 
-See [VLLM_SETUP.md](VLLM_SETUP.md) for detailed configuration options.
+See [VLLM_SETUP.md](VLLM_SETUP.md) for detailed Basilica configuration options.
 
-#### Step 2: Index with Remote Embeddings
+#### Step 2: Index with Basilica Embeddings
 
 ```bash
 # Add collection
@@ -350,15 +354,17 @@ agentroot collection add ~/projects/my-app --name my-app
 # Index files
 agentroot update
 
-# Generate embeddings using vLLM (automatically uses remote endpoint)
+# Generate embeddings using Basilica (automatically uses remote endpoint)
 agentroot embed
 ```
 
-**Benefits of Remote Embeddings:**
-- Faster (GPU acceleration)
-- Higher quality (larger models)
-- Consistent (same model for team)
-- No local model download
+**Benefits of Basilica Embeddings:**
+- **10x Faster**: GPU acceleration on verified hardware
+- **Higher Quality**: Larger models (e5-mistral-7b, 4096 dims)
+- **Consistent**: Same model across your team
+- **No Downloads**: No local model files needed
+- **Trustless**: Binary verification of GPU compute
+- **Reliable**: Automatic failover across 100+ nodes
 
 #### Step 3: Generate AI Metadata
 
