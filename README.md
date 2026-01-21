@@ -560,6 +560,7 @@ See [AGENTS.md](AGENTS.md) for developer guidelines.
 ## Documentation
 
 **Start Here:**
+- ⚡ [**Quick Reference**](QUICKSTART.md) - Fast 30-second start (NEW!)
 - 🚀 [**End-to-End Workflow**](WORKFLOW.md) - Complete real-world tutorial (NEW!)
 - [Getting Started](docs/getting-started.md) - Step-by-step tutorial for new users
 - [vLLM Setup Guide](VLLM_SETUP.md) - Configure AI-powered features (NEW!)
