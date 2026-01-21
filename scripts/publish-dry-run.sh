@@ -80,6 +80,11 @@ cd - > /dev/null
 
 echo ""
 echo -e "${YELLOW}Step 3: Running dry-run publish for all packages...${NC}"
+echo ""
+echo -e "${YELLOW}Note: agentroot-mcp and agentroot-cli dry-runs may fail${NC}"
+echo -e "${YELLOW}because agentroot-core isn't published to crates.io yet.${NC}"
+echo -e "${YELLOW}This is expected and will work when actually publishing.${NC}"
+echo ""
 
 # Dry run for each package
 dry_run_package() {
