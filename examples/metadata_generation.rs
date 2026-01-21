@@ -1,15 +1,26 @@
 //! Metadata Generation Example
 //!
-//! Demonstrates LLM-powered automatic metadata generation for documents.
+//! Demonstrates LLM-powered automatic metadata generation for documents
+//! using an external HTTP service.
+//!
+//! Requirements:
+//! - Set AGENTROOT_LLM_URL environment variable
+//! - Set AGENTROOT_LLM_MODEL environment variable
+//! - Running external LLM service (vLLM, Basilica, OpenAI, etc.)
+//!
+//! Example:
+//!   export AGENTROOT_LLM_URL="https://your-service.com/v1"
+//!   export AGENTROOT_LLM_MODEL="Qwen/Qwen2.5-7B-Instruct"
+//!   cargo run --example metadata_generation
 //!
 //! This example shows:
 //! 1. Creating a test document
-//! 2. Generating metadata using LlamaMetadataGenerator (with fallback)
+//! 2. Generating metadata using HttpMetadataGenerator
 //! 3. Storing metadata in the database
 //! 4. Searching with metadata-enhanced results
 
 use agentroot_core::{
-    Database, DocumentMetadata, LlamaMetadataGenerator, MetadataContext, MetadataGenerator,
+    Database, DocumentMetadata, HttpMetadataGenerator, MetadataContext, MetadataGenerator,
 };
 use anyhow::Result;
 
@@ -84,7 +95,7 @@ rustc main.rs
     // Step 3: Try to generate metadata with LLM (will fall back to heuristics if model unavailable)
     println!("🤖 Attempting metadata generation...");
 
-    let generator_result = LlamaMetadataGenerator::from_default();
+    let generator_result = HttpMetadataGenerator::from_env();
 
     let metadata: DocumentMetadata = match generator_result {
         Ok(generator) => {

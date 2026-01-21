@@ -1,9 +1,19 @@
 //! Interactive demo showing automated metadata generation
 //!
 //! This example creates sample documents and shows the metadata
-//! that gets automatically generated (with and without LLM).
+//! that gets automatically generated using an external LLM service.
+//!
+//! Requirements:
+//! - Set AGENTROOT_LLM_URL environment variable
+//! - Set AGENTROOT_LLM_MODEL environment variable
+//! - Running external LLM service (vLLM, Basilica, OpenAI, etc.)
+//!
+//! Example:
+//!   export AGENTROOT_LLM_URL="https://your-service.com/v1"
+//!   export AGENTROOT_LLM_MODEL="Qwen/Qwen2.5-7B-Instruct"
+//!   cargo run --example metadata_demo
 
-use agentroot_core::{Database, LlamaMetadataGenerator, MetadataGenerator, SearchOptions};
+use agentroot_core::{Database, HttpMetadataGenerator, MetadataGenerator, SearchOptions};
 use std::fs;
 use tempfile::TempDir;
 
@@ -191,7 +201,7 @@ See examples/ directory for complete configuration samples.
     println!("🔧 Indexing documents with metadata generation...\n");
 
     // Try to load LLM model
-    let generator_result = LlamaMetadataGenerator::from_default();
+    let generator_result = HttpMetadataGenerator::from_env();
     let generator = generator_result.ok();
 
     if generator.is_some() {

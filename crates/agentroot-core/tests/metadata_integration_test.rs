@@ -1,9 +1,16 @@
 //! Integration test for LLM-generated metadata system
 //!
 //! This test creates a real collection with markdown and code files,
-//! generates metadata using the LLM, and verifies search quality.
+//! generates metadata using an external LLM service, and verifies search quality.
+//!
+//! These tests are marked as #[ignore] because they require:
+//! - AGENTROOT_LLM_URL environment variable
+//! - AGENTROOT_LLM_MODEL environment variable
+//! - Running external LLM service (vLLM, Basilica, OpenAI, etc.)
+//!
+//! Run manually with: cargo test --test metadata_integration_test -- --ignored
 
-use agentroot_core::{Database, LlamaMetadataGenerator, MetadataGenerator, SearchOptions};
+use agentroot_core::{Database, HttpMetadataGenerator, MetadataGenerator, SearchOptions};
 use std::fs;
 use std::path::PathBuf;
 use tempfile::TempDir;
@@ -249,7 +256,7 @@ async fn test_end_to_end_metadata_generation() {
     .unwrap();
 
     // Create metadata generator (will use fallback if LLM not available)
-    let generator_result = LlamaMetadataGenerator::from_default();
+    let generator_result = HttpMetadataGenerator::from_env();
     let generator = generator_result.ok();
 
     // Index with metadata
@@ -363,7 +370,7 @@ async fn test_metadata_improves_search_quality() {
     )
     .unwrap();
 
-    let generator_result = LlamaMetadataGenerator::from_default();
+    let generator_result = HttpMetadataGenerator::from_env();
     let generator = generator_result.ok();
 
     if let Some(ref gen) = generator {
@@ -457,7 +464,7 @@ async fn test_metadata_fields_in_search_results() {
     )
     .unwrap();
 
-    let generator_result = LlamaMetadataGenerator::from_default();
+    let generator_result = HttpMetadataGenerator::from_env();
     let generator = generator_result.ok();
 
     if let Some(ref gen) = generator {
@@ -551,7 +558,7 @@ async fn test_metadata_cache_functionality() {
     .unwrap();
 
     // Index first time
-    let generator_result = LlamaMetadataGenerator::from_default();
+    let generator_result = HttpMetadataGenerator::from_env();
     let generator = generator_result.ok();
 
     if let Some(ref gen) = generator {
