@@ -61,7 +61,7 @@ impl PDFProvider {
         Path::new(filename)
             .file_stem()
             .and_then(|s| s.to_str())
-            .map(|s| s.replace('_', " ").replace('-', " "))
+            .map(|s| s.replace(['_', '-'], " "))
             .unwrap_or_else(|| "Untitled PDF".to_string())
     }
 

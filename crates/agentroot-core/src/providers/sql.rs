@@ -106,11 +106,11 @@ impl SQLProvider {
 
                 Ok((id, title, content))
             })
-            .map_err(|e| AgentRootError::Database(e))?;
+            .map_err(AgentRootError::Database)?;
 
         let mut items = Vec::new();
         for row_result in rows {
-            let (id, title, content) = row_result.map_err(|e| AgentRootError::Database(e))?;
+            let (id, title, content) = row_result.map_err(AgentRootError::Database)?;
 
             if content.trim().is_empty() {
                 continue;

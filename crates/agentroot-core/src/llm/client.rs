@@ -76,7 +76,7 @@ impl VLLMClient {
         let http_client = reqwest::Client::builder()
             .timeout(Duration::from_secs(config.timeout_secs))
             .build()
-            .map_err(|e| AgentRootError::Http(e))?;
+            .map_err(AgentRootError::Http)?;
 
         // Use configured dimensions or default to 384
         let embedding_dimensions = config.embedding_dimensions.unwrap_or(384);

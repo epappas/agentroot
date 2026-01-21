@@ -84,11 +84,7 @@ impl CSVProvider {
                     .join("\n")
             };
 
-            let title = if has_headers && !headers.is_empty() {
-                format!("{} - Row {}", filename, row_num + 1)
-            } else {
-                format!("{} - Row {}", filename, row_num + 1)
-            };
+            let title = format!("{} - Row {}", filename, row_num + 1);
 
             let uri = format!("csv://{}/row_{}", path.display(), row_num + 1);
             let hash = hash_content(&row_content);

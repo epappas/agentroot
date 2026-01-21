@@ -108,14 +108,11 @@ JSON:"#,
                 break;
             }
 
-            // Always include headers
-            if line.starts_with('#') {
-                result.push_str(line);
-                result.push('\n');
-                current_len += line.len() + 1;
-            }
-            // Include first 2 lines after each header
-            else if !line.is_empty() && current_len + line.len() < max_chars {
+            // Always include headers or non-empty lines that fit
+            let should_include =
+                line.starts_with('#') || (!line.is_empty() && current_len + line.len() < max_chars);
+
+            if should_include {
                 result.push_str(line);
                 result.push('\n');
                 current_len += line.len() + 1;

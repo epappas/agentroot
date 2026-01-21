@@ -376,10 +376,9 @@ Respond ONLY with valid JSON in this exact format (no markdown, no code blocks):
     /// Improve title from file path
     fn improve_title_from_path(&self, path: &str) -> String {
         path.split('/')
-            .last()
+            .next_back()
             .unwrap_or(path)
-            .replace('-', " ")
-            .replace('_', " ")
+            .replace(['-', '_'], " ")
             .split_whitespace()
             .map(|word| {
                 let mut chars = word.chars();
@@ -463,7 +462,7 @@ Respond ONLY with valid JSON in this exact format (no markdown, no code blocks):
         for word in content.split_whitespace().take(200) {
             let clean: String = word.chars().filter(|c| c.is_alphanumeric()).collect();
 
-            if clean.len() > 2 && clean.chars().next().map_or(false, |c| c.is_uppercase()) {
+            if clean.len() > 2 && clean.chars().next().is_some_and(|c| c.is_uppercase()) {
                 concepts.insert(clean);
             }
         }

@@ -29,6 +29,7 @@ impl LLMCache {
     }
 
     /// Create cache with custom TTL
+    #[allow(dead_code)]
     pub fn with_ttl(ttl: Duration) -> Self {
         Self {
             entries: Arc::new(RwLock::new(HashMap::new())),
@@ -66,6 +67,7 @@ impl LLMCache {
     }
 
     /// Clear expired entries
+    #[allow(dead_code)]
     pub fn cleanup(&self) {
         if let Ok(mut entries) = self.entries.write() {
             let now = SystemTime::now();
@@ -74,6 +76,7 @@ impl LLMCache {
     }
 
     /// Clear all entries
+    #[allow(dead_code)]
     pub fn clear(&self) {
         if let Ok(mut entries) = self.entries.write() {
             entries.clear();
@@ -81,6 +84,7 @@ impl LLMCache {
     }
 
     /// Get cache statistics
+    #[allow(dead_code)]
     pub fn stats(&self) -> CacheStats {
         if let Ok(entries) = self.entries.read() {
             let now = SystemTime::now();

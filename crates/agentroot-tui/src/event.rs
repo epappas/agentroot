@@ -43,6 +43,13 @@ fn handle_search_input(app: &mut App, key: KeyEvent) {
             app.cycle_search_mode();
             app.search();
         }
+        KeyCode::Char('c') => {
+            app.load_collections();
+            app.mode = AppMode::Collections;
+        }
+        KeyCode::Char('?') => {
+            app.mode = AppMode::Help;
+        }
         KeyCode::Char(c) => {
             app.query.insert(app.cursor_pos, c);
             app.cursor_pos += 1;
@@ -64,13 +71,6 @@ fn handle_search_input(app: &mut App, key: KeyEvent) {
             if app.cursor_pos < app.query.len() {
                 app.cursor_pos += 1;
             }
-        }
-        KeyCode::Char('c') => {
-            app.load_collections();
-            app.mode = AppMode::Collections;
-        }
-        KeyCode::Char('?') => {
-            app.mode = AppMode::Help;
         }
         _ => {}
     }
