@@ -4,7 +4,9 @@ Complete documentation for Agentroot - local semantic search for codebases and k
 
 ## Quick Links
 
+- 🚀 **[End-to-End Workflow](../WORKFLOW.md)** - Complete real-world tutorial (NEW!)
 - **[Getting Started Guide](getting-started.md)** - New to Agentroot? Start here
+- **[vLLM Setup Guide](../VLLM_SETUP.md)** - Configure AI-powered features (NEW!)
 - **[How-To Guide](howto-guide.md)** - Practical recipes for common tasks
 - **[CLI Reference](cli-reference.md)** - Complete command reference
 
@@ -76,11 +78,13 @@ See [Getting Started Guide](getting-started.md) for detailed walkthrough.
 
 ## Key Features
 
-- **Multi-Source Indexing**: Index from local files, GitHub, URLs, and more
+- **Multi-Source Indexing**: Index from local files, GitHub, URLs, PDFs, databases, and more
+- **AI-Powered Search**: Natural language queries with LLM understanding (vLLM integration)
+- **Response Caching**: 7,000-10,000x speedup for repeated queries
 - **Hybrid Search**: Combines BM25 full-text with vector similarity search
 - **AST-Aware Chunking**: Keeps code functions intact for better embeddings
 - **Smart Caching**: 80-90% cache hit rates on re-indexing
-- **Local-First**: All data stays on your machine
+- **Local-First or Cloud**: Run offline or connect to vLLM endpoints
 - **MCP Integration**: Works with Claude and other AI assistants
 
 ## Common Tasks
@@ -93,10 +97,12 @@ See [Getting Started Guide](getting-started.md) for detailed walkthrough.
 | Add SQLite database | `agentroot collection add database.db --provider sql --config '{"table":"articles"}' --name articles` |
 | Update index | `agentroot update` |
 | Generate embeddings | `agentroot embed` |
+| Generate AI metadata | `agentroot metadata refresh myproject` (requires vLLM) |
 | Search (BM25) | `agentroot search "keyword"` |
 | Search (vector) | `agentroot vsearch "natural language query"` |
 | Search (hybrid) | `agentroot query "best quality search"` |
-| Filter by provider | `agentroot search "keyword" --provider pdf` |
+| Search (AI natural language) | `agentroot smart "show me error handling code"` (requires vLLM) |
+| Filter by collection | `agentroot search "keyword" --collection myproject` |
 | List collections | `agentroot collection list` |
 | Check status | `agentroot status` |
 

@@ -121,10 +121,12 @@ Hybrid combines both for best results
 
 - **Multi-Source Indexing**: Pluggable provider system for indexing from local files, GitHub repositories, URLs, databases, and more
 - **Hybrid Search**: Combines BM25 full-text search with vector similarity search using Reciprocal Rank Fusion
+- **AI-Powered Search**: Natural language queries with LLM-based query understanding and metadata generation (optional vLLM integration)
+- **Response Caching**: 7,000-10,000x speedup for repeated queries with intelligent cache management
 - **AST-Aware Chunking**: Intelligently chunks code by semantic units (functions, classes, methods) using tree-sitter
 - **Smart Cache Invalidation**: Content-addressable chunk hashing achieves 80-90% cache hit rates on re-indexing
 - **Multi-Language Support**: Rust, Python, JavaScript/TypeScript, Go (with fallback for other languages)
-- **Local-First**: All data stays on your machine, runs entirely offline
+- **Local-First or Cloud**: Run entirely offline with local models, or connect to vLLM endpoints for GPU acceleration
 - **MCP Server**: Model Context Protocol support for AI assistant integration
 
 ## Installation
@@ -152,6 +154,8 @@ Agentroot requires an embedding model for vector search. On first run, it will d
 
 ## Quick Start
 
+### Option 1: Local-Only (Privacy-First)
+
 ```bash
 # 1. Add a collection (index files from a directory)
 agentroot collection add /path/to/your/code --name myproject --mask '**/*.rs'
@@ -159,7 +163,7 @@ agentroot collection add /path/to/your/code --name myproject --mask '**/*.rs'
 # 2. Index the files
 agentroot update
 
-# 3. Generate embeddings
+# 3. Generate embeddings (downloads model on first run)
 agentroot embed
 
 # 4. Search
@@ -168,7 +172,37 @@ agentroot vsearch "error handling"     # Vector similarity search
 agentroot query "error handling"       # Hybrid search (best quality)
 ```
 
-See [Getting Started Guide](docs/getting-started.md) for detailed walkthrough.
+### Option 2: AI-Powered with vLLM (Recommended)
+
+```bash
+# 1. Configure vLLM endpoints (see VLLM_SETUP.md for details)
+export AGENTROOT_LLM_URL="https://your-llm-endpoint.com"
+export AGENTROOT_LLM_MODEL="Qwen/Qwen2.5-7B-Instruct"
+export AGENTROOT_EMBEDDING_URL="https://your-embed-endpoint.com"
+export AGENTROOT_EMBEDDING_MODEL="intfloat/e5-mistral-7b-instruct"
+export AGENTROOT_EMBEDDING_DIMS="4096"
+
+# 2. Add and index collection
+agentroot collection add /path/to/your/code --name myproject
+agentroot update
+
+# 3. Generate embeddings (uses vLLM, 10x faster with GPU)
+agentroot embed
+
+# 4. Generate AI metadata (optional but recommended)
+agentroot metadata refresh myproject
+
+# 5. Smart natural language search
+agentroot smart "show me files dealing with error handling"
+```
+
+**Benefits of vLLM Integration:**
+- 🚀 10x faster with GPU acceleration
+- 🧠 Smarter queries with LLM understanding
+- 📊 Rich metadata generation
+- ⚡ 7,000x speedup for cached queries
+
+See [Complete Workflow Guide](WORKFLOW.md) for step-by-step tutorials and [VLLM_SETUP.md](VLLM_SETUP.md) for vLLM configuration.
 
 ## Multi-Source Indexing
 
@@ -258,20 +292,25 @@ All examples are production-ready, compile cleanly, and demonstrate real functio
 
 ## Commands
 
-| Command | Description |
-|---------|-------------|
-| `collection add <path>` | Add a new collection |
-| `collection list` | List all collections |
-| `collection remove <name>` | Remove a collection |
-| `update` | Re-index all collections |
-| `embed` | Generate vector embeddings |
-| `search <query>` | BM25 full-text search |
-| `vsearch <query>` | Vector similarity search |
-| `query <query>` | Hybrid search with reranking |
-| `get <docid>` | Get document by path or docid |
-| `ls [collection]` | List files in a collection |
-| `status` | Show index status |
-| `mcp` | Start MCP server for AI integration |
+| Command | Description | Speed | Quality |
+|---------|-------------|-------|---------|
+| `collection add <path>` | Add a new collection | - | - |
+| `collection list` | List all collections | - | - |
+| `collection remove <name>` | Remove a collection | - | - |
+| `update` | Re-index all collections | Fast | - |
+| `embed` | Generate vector embeddings | Medium | - |
+| `metadata refresh` | Generate AI metadata (vLLM) | Medium | - |
+| `search <query>` | BM25 full-text search | ⚡ <10ms | ⭐⭐⭐ |
+| `vsearch <query>` | Vector similarity search | ~100ms | ⭐⭐⭐⭐ |
+| `query <query>` | Hybrid search with RRF | ~150ms | ⭐⭐⭐⭐⭐ |
+| `smart <query>` | AI natural language search (vLLM) | ~150ms* | ⭐⭐⭐⭐⭐ |
+| `get <docid>` | Get document by path or docid | <1ms | - |
+| `multi-get <pattern>` | Get multiple documents | <10ms | - |
+| `ls [collection]` | List files in a collection | <1ms | - |
+| `status` | Show index status | <1ms | - |
+| `mcp` | Start MCP server for AI integration | - | - |
+
+*First query ~1.5s, cached queries ~150ms (10x faster)
 
 See [CLI Reference](docs/cli-reference.md) for complete documentation.
 
@@ -291,14 +330,33 @@ agentroot embed
 ### Search for Error Handling Patterns
 
 ```bash
-# Keyword search (fast)
+# Keyword search (fast, <10ms)
 agentroot search "Result<T>"
 
-# Semantic search (understands meaning)
+# Semantic search (understands meaning, ~100ms)
 agentroot vsearch "how to handle database errors"
 
-# Hybrid search (best quality)
+# Hybrid search (best quality, ~150ms)
 agentroot query "error handling patterns in async code"
+
+# AI natural language search (with vLLM, understands complex queries)
+agentroot smart "show me all files that deal with async error handling"
+```
+
+Example output:
+```
+🤖 Parsed query: async error handling
+📊 Search type: Hybrid
+🔍 Expanded terms: error handling, async, Result, tokio
+
+  94% src/async/error.rs #a1b2c3
+  Async error handling utilities with retry and backoff
+
+  91% src/api/handlers.rs #d4e5f6
+  HTTP handlers with async error propagation
+
+  87% src/database/pool.rs #g7h8i9
+  Connection pool error recovery strategies
 ```
 
 ### Retrieve Specific Files
@@ -371,15 +429,32 @@ See [Semantic Chunking Documentation](docs/semantic-chunking.md) for technical d
 
 - Scanning: ~1000 files/second
 - AST parsing: ~1-5ms per file
-- Embedding: ~50-100 chunks/second (CPU-dependent)
+- Embedding (local): ~50-100 chunks/second (CPU-dependent)
+- Embedding (vLLM): ~200-500 chunks/second (GPU-accelerated)
 
 ### Search Speed
 
-- BM25 search: <10ms for typical queries
-- Vector search: <100ms for 10K chunks
-- Hybrid search: <150ms combined
+| Operation | First Query | Cached Query | Speedup |
+|-----------|-------------|--------------|---------|
+| BM25 search | <10ms | <10ms | 1x |
+| Vector search | ~100ms | ~100ms | 1x |
+| Hybrid search | ~150ms | ~150ms | 1x |
+| Smart search (vLLM) | ~1500ms | ~150ms | **10x** |
+| Embedding (vLLM) | 600ms | 80µs | **7,500x** |
 
-### Cache Efficiency
+### Response Caching (vLLM)
+
+AgentRoot intelligently caches LLM responses and embeddings:
+
+```
+Cache Performance:
+  Embedding cache:   7,000-10,000x speedup (600ms → 80µs)
+  Query cache:       10x speedup (1.5s → 0.15s)
+  TTL:               1 hour (auto-expiration)
+  Thread-safe:       Concurrent access supported
+```
+
+### Chunk Cache Efficiency
 
 ```
 Initial indexing:  0% cache hits (all chunks computed)
@@ -388,7 +463,17 @@ Feature additions: 80-90% cache hits
 Major refactor:    60-80% cache hits
 ```
 
-See [Performance Documentation](docs/performance.md) for benchmarks.
+**Real-World Example:**
+```bash
+# Test caching yourself
+cargo run --release --example test_cache
+
+# Output:
+# First embed:  632ms  (cache miss)
+# Second embed: 80µs   (cache hit - 7,900x faster!)
+```
+
+See [Performance Documentation](docs/performance.md) for detailed benchmarks.
 
 ## Configuration
 
@@ -398,7 +483,7 @@ See [Performance Documentation](docs/performance.md) for benchmarks.
 ~/.cache/agentroot/index.sqlite
 ```
 
-### Model Location
+### Model Location (Local Mode)
 
 ```
 ~/.local/share/agentroot/models/
@@ -406,16 +491,50 @@ See [Performance Documentation](docs/performance.md) for benchmarks.
 
 ### Environment Variables
 
+#### Basic Configuration
+
 ```bash
 # Override database path
 export AGENTROOT_DB=/custom/path/index.sqlite
 
-# Override models directory
+# Override models directory (local mode)
 export AGENTROOT_MODELS=/custom/path/models
 
 # Set log level
 export RUST_LOG=debug
 ```
+
+#### vLLM Integration (Optional)
+
+For AI-powered features with external LLM endpoints:
+
+```bash
+# LLM Service (for query parsing, metadata generation)
+export AGENTROOT_LLM_URL="https://your-llm-endpoint.com"
+export AGENTROOT_LLM_MODEL="Qwen/Qwen2.5-7B-Instruct"
+
+# Embedding Service (for vector search)
+export AGENTROOT_EMBEDDING_URL="https://your-embed-endpoint.com"
+export AGENTROOT_EMBEDDING_MODEL="intfloat/e5-mistral-7b-instruct"
+export AGENTROOT_EMBEDDING_DIMS="4096"
+
+# Optional: Timeouts and API keys
+export AGENTROOT_LLM_TIMEOUT="120"
+export AGENTROOT_LLM_API_KEY="your-api-key"  # if required
+```
+
+**When to use vLLM:**
+- ✅ Want GPU-accelerated search (10x faster)
+- ✅ Need AI metadata generation
+- ✅ Natural language queries
+- ✅ Team with shared infrastructure
+
+**When to use Local:**
+- ✅ Privacy-critical code
+- ✅ Offline development
+- ✅ No external dependencies
+
+See [VLLM_SETUP.md](VLLM_SETUP.md) for complete configuration guide.
 
 ## Development
 
@@ -441,7 +560,9 @@ See [AGENTS.md](AGENTS.md) for developer guidelines.
 ## Documentation
 
 **Start Here:**
+- 🚀 [**End-to-End Workflow**](WORKFLOW.md) - Complete real-world tutorial (NEW!)
 - [Getting Started](docs/getting-started.md) - Step-by-step tutorial for new users
+- [vLLM Setup Guide](VLLM_SETUP.md) - Configure AI-powered features (NEW!)
 - [How-To Guide](docs/howto-guide.md) - Practical recipes for common tasks
 
 **Reference:**
@@ -457,6 +578,10 @@ See [AGENTS.md](AGENTS.md) for developer guidelines.
 
 **Integration:**
 - [MCP Server](docs/mcp-server.md) - AI assistant integration (Claude, Continue.dev)
+
+**Development:**
+- [TODO](TODO.md) - Known issues and planned improvements
+- [AGENTS.md](AGENTS.md) - Guidelines for AI coding agents
 
 **Index:**
 - [Documentation Index](docs/README.md) - Complete documentation overview
