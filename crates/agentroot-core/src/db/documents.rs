@@ -21,6 +21,7 @@ pub struct Document {
     pub active: bool,
     pub source_type: String,
     pub source_uri: Option<String>,
+    pub llm_model: Option<String>,
 }
 
 /// Document result with content
@@ -144,7 +145,7 @@ impl Database {
     /// Find active document by collection and path
     pub fn find_active_document(&self, collection: &str, path: &str) -> Result<Option<Document>> {
         let result = self.conn.query_row(
-            "SELECT id, collection, path, title, hash, created_at, modified_at, active, source_type, source_uri
+            "SELECT id, collection, path, title, hash, created_at, modified_at, active, source_type, source_uri, llm_model
              FROM documents WHERE collection = ?1 AND path = ?2 AND active = 1",
             params![collection, path],
             |row| {
@@ -159,6 +160,7 @@ impl Database {
                     active: row.get::<_, i32>(7)? == 1,
                     source_type: row.get(8)?,
                     source_uri: row.get(9)?,
+                    llm_model: row.get(10)?,
                 })
             },
         );

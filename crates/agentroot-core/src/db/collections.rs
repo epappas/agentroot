@@ -404,8 +404,13 @@ impl Database {
             let now = Utc::now().to_rfc3339();
 
             if let Some(existing) = self.find_active_document(name, &item.uri)? {
-                if existing.hash != item.hash {
-                    self.insert_content(&item.hash, &item.content)?;
+                let content_changed = existing.hash != item.hash;
+                let needs_metadata = existing.llm_model.is_none() && generator.is_some();
+
+                if content_changed || needs_metadata {
+                    if content_changed {
+                        self.insert_content(&item.hash, &item.content)?;
+                    }
 
                     let metadata_opt = if generator.is_some() {
                         let context = self.build_metadata_context(&item, name, &coll);
