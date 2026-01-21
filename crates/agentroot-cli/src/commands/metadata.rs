@@ -2,9 +2,11 @@
 
 use crate::app::{MetadataAction, MetadataArgs, OutputFormat};
 use agentroot_core::{
-    Database, LlamaMetadataGenerator, MetadataBuilder, MetadataFilter, MetadataValue,
+    Database, HttpMetadataGenerator, LlamaMetadataGenerator, MetadataBuilder, MetadataFilter,
+    MetadataGenerator, MetadataValue,
 };
 use anyhow::Result;
+use std::sync::Arc;
 
 pub async fn run(args: MetadataArgs, db: &Database, format: OutputFormat) -> Result<()> {
     match args.action {
@@ -55,10 +57,18 @@ async fn run_refresh(
     force: bool,
     model_path: Option<std::path::PathBuf>,
 ) -> Result<()> {
-    let generator = if let Some(path) = model_path {
-        LlamaMetadataGenerator::new(path)?
+    // Try HTTP metadata generator first, then fallback to local
+    let generator: Arc<dyn MetadataGenerator> = if let Some(path) = model_path {
+        // User specified a local model path
+        Arc::new(LlamaMetadataGenerator::new(path)?)
+    } else if let Ok(http_gen) = HttpMetadataGenerator::from_env() {
+        // Use HTTP service if configured
+        println!("Using HTTP metadata service: {}", http_gen.model_name());
+        Arc::new(http_gen)
     } else {
-        LlamaMetadataGenerator::from_default()?
+        // Fallback to local model
+        println!("Using local metadata model");
+        Arc::new(LlamaMetadataGenerator::from_default()?)
     };
 
     if let Some(doc_path) = doc {
@@ -70,7 +80,7 @@ async fn run_refresh(
         for coll in collections {
             println!("Processing collection: {}", coll.name);
             let updated = db
-                .reindex_collection_with_metadata(&coll.name, Some(&generator))
+                .reindex_collection_with_metadata(&coll.name, Some(generator.as_ref()))
                 .await?;
             println!("  Updated {} documents", updated);
         }
@@ -78,7 +88,7 @@ async fn run_refresh(
     } else if let Some(coll_name) = collection {
         println!("Refreshing metadata for collection: {}", coll_name);
         let updated = db
-            .reindex_collection_with_metadata(&coll_name, Some(&generator))
+            .reindex_collection_with_metadata(&coll_name, Some(generator.as_ref()))
             .await?;
         println!("Updated {} documents", updated);
     } else {

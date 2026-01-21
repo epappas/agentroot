@@ -2,7 +2,10 @@
 
 use crate::app::{OutputFormat, SearchArgs};
 use crate::output::{format_search_results, FormatOptions};
-use agentroot_core::{smart_search, Database, LlamaEmbedder, SearchOptions, DEFAULT_EMBED_MODEL};
+use agentroot_core::{
+    smart_search, Database, Embedder, HttpEmbedder, LlamaEmbedder, SearchOptions,
+    DEFAULT_EMBED_MODEL,
+};
 use anyhow::Result;
 
 pub async fn run_bm25(args: SearchArgs, db: &Database, format: OutputFormat) -> Result<()> {
@@ -42,7 +45,7 @@ pub async fn run_vector(args: SearchArgs, db: &Database, format: OutputFormat) -
         }
     };
 
-    let results = db.search_vec(&query, &embedder, &options).await?;
+    let results = db.search_vec(&query, embedder.as_ref(), &options).await?;
 
     let format_opts = FormatOptions {
         full: args.full,
@@ -77,7 +80,7 @@ pub async fn run_hybrid(args: SearchArgs, db: &Database, format: OutputFormat) -
 
     // Run hybrid search (BM25 + Vector with RRF fusion)
     let bm25_results = db.search_fts(&query, &options)?;
-    let vec_results = db.search_vec(&query, &embedder, &options).await?;
+    let vec_results = db.search_vec(&query, embedder.as_ref(), &options).await?;
 
     // RRF fusion
     let results = agentroot_core::search::rrf_fusion(&bm25_results, &vec_results);
@@ -129,7 +132,13 @@ pub async fn run_smart(args: SearchArgs, db: &Database, format: OutputFormat) ->
     Ok(())
 }
 
-fn load_embedder() -> Result<LlamaEmbedder> {
+fn load_embedder() -> Result<Box<dyn Embedder>> {
+    // Try HTTP embedder first
+    if let Ok(http_embedder) = HttpEmbedder::from_env() {
+        return Ok(Box::new(http_embedder));
+    }
+
+    // Fallback to local model
     let model_dir = dirs::data_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
         .join("agentroot")
@@ -138,10 +147,10 @@ fn load_embedder() -> Result<LlamaEmbedder> {
 
     if !model_path.exists() {
         return Err(anyhow::anyhow!(
-            "Model not found at {}",
+            "No embedding service available. Configure AGENTROOT_EMBEDDING_URL or download a local model to {}",
             model_path.display()
         ));
     }
 
-    Ok(LlamaEmbedder::new(&model_path)?)
+    Ok(Box::new(LlamaEmbedder::new(&model_path)?))
 }

@@ -437,25 +437,26 @@ pub async fn handle_vsearch(db: &Database, args: Value) -> Result<ToolResult> {
         full_content: false,
     };
 
-    let embedder = match agentroot_core::LlamaEmbedder::from_default() {
-        Ok(e) => e,
-        Err(e) => {
-            return Ok(ToolResult {
+    // Try HTTP embedder first, fallback to local
+    let embedder: Box<dyn agentroot_core::Embedder> = if let Ok(http) =
+        agentroot_core::HttpEmbedder::from_env()
+    {
+        Box::new(http)
+    } else if let Ok(local) = agentroot_core::LlamaEmbedder::from_default() {
+        Box::new(local)
+    } else {
+        return Ok(ToolResult {
                 content: vec![Content::Text {
-                    text: format!(
-                        "Could not load embedding model: {}. \
-                         Download an embedding model to use vector search. \
-                         See: https://github.com/epappas/agentroot#embedding-models",
-                        e
-                    ),
+                    text: "Could not load embedding model. Configure HTTP service via AGENTROOT_EMBEDDING_URL \
+                          or download a local model. See: https://github.com/epappas/agentroot#embedding-models"
+                        .to_string(),
                 }],
                 structured_content: None,
                 is_error: Some(true),
             });
-        }
     };
 
-    let mut results = db.search_vec(query, &embedder, &options).await?;
+    let mut results = db.search_vec(query, embedder.as_ref(), &options).await?;
 
     // Apply metadata filters
     let category_filter = args.get("category").and_then(|v| v.as_str());
@@ -553,15 +554,19 @@ pub async fn handle_query(db: &Database, args: Value) -> Result<ToolResult> {
         full_content: false,
     };
 
-    let embedder = match agentroot_core::LlamaEmbedder::from_default() {
-        Ok(e) => e,
-        Err(_) => {
+    // Try HTTP embedder first, fallback to local, then BM25-only
+    let embedder: Box<dyn agentroot_core::Embedder> =
+        if let Ok(http) = agentroot_core::HttpEmbedder::from_env() {
+            Box::new(http)
+        } else if let Ok(local) = agentroot_core::LlamaEmbedder::from_default() {
+            Box::new(local)
+        } else {
+            // No embedder available, fall back to BM25-only search
             return handle_search(db, args).await;
-        }
-    };
+        };
 
     let bm25_results = db.search_fts(query, &options)?;
-    let vec_results = db.search_vec(query, &embedder, &options).await?;
+    let vec_results = db.search_vec(query, embedder.as_ref(), &options).await?;
 
     let fused_results = agentroot_core::search::rrf_fusion(&bm25_results, &vec_results);
 
