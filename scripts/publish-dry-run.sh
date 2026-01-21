@@ -1,7 +1,22 @@
 #!/bin/bash
 set -e
 
-VERSION=$1
+# Parse arguments
+PUBLISH_ALL=false
+VERSION=""
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --all)
+            PUBLISH_ALL=true
+            shift
+            ;;
+        *)
+            VERSION=$1
+            shift
+            ;;
+    esac
+done
 
 # Colors for output
 RED='\033[0;31m'
@@ -11,12 +26,22 @@ NC='\033[0m' # No Color
 
 if [ -z "$VERSION" ]; then
     echo -e "${RED}Error: Version required${NC}"
-    echo "Usage: ./scripts/publish-dry-run.sh <version>"
-    echo "Example: ./scripts/publish-dry-run.sh 0.1.0"
+    echo "Usage: ./scripts/publish-dry-run.sh [--all] <version>"
+    echo ""
+    echo "Options:"
+    echo "  --all    Test all packages (core, mcp, cli)"
+    echo ""
+    echo "Examples:"
+    echo "  ./scripts/publish-dry-run.sh 0.1.3              # Test only CLI package"
+    echo "  ./scripts/publish-dry-run.sh --all 0.1.3        # Test all packages"
     exit 1
 fi
 
-echo -e "${GREEN}DRY RUN: Testing publish for AgentRoot version $VERSION${NC}"
+if [ "$PUBLISH_ALL" = true ]; then
+    echo -e "${GREEN}DRY RUN: Testing ALL packages for version $VERSION${NC}"
+else
+    echo -e "${GREEN}DRY RUN: Testing agentroot CLI package for version $VERSION${NC}"
+fi
 echo -e "${YELLOW}(No actual publishing will occur)${NC}"
 echo ""
 
@@ -79,12 +104,15 @@ cargo package --list | tail -1
 cd - > /dev/null
 
 echo ""
-echo -e "${YELLOW}Step 3: Running dry-run publish for all packages...${NC}"
+echo -e "${YELLOW}Step 3: Running dry-run publish...${NC}"
 echo ""
-echo -e "${YELLOW}Note: agentroot-mcp and agentroot-cli dry-runs may fail${NC}"
-echo -e "${YELLOW}because agentroot-core isn't published to crates.io yet.${NC}"
-echo -e "${YELLOW}This is expected and will work when actually publishing.${NC}"
-echo ""
+
+if [ "$PUBLISH_ALL" = true ]; then
+    echo -e "${YELLOW}Note: agentroot-mcp and agentroot dry-runs may fail${NC}"
+    echo -e "${YELLOW}because agentroot-core isn't published to crates.io yet.${NC}"
+    echo -e "${YELLOW}This is expected and will work when actually publishing.${NC}"
+    echo ""
+fi
 
 # Dry run for each package
 dry_run_package() {
@@ -107,19 +135,34 @@ dry_run_package() {
     cd - > /dev/null
 }
 
-dry_run_package "agentroot-core" "crates/agentroot-core"
-dry_run_package "agentroot-mcp" "crates/agentroot-mcp"
-dry_run_package "agentroot-cli" "crates/agentroot-cli"
+if [ "$PUBLISH_ALL" = true ]; then
+    dry_run_package "agentroot-core" "crates/agentroot-core"
+    dry_run_package "agentroot-mcp" "crates/agentroot-mcp"
+    dry_run_package "agentroot" "crates/agentroot-cli"
+else
+    dry_run_package "agentroot" "crates/agentroot-cli"
+fi
 
 echo ""
 echo -e "${GREEN}═══════════════════════════════════════════${NC}"
 echo -e "${GREEN}✓ DRY RUN SUCCESSFUL${NC}"
 echo -e "${GREEN}═══════════════════════════════════════════${NC}"
 echo ""
-echo "All packages are ready to publish!"
-echo ""
-echo "To actually publish version $VERSION:"
-echo "  ./scripts/publish.sh $VERSION"
+if [ "$PUBLISH_ALL" = true ]; then
+    echo "All packages are ready to publish!"
+    echo ""
+    echo "To actually publish version $VERSION:"
+    echo "  ./scripts/publish.sh --all $VERSION"
+else
+    echo "The agentroot CLI package is ready to publish!"
+    echo ""
+    echo "To actually publish version $VERSION:"
+    echo "  ./scripts/publish.sh $VERSION"
+    echo ""
+    echo "To test/publish all packages:"
+    echo "  ./scripts/publish-dry-run.sh --all $VERSION"
+    echo "  ./scripts/publish.sh --all $VERSION"
+fi
 echo ""
 echo "Make sure you have:"
 echo "  1. Logged in to crates.io: cargo login <token>"

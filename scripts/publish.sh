@@ -1,7 +1,22 @@
 #!/bin/bash
 set -e
 
-VERSION=$1
+# Parse arguments
+PUBLISH_ALL=false
+VERSION=""
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --all)
+            PUBLISH_ALL=true
+            shift
+            ;;
+        *)
+            VERSION=$1
+            shift
+            ;;
+    esac
+done
 
 # Colors for output
 RED='\033[0;31m'
@@ -11,12 +26,23 @@ NC='\033[0m' # No Color
 
 if [ -z "$VERSION" ]; then
     echo -e "${RED}Error: Version required${NC}"
-    echo "Usage: ./scripts/publish.sh <version>"
-    echo "Example: ./scripts/publish.sh 0.1.0"
+    echo "Usage: ./scripts/publish.sh [--all] <version>"
+    echo ""
+    echo "Options:"
+    echo "  --all    Publish all packages (core, mcp, cli)"
+    echo ""
+    echo "Examples:"
+    echo "  ./scripts/publish.sh 0.1.3              # Publish only CLI package"
+    echo "  ./scripts/publish.sh --all 0.1.3        # Publish all packages"
     exit 1
 fi
 
-echo -e "${GREEN}Publishing AgentRoot version $VERSION${NC}"
+if [ "$PUBLISH_ALL" = true ]; then
+    echo -e "${GREEN}Publishing ALL AgentRoot packages version $VERSION${NC}"
+else
+    echo -e "${GREEN}Publishing agentroot CLI package version $VERSION${NC}"
+    echo -e "${YELLOW}(Use --all flag to publish all packages)${NC}"
+fi
 echo ""
 
 # Check if we're in the right directory
@@ -125,22 +151,31 @@ publish_package() {
     cd - > /dev/null
 }
 
-# Publish in order: core → mcp → cli
-publish_package "agentroot-core" "crates/agentroot-core"
-echo ""
-echo -e "${YELLOW}Waiting 120 seconds for crates.io to index agentroot-core...${NC}"
-sleep 120
-
-publish_package "agentroot-mcp" "crates/agentroot-mcp"
-echo ""
-echo -e "${YELLOW}Waiting 120 seconds for crates.io to index agentroot-mcp...${NC}"
-sleep 120
-
-publish_package "agentroot-cli" "crates/agentroot-cli"
-
-echo ""
-echo -e "${GREEN}✓ Successfully published all packages!${NC}"
-echo ""
+if [ "$PUBLISH_ALL" = true ]; then
+    # Publish in order: core → mcp → cli
+    publish_package "agentroot-core" "crates/agentroot-core"
+    echo ""
+    echo -e "${YELLOW}Waiting 120 seconds for crates.io to index agentroot-core...${NC}"
+    sleep 120
+    
+    publish_package "agentroot-mcp" "crates/agentroot-mcp"
+    echo ""
+    echo -e "${YELLOW}Waiting 120 seconds for crates.io to index agentroot-mcp...${NC}"
+    sleep 120
+    
+    publish_package "agentroot" "crates/agentroot-cli"
+    
+    echo ""
+    echo -e "${GREEN}✓ Successfully published all packages!${NC}"
+    echo ""
+else
+    # Publish only CLI package (what users install)
+    publish_package "agentroot" "crates/agentroot-cli"
+    
+    echo ""
+    echo -e "${GREEN}✓ Successfully published agentroot CLI package!${NC}"
+    echo ""
+fi
 
 echo -e "${YELLOW}Step 6: Creating git tag...${NC}"
 git tag "v$VERSION"
@@ -148,7 +183,11 @@ echo -e "  ${GREEN}✓${NC} Created tag v$VERSION"
 
 echo ""
 echo -e "${GREEN}═══════════════════════════════════════════${NC}"
-echo -e "${GREEN}✓ Published AgentRoot version $VERSION${NC}"
+if [ "$PUBLISH_ALL" = true ]; then
+    echo -e "${GREEN}✓ Published ALL packages version $VERSION${NC}"
+else
+    echo -e "${GREEN}✓ Published agentroot CLI version $VERSION${NC}"
+fi
 echo -e "${GREEN}═══════════════════════════════════════════${NC}"
 echo ""
 echo "Next steps:"
@@ -162,3 +201,8 @@ echo ""
 echo "  3. Check on crates.io (may take a few minutes):"
 echo "     https://crates.io/crates/agentroot"
 echo ""
+if [ "$PUBLISH_ALL" = false ]; then
+    echo "Note: Only the CLI package was published."
+    echo "To publish all packages next time, use: ./scripts/publish.sh --all <version>"
+    echo ""
+fi

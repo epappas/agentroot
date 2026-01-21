@@ -36,9 +36,23 @@ categories = ["command-line-utilities", "development-tools", "text-processing"]
 authors = ["Evangelos Pappas <epappas@evalonlabs.com>"]
 ```
 
-## Publishing Order
+## Publishing Methods
 
-⚠️ **Important**: Publish in dependency order (core → mcp → cli)
+### Quick Method: Use Automation Scripts (Recommended)
+
+```bash
+# For most releases (CLI changes only)
+./scripts/publish.sh 0.1.3
+
+# When core library or MCP server changed
+./scripts/publish.sh --all 0.1.3
+```
+
+See "Automation Scripts" section below for details.
+
+### Manual Method: Publishing Order
+
+⚠️ **Important**: If publishing manually, follow dependency order (core → mcp → cli)
 
 ### Step 1: Publish Core Library
 
@@ -194,59 +208,63 @@ Before publishing, ensure:
 - ✅ Git committed and tagged
 - ✅ CI passing (if applicable)
 
-## Automation Script
+## Automation Scripts
 
-Create `scripts/publish.sh`:
+AgentRoot includes two publishing scripts:
+
+### Quick Publishing (CLI Only)
+
+For most releases, you only need to publish the CLI package:
 
 ```bash
-#!/bin/bash
-set -e
+# Test first (dry run)
+./scripts/publish-dry-run.sh 0.1.3
 
-VERSION=$1
-
-if [ -z "$VERSION" ]; then
-    echo "Usage: ./scripts/publish.sh <version>"
-    exit 1
-fi
-
-echo "Publishing version $VERSION..."
-
-# Update version
-sed -i "s/^version = .*/version = \"$VERSION\"/" Cargo.toml
-
-# Run tests
-cargo test --all
-cargo clippy --all-targets --all-features
-cargo fmt --all --check
-
-# Commit version bump
-git add Cargo.toml
-git commit -m "chore: bump version to $VERSION"
-git tag "v$VERSION"
-
-# Publish packages
-echo "Publishing agentroot-core..."
-cd crates/agentroot-core
-cargo publish
-sleep 120
-
-echo "Publishing agentroot-mcp..."
-cd ../agentroot-mcp
-cargo publish
-sleep 120
-
-echo "Publishing agentroot-cli..."
-cd ../agentroot-cli
-cargo publish
-
-echo "✅ Published version $VERSION"
-echo "Don't forget to: git push github master --tags"
+# Publish CLI package only
+./scripts/publish.sh 0.1.3
 ```
 
-Usage:
+This is faster and sufficient when only the CLI code changed.
+
+### Full Publishing (All Packages)
+
+When core library or MCP server changed, publish all packages:
+
 ```bash
-chmod +x scripts/publish.sh
-./scripts/publish.sh 0.1.1
+# Test first (dry run)
+./scripts/publish-dry-run.sh --all 0.1.3
+
+# Publish all packages
+./scripts/publish.sh --all 0.1.3
+```
+
+This publishes in order: core → mcp → cli (with proper wait times).
+
+### Script Features
+
+Both scripts:
+- ✅ Run tests before publishing
+- ✅ Check code formatting
+- ✅ Update version in Cargo.toml
+- ✅ Commit version bump
+- ✅ Create git tag
+- ✅ Handle publishing with proper wait times
+- ✅ Provide clear success/error messages
+
+### Usage Examples
+
+```bash
+# Publish CLI only (most common)
+./scripts/publish.sh 0.1.3
+
+# Publish all packages (when core/mcp changed)
+./scripts/publish.sh --all 0.1.3
+
+# Test before publishing (CLI only)
+./scripts/publish-dry-run.sh 0.1.3
+
+# Test before publishing (all packages)
+./scripts/publish-dry-run.sh --all 0.1.3
 ```
 
 ## Package Visibility
