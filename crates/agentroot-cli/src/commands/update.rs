@@ -2,8 +2,9 @@
 
 use crate::app::UpdateArgs;
 use crate::progress::ProgressReporter;
-use agentroot_core::Database;
+use agentroot_core::{Database, HttpMetadataGenerator, MetadataGenerator};
 use anyhow::Result;
+use std::sync::Arc;
 
 pub async fn run(args: UpdateArgs, db: &Database, verbose: bool) -> Result<()> {
     let collections = db.list_collections()?;
@@ -12,6 +13,23 @@ pub async fn run(args: UpdateArgs, db: &Database, verbose: bool) -> Result<()> {
         println!("No collections to update");
         return Ok(());
     }
+
+    // Try to get HTTP metadata generator from environment
+    let metadata_generator: Option<Arc<dyn MetadataGenerator>> =
+        match HttpMetadataGenerator::from_env() {
+            Ok(gen) => {
+                if verbose {
+                    println!("Using HTTP metadata service: {}", gen.model_name());
+                }
+                Some(Arc::new(gen))
+            }
+            Err(_) => {
+                if verbose {
+                    println!("No metadata service configured (set AGENTROOT_LLM_URL to enable)");
+                }
+                None
+            }
+        };
 
     let total_docs_before: usize = collections.iter().map(|c| c.document_count).sum();
     let mut progress = ProgressReporter::new(collections.len()).with_percentage(true);
@@ -43,7 +61,14 @@ pub async fn run(args: UpdateArgs, db: &Database, verbose: bool) -> Result<()> {
             }
         }
 
-        match db.reindex_collection(&coll.name).await {
+        // Use reindex_collection_with_metadata to generate metadata if service is configured
+        match db
+            .reindex_collection_with_metadata(
+                &coll.name,
+                metadata_generator.as_ref().map(|g| g.as_ref()),
+            )
+            .await
+        {
             Ok(updated) => {
                 progress.increment();
                 if updated > 0 || verbose {
