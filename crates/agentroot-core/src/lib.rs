@@ -24,8 +24,8 @@ pub use index::{chunk_semantic, ChunkType, SemanticChunk, SemanticChunker};
 pub use llm::{
     ChatMessage, DocumentMetadata, Embedder, HttpEmbedder, HttpMetadataGenerator, HttpQueryParser,
     LLMClient, LlamaEmbedder, LlamaMetadataGenerator, MetadataContext, MetadataFilterHint,
-    MetadataGenerator, ParsedQuery, QueryParser, SearchType, TemporalFilter, VLLMClient,
-    DEFAULT_EMBED_MODEL, DEFAULT_METADATA_MODEL,
+    MetadataGenerator, MetricsSnapshot, ParsedQuery, QueryParser, SearchType, TemporalFilter,
+    VLLMClient, DEFAULT_EMBED_MODEL, DEFAULT_METADATA_MODEL,
 };
 pub use providers::{
     CSVProvider, FileProvider, GitHubProvider, JSONProvider, PDFProvider, ProviderConfig,

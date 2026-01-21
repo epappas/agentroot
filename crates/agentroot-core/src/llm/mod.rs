@@ -17,7 +17,7 @@ mod metadata_generator;
 mod query_parser;
 mod traits;
 
-pub use client::{generate_metadata_with_llm, ChatMessage, LLMClient, VLLMClient};
+pub use client::{generate_metadata_with_llm, ChatMessage, LLMClient, MetricsSnapshot, VLLMClient};
 pub use http_embedder::HttpEmbedder;
 pub use http_metadata_generator::HttpMetadataGenerator;
 pub use http_query_parser::HttpQueryParser;
