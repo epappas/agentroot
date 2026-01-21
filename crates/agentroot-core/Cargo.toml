@@ -106,3 +106,7 @@ path = "../../examples/csv_provider.rs"
 name = "json_provider"
 path = "../../examples/json_provider.rs"
 
+[[example]]
+name = "test_cache"
+path = "../../examples/test_cache.rs"
+
