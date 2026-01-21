@@ -2,7 +2,10 @@
 
 use crate::app::{OutputFormat, SearchArgs};
 use crate::output::{format_search_results, FormatOptions};
-use agentroot_core::{smart_search, Database, Embedder, HttpEmbedder, SearchOptions};
+use agentroot_core::{
+    smart_search, Database, Embedder, HttpEmbedder, HttpQueryExpander, HttpReranker, QueryExpander,
+    Reranker, SearchOptions,
+};
 use anyhow::Result;
 
 pub async fn run_bm25(args: SearchArgs, db: &Database, format: OutputFormat) -> Result<()> {
@@ -75,19 +78,22 @@ pub async fn run_hybrid(args: SearchArgs, db: &Database, format: OutputFormat) -
         }
     };
 
-    // Run hybrid search (BM25 + Vector with RRF fusion)
-    let bm25_results = db.search_fts(&query, &options)?;
-    let vec_results = db.search_vec(&query, embedder.as_ref(), &options).await?;
+    // Load query expander (optional)
+    let expander = load_query_expander();
 
-    // RRF fusion
-    let results = agentroot_core::search::rrf_fusion(&bm25_results, &vec_results);
+    // Load reranker (optional)
+    let reranker = load_reranker();
 
-    // Apply limit and min_score
-    let final_results: Vec<_> = results
-        .into_iter()
-        .filter(|r| r.score >= options.min_score)
-        .take(options.limit)
-        .collect();
+    // Run full hybrid search with query expansion and reranking
+    let results = agentroot_core::search::hybrid_search(
+        db,
+        &query,
+        &options,
+        embedder.as_ref(),
+        expander.as_ref().map(|e| e.as_ref()),
+        reranker.as_ref().map(|r| r.as_ref()),
+    )
+    .await?;
 
     let format_opts = FormatOptions {
         full: args.full,
@@ -95,10 +101,7 @@ pub async fn run_hybrid(args: SearchArgs, db: &Database, format: OutputFormat) -
         line_numbers: args.line_numbers,
     };
 
-    print!(
-        "{}",
-        format_search_results(&final_results, format, &format_opts)
-    );
+    print!("{}", format_search_results(&results, format, &format_opts));
     Ok(())
 }
 
@@ -136,5 +139,31 @@ fn load_embedder() -> Result<Box<dyn Embedder>> {
         Err(_) => Err(anyhow::anyhow!(
             "No embedding service configured. Set AGENTROOT_EMBEDDING_URL, AGENTROOT_EMBEDDING_MODEL, and AGENTROOT_EMBEDDING_DIMS environment variables. See VLLM_SETUP.md for details."
         )),
+    }
+}
+
+fn load_query_expander() -> Option<Box<dyn QueryExpander>> {
+    match HttpQueryExpander::from_env() {
+        Ok(expander) => {
+            eprintln!("Query expansion enabled with {}", expander.model_name());
+            Some(Box::new(expander))
+        }
+        Err(_) => {
+            eprintln!("Query expansion disabled (no LLM service configured)");
+            None
+        }
+    }
+}
+
+fn load_reranker() -> Option<Box<dyn Reranker>> {
+    match HttpReranker::from_env() {
+        Ok(reranker) => {
+            eprintln!("Reranking enabled with {}", reranker.model_name());
+            Some(Box::new(reranker))
+        }
+        Err(_) => {
+            eprintln!("Reranking disabled (no LLM service configured)");
+            None
+        }
     }
 }

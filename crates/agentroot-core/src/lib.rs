@@ -22,9 +22,10 @@ pub use db::{Database, MetadataBuilder, MetadataFilter, MetadataValue, UserMetad
 pub use error::{AgentRootError, Error, Result};
 pub use index::{chunk_semantic, ChunkType, SemanticChunk, SemanticChunker};
 pub use llm::{
-    ChatMessage, DocumentMetadata, Embedder, HttpEmbedder, HttpMetadataGenerator, HttpQueryParser,
-    LLMClient, MetadataContext, MetadataFilterHint, MetadataGenerator, MetricsSnapshot,
-    ParsedQuery, SearchType, TemporalFilter, VLLMClient,
+    ChatMessage, DocumentMetadata, Embedder, HttpEmbedder, HttpMetadataGenerator,
+    HttpQueryExpander, HttpQueryParser, HttpReranker, LLMClient, MetadataContext,
+    MetadataFilterHint, MetadataGenerator, MetricsSnapshot, ParsedQuery, QueryExpander, Reranker,
+    SearchType, TemporalFilter, VLLMClient,
 };
 pub use providers::{
     CSVProvider, FileProvider, GitHubProvider, JSONProvider, PDFProvider, ProviderConfig,
