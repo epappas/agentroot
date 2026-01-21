@@ -2,46 +2,63 @@
 
 use crate::app::EmbedArgs;
 use agentroot_core::index::{embed_documents, EmbedProgress};
-use agentroot_core::{Database, Embedder, LlamaEmbedder, DEFAULT_EMBED_MODEL};
+use agentroot_core::{Database, Embedder, HttpEmbedder, LlamaEmbedder, DEFAULT_EMBED_MODEL};
 use anyhow::Result;
+use std::sync::Arc;
 
 pub async fn run(args: EmbedArgs, db: &Database) -> Result<()> {
     // Run migration to ensure schema is up to date
     db.migrate()?;
 
-    // Determine model path
-    let model_path = if let Some(path) = args.model {
-        path
-    } else {
-        let model_dir = dirs::data_dir()
-            .unwrap_or_else(|| std::path::PathBuf::from("."))
-            .join("agentroot")
-            .join("models");
-        model_dir.join(DEFAULT_EMBED_MODEL)
-    };
-
-    if !model_path.exists() {
-        eprintln!(
-            "Error: Embedding model not found at {}",
-            model_path.display()
+    // Try HTTP embedder first (from env vars or config)
+    let embedder: Arc<dyn Embedder> = if let Ok(http_embedder) = HttpEmbedder::from_env() {
+        println!(
+            "Using HTTP embedding service: {}",
+            http_embedder.model_name()
         );
-        eprintln!();
-        eprintln!("To use vector embeddings, download an embedding model:");
-        eprintln!("  1. Create the models directory:");
-        eprintln!("     mkdir -p ~/.local/share/agentroot/models");
-        eprintln!();
-        eprintln!("  2. Download a GGUF embedding model, e.g.:");
-        eprintln!("     - nomic-embed-text-v1.5.Q4_K_M.gguf");
-        eprintln!("     - bge-small-en-v1.5.Q4_K_M.gguf");
-        eprintln!();
-        eprintln!("  3. Place it in ~/.local/share/agentroot/models/");
-        eprintln!();
-        eprintln!("Or specify a model path with: agentroot embed --model /path/to/model.gguf");
-        return Err(anyhow::anyhow!("Model not found"));
-    }
+        println!("Dimensions: {}", http_embedder.dimensions());
+        Arc::new(http_embedder)
+    } else {
+        // Fall back to local embedder
+        let model_path = if let Some(path) = args.model {
+            path
+        } else {
+            let model_dir = dirs::data_dir()
+                .unwrap_or_else(|| std::path::PathBuf::from("."))
+                .join("agentroot")
+                .join("models");
+            model_dir.join(DEFAULT_EMBED_MODEL)
+        };
 
-    println!("Loading embedding model: {}", model_path.display());
-    let embedder = LlamaEmbedder::new(&model_path)?;
+        if !model_path.exists() {
+            eprintln!(
+                "Error: Embedding model not found at {}",
+                model_path.display()
+            );
+            eprintln!();
+            eprintln!("To use vector embeddings, you have two options:");
+            eprintln!();
+            eprintln!("Option 1: Use an HTTP embedding service (recommended)");
+            eprintln!("  Set environment variables:");
+            eprintln!("    export AGENTROOT_EMBEDDING_URL=\"https://your-service.com\"");
+            eprintln!("    export AGENTROOT_EMBEDDING_MODEL=\"intfloat/e5-mistral-7b-instruct\"");
+            eprintln!("    export AGENTROOT_EMBEDDING_DIMS=\"4096\"");
+            eprintln!();
+            eprintln!("Option 2: Use a local GGUF model");
+            eprintln!("  1. Create the models directory:");
+            eprintln!("     mkdir -p ~/.local/share/agentroot/models");
+            eprintln!(
+                "  2. Download a GGUF embedding model (e.g., nomic-embed-text-v1.5.Q4_K_M.gguf)"
+            );
+            eprintln!("  3. Place it in ~/.local/share/agentroot/models/");
+            eprintln!();
+            return Err(anyhow::anyhow!("No embedding service available"));
+        }
+
+        println!("Loading local embedding model: {}", model_path.display());
+        let local_embedder = LlamaEmbedder::new(&model_path)?;
+        Arc::new(local_embedder)
+    };
     println!(
         "Model loaded: {} ({} dimensions)",
         embedder.model_name(),
@@ -53,7 +70,7 @@ pub async fn run(args: EmbedArgs, db: &Database) -> Result<()> {
     // Run embedding pipeline
     let stats = embed_documents(
         db,
-        &embedder,
+        embedder.as_ref(),
         &model_name,
         args.force,
         Some(Box::new(|progress: EmbedProgress| {

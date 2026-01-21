@@ -17,6 +17,79 @@ pub struct Config {
     /// Collection configurations
     #[serde(default)]
     pub collections: HashMap<String, CollectionConfig>,
+
+    /// LLM service configuration
+    #[serde(default)]
+    pub llm_service: LLMServiceConfig,
+}
+
+/// LLM service configuration for external inference
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LLMServiceConfig {
+    /// Base URL of the LLM service for chat/completions
+    pub url: String,
+
+    /// Model name for chat completions (query parsing, metadata generation)
+    #[serde(default = "default_chat_model")]
+    pub model: String,
+
+    /// Base URL for embeddings service (can be different from LLM URL)
+    #[serde(default)]
+    pub embedding_url: Option<String>,
+
+    /// Model name for embeddings
+    #[serde(default = "default_embedding_model")]
+    pub embedding_model: String,
+
+    /// Embedding dimensions (will be auto-detected if not specified)
+    #[serde(default)]
+    pub embedding_dimensions: Option<usize>,
+
+    /// API key (optional, for authenticated services)
+    #[serde(default)]
+    pub api_key: Option<String>,
+
+    /// Request timeout in seconds
+    #[serde(default = "default_timeout")]
+    pub timeout_secs: u64,
+}
+
+impl LLMServiceConfig {
+    /// Get the embeddings URL (falls back to main URL if not specified)
+    pub fn embeddings_url(&self) -> &str {
+        self.embedding_url.as_deref().unwrap_or(&self.url)
+    }
+}
+
+impl Default for LLMServiceConfig {
+    fn default() -> Self {
+        Self {
+            url: std::env::var("AGENTROOT_LLM_URL")
+                .unwrap_or_else(|_| "http://localhost:8000".to_string()),
+            model: default_chat_model(),
+            embedding_url: std::env::var("AGENTROOT_EMBEDDING_URL").ok(),
+            embedding_model: default_embedding_model(),
+            embedding_dimensions: std::env::var("AGENTROOT_EMBEDDING_DIMS")
+                .ok()
+                .and_then(|s| s.parse().ok()),
+            api_key: std::env::var("AGENTROOT_LLM_API_KEY").ok(),
+            timeout_secs: default_timeout(),
+        }
+    }
+}
+
+fn default_chat_model() -> String {
+    std::env::var("AGENTROOT_LLM_MODEL")
+        .unwrap_or_else(|_| "meta-llama/Llama-3.1-8B-Instruct".to_string())
+}
+
+fn default_embedding_model() -> String {
+    std::env::var("AGENTROOT_EMBEDDING_MODEL")
+        .unwrap_or_else(|_| "sentence-transformers/all-MiniLM-L6-v2".to_string())
+}
+
+fn default_timeout() -> u64 {
+    30
 }
 
 /// Per-collection configuration

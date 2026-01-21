@@ -17,14 +17,15 @@ pub mod llm;
 pub mod providers;
 pub mod search;
 
-pub use config::{CollectionConfig, Config};
+pub use config::{CollectionConfig, Config, LLMServiceConfig};
 pub use db::{Database, MetadataBuilder, MetadataFilter, MetadataValue, UserMetadata};
 pub use error::{AgentRootError, Error, Result};
 pub use index::{chunk_semantic, ChunkType, SemanticChunk, SemanticChunker};
 pub use llm::{
-    DocumentMetadata, Embedder, LlamaEmbedder, LlamaMetadataGenerator, MetadataContext,
-    MetadataFilterHint, MetadataGenerator, ParsedQuery, QueryParser, SearchType, TemporalFilter,
-    DEFAULT_EMBED_MODEL, DEFAULT_METADATA_MODEL,
+    ChatMessage, DocumentMetadata, Embedder, HttpEmbedder, HttpQueryParser, LLMClient,
+    LlamaEmbedder, LlamaMetadataGenerator, MetadataContext, MetadataFilterHint, MetadataGenerator,
+    ParsedQuery, QueryParser, SearchType, TemporalFilter, VLLMClient, DEFAULT_EMBED_MODEL,
+    DEFAULT_METADATA_MODEL,
 };
 pub use providers::{
     CSVProvider, FileProvider, GitHubProvider, JSONProvider, PDFProvider, ProviderConfig,

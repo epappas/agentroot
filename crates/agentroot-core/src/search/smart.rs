@@ -2,7 +2,7 @@
 
 use crate::db::Database;
 use crate::error::Result;
-use crate::llm::{LlamaEmbedder, QueryParser};
+use crate::llm::{HttpQueryParser, LlamaEmbedder};
 use crate::search::{hybrid_search, SearchOptions, SearchResult};
 
 /// Smart search that understands natural language queries
@@ -18,8 +18,8 @@ pub async fn smart_search(
     query: &str,
     options: &SearchOptions,
 ) -> Result<Vec<SearchResult>> {
-    // Try to parse the natural language query
-    let parser_result = QueryParser::from_default();
+    // Try to parse the natural language query using HTTP service
+    let parser_result = HttpQueryParser::from_env();
 
     if let Ok(parser) = parser_result {
         // Parser available - use smart parsing
