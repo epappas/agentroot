@@ -2,10 +2,7 @@
 
 use crate::app::{OutputFormat, SearchArgs};
 use crate::output::{format_search_results, FormatOptions};
-use agentroot_core::{
-    smart_search, Database, Embedder, HttpEmbedder, LlamaEmbedder, SearchOptions,
-    DEFAULT_EMBED_MODEL,
-};
+use agentroot_core::{smart_search, Database, Embedder, HttpEmbedder, SearchOptions};
 use anyhow::Result;
 
 pub async fn run_bm25(args: SearchArgs, db: &Database, format: OutputFormat) -> Result<()> {
@@ -133,24 +130,11 @@ pub async fn run_smart(args: SearchArgs, db: &Database, format: OutputFormat) ->
 }
 
 fn load_embedder() -> Result<Box<dyn Embedder>> {
-    // Try HTTP embedder first
-    if let Ok(http_embedder) = HttpEmbedder::from_env() {
-        return Ok(Box::new(http_embedder));
+    // Get HTTP embedder from environment variables
+    match HttpEmbedder::from_env() {
+        Ok(http_embedder) => Ok(Box::new(http_embedder)),
+        Err(_) => Err(anyhow::anyhow!(
+            "No embedding service configured. Set AGENTROOT_EMBEDDING_URL, AGENTROOT_EMBEDDING_MODEL, and AGENTROOT_EMBEDDING_DIMS environment variables. See VLLM_SETUP.md for details."
+        )),
     }
-
-    // Fallback to local model
-    let model_dir = dirs::data_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("agentroot")
-        .join("models");
-    let model_path = model_dir.join(DEFAULT_EMBED_MODEL);
-
-    if !model_path.exists() {
-        return Err(anyhow::anyhow!(
-            "No embedding service available. Configure AGENTROOT_EMBEDDING_URL or download a local model to {}",
-            model_path.display()
-        ));
-    }
-
-    Ok(Box::new(LlamaEmbedder::new(&model_path)?))
 }

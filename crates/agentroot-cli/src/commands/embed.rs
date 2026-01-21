@@ -2,7 +2,7 @@
 
 use crate::app::EmbedArgs;
 use agentroot_core::index::{embed_documents, EmbedProgress};
-use agentroot_core::{Database, Embedder, HttpEmbedder, LlamaEmbedder, DEFAULT_EMBED_MODEL};
+use agentroot_core::{Database, Embedder, HttpEmbedder};
 use anyhow::Result;
 use std::sync::Arc;
 
@@ -10,55 +10,37 @@ pub async fn run(args: EmbedArgs, db: &Database) -> Result<()> {
     // Run migration to ensure schema is up to date
     db.migrate()?;
 
-    // Try HTTP embedder first (from env vars or config)
-    let embedder: Arc<dyn Embedder> = if let Ok(http_embedder) = HttpEmbedder::from_env() {
-        println!(
-            "Using HTTP embedding service: {}",
-            http_embedder.model_name()
-        );
-        println!("Dimensions: {}", http_embedder.dimensions());
-        Arc::new(http_embedder)
-    } else {
-        // Fall back to local embedder
-        let model_path = if let Some(path) = args.model {
-            path
-        } else {
-            let model_dir = dirs::data_dir()
-                .unwrap_or_else(|| std::path::PathBuf::from("."))
-                .join("agentroot")
-                .join("models");
-            model_dir.join(DEFAULT_EMBED_MODEL)
-        };
-
-        if !model_path.exists() {
-            eprintln!(
-                "Error: Embedding model not found at {}",
-                model_path.display()
+    // Get HTTP embedder from environment variables
+    let embedder: Arc<dyn Embedder> = match HttpEmbedder::from_env() {
+        Ok(http_embedder) => {
+            println!(
+                "Using HTTP embedding service: {}",
+                http_embedder.model_name()
             );
-            eprintln!();
-            eprintln!("To use vector embeddings, you have two options:");
-            eprintln!();
-            eprintln!("Option 1: Use an HTTP embedding service (recommended)");
-            eprintln!("  Set environment variables:");
-            eprintln!("    export AGENTROOT_EMBEDDING_URL=\"https://your-service.com\"");
-            eprintln!("    export AGENTROOT_EMBEDDING_MODEL=\"intfloat/e5-mistral-7b-instruct\"");
-            eprintln!("    export AGENTROOT_EMBEDDING_DIMS=\"4096\"");
-            eprintln!();
-            eprintln!("Option 2: Use a local GGUF model");
-            eprintln!("  1. Create the models directory:");
-            eprintln!("     mkdir -p ~/.local/share/agentroot/models");
-            eprintln!(
-                "  2. Download a GGUF embedding model (e.g., nomic-embed-text-v1.5.Q4_K_M.gguf)"
-            );
-            eprintln!("  3. Place it in ~/.local/share/agentroot/models/");
-            eprintln!();
-            return Err(anyhow::anyhow!("No embedding service available"));
+            println!("Dimensions: {}", http_embedder.dimensions());
+            Arc::new(http_embedder)
         }
-
-        println!("Loading local embedding model: {}", model_path.display());
-        let local_embedder = LlamaEmbedder::new(&model_path)?;
-        Arc::new(local_embedder)
+        Err(_) => {
+            eprintln!("Error: No embedding service configured");
+            eprintln!();
+            eprintln!("AgentRoot requires an external embedding service.");
+            eprintln!("Configure one by setting environment variables:");
+            eprintln!();
+            eprintln!("  export AGENTROOT_EMBEDDING_URL=\"https://your-service.com/v1\"");
+            eprintln!("  export AGENTROOT_EMBEDDING_MODEL=\"intfloat/e5-mistral-7b-instruct\"");
+            eprintln!("  export AGENTROOT_EMBEDDING_DIMS=\"4096\"");
+            eprintln!();
+            eprintln!("Supported services:");
+            eprintln!("  - vLLM (https://docs.vllm.ai)");
+            eprintln!("  - Basilica (https://basilica.ai) - Recommended");
+            eprintln!("  - OpenAI (https://openai.com/api)");
+            eprintln!("  - Any OpenAI-compatible API");
+            eprintln!();
+            eprintln!("See VLLM_SETUP.md for detailed instructions.");
+            return Err(anyhow::anyhow!("No embedding service configured"));
+        }
     };
+
     println!(
         "Model loaded: {} ({} dimensions)",
         embedder.model_name(),

@@ -2,7 +2,7 @@
 
 use crate::db::Database;
 use crate::error::Result;
-use crate::llm::{HttpQueryParser, LlamaEmbedder};
+use crate::llm::{HttpEmbedder, HttpQueryParser};
 use crate::search::{hybrid_search, SearchOptions, SearchResult};
 
 /// Smart search that understands natural language queries
@@ -37,8 +37,8 @@ pub async fn smart_search(
         let mut results = match parsed.search_type {
             crate::llm::SearchType::Bm25 => db.search_fts(&parsed.search_terms, options)?,
             crate::llm::SearchType::Vector => {
-                // Vector search requires embedder
-                match LlamaEmbedder::from_default() {
+                // Vector search requires HTTP embedder
+                match HttpEmbedder::from_env() {
                     Ok(embedder) => {
                         // Try vector search, fall back to BM25 if it fails (e.g., no embeddings yet)
                         match db
@@ -56,14 +56,14 @@ pub async fn smart_search(
                         }
                     }
                     Err(_) => {
-                        tracing::warn!("Embedder not available, falling back to BM25");
+                        tracing::warn!("HTTP embedder not configured, falling back to BM25");
                         db.search_fts(&parsed.search_terms, options)?
                     }
                 }
             }
             crate::llm::SearchType::Hybrid => {
-                // Hybrid search requires embedder
-                match LlamaEmbedder::from_default() {
+                // Hybrid search requires HTTP embedder
+                match HttpEmbedder::from_env() {
                     Ok(embedder) => {
                         // Try hybrid search, fall back to BM25 if it fails (e.g., no embeddings yet)
                         match hybrid_search(
@@ -87,7 +87,7 @@ pub async fn smart_search(
                         }
                     }
                     Err(_) => {
-                        tracing::warn!("Embedder not available, falling back to BM25");
+                        tracing::warn!("HTTP embedder not configured, falling back to BM25");
                         db.search_fts(&parsed.search_terms, options)?
                     }
                 }

@@ -23,9 +23,8 @@ pub use error::{AgentRootError, Error, Result};
 pub use index::{chunk_semantic, ChunkType, SemanticChunk, SemanticChunker};
 pub use llm::{
     ChatMessage, DocumentMetadata, Embedder, HttpEmbedder, HttpMetadataGenerator, HttpQueryParser,
-    LLMClient, LlamaEmbedder, LlamaMetadataGenerator, MetadataContext, MetadataFilterHint,
-    MetadataGenerator, MetricsSnapshot, ParsedQuery, QueryParser, SearchType, TemporalFilter,
-    VLLMClient, DEFAULT_EMBED_MODEL, DEFAULT_METADATA_MODEL,
+    LLMClient, MetadataContext, MetadataFilterHint, MetadataGenerator, MetricsSnapshot,
+    ParsedQuery, SearchType, TemporalFilter, VLLMClient,
 };
 pub use providers::{
     CSVProvider, FileProvider, GitHubProvider, JSONProvider, PDFProvider, ProviderConfig,

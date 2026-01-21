@@ -438,22 +438,21 @@ pub async fn handle_vsearch(db: &Database, args: Value) -> Result<ToolResult> {
     };
 
     // Try HTTP embedder first, fallback to local
-    let embedder: Box<dyn agentroot_core::Embedder> = if let Ok(http) =
-        agentroot_core::HttpEmbedder::from_env()
+    let embedder: Box<dyn agentroot_core::Embedder> = match agentroot_core::HttpEmbedder::from_env()
     {
-        Box::new(http)
-    } else if let Ok(local) = agentroot_core::LlamaEmbedder::from_default() {
-        Box::new(local)
-    } else {
-        return Ok(ToolResult {
-                content: vec![Content::Text {
-                    text: "Could not load embedding model. Configure HTTP service via AGENTROOT_EMBEDDING_URL \
-                          or download a local model. See: https://github.com/epappas/agentroot#embedding-models"
-                        .to_string(),
-                }],
-                structured_content: None,
-                is_error: Some(true),
-            });
+        Ok(http) => Box::new(http),
+        Err(_) => {
+            return Ok(ToolResult {
+                    content: vec![Content::Text {
+                        text: "No embedding service configured. Set AGENTROOT_EMBEDDING_URL, \
+                              AGENTROOT_EMBEDDING_MODEL, and AGENTROOT_EMBEDDING_DIMS environment variables. \
+                              See VLLM_SETUP.md for details."
+                            .to_string(),
+                    }],
+                    structured_content: None,
+                    is_error: Some(true),
+                });
+        }
     };
 
     let mut results = db.search_vec(query, embedder.as_ref(), &options).await?;
@@ -554,16 +553,15 @@ pub async fn handle_query(db: &Database, args: Value) -> Result<ToolResult> {
         full_content: false,
     };
 
-    // Try HTTP embedder first, fallback to local, then BM25-only
-    let embedder: Box<dyn agentroot_core::Embedder> =
-        if let Ok(http) = agentroot_core::HttpEmbedder::from_env() {
-            Box::new(http)
-        } else if let Ok(local) = agentroot_core::LlamaEmbedder::from_default() {
-            Box::new(local)
-        } else {
-            // No embedder available, fall back to BM25-only search
+    // Try HTTP embedder, fallback to BM25-only if not configured
+    let embedder: Box<dyn agentroot_core::Embedder> = match agentroot_core::HttpEmbedder::from_env()
+    {
+        Ok(http) => Box::new(http),
+        Err(_) => {
+            // No HTTP embedder configured, fall back to BM25-only search
             return handle_search(db, args).await;
-        };
+        }
+    };
 
     let bm25_results = db.search_fts(query, &options)?;
     let vec_results = db.search_vec(query, embedder.as_ref(), &options).await?;

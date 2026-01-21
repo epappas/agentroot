@@ -217,10 +217,6 @@ pub struct EmbedArgs {
     /// Force re-embedding of all documents
     #[arg(short, long)]
     pub force: bool,
-
-    /// Path to embedding model (GGUF file)
-    #[arg(short, long)]
-    pub model: Option<std::path::PathBuf>,
 }
 
 #[derive(Args)]
@@ -247,10 +243,6 @@ pub enum MetadataAction {
         /// Force regeneration even if cached
         #[arg(short, long)]
         force: bool,
-
-        /// Path to metadata generation model (GGUF file)
-        #[arg(short, long)]
-        model: Option<std::path::PathBuf>,
     },
     /// Show all metadata for a document (LLM + user)
     Show {

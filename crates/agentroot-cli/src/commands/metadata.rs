@@ -2,8 +2,8 @@
 
 use crate::app::{MetadataAction, MetadataArgs, OutputFormat};
 use agentroot_core::{
-    Database, HttpMetadataGenerator, LlamaMetadataGenerator, MetadataBuilder, MetadataFilter,
-    MetadataGenerator, MetadataValue,
+    Database, HttpMetadataGenerator, MetadataBuilder, MetadataFilter, MetadataGenerator,
+    MetadataValue,
 };
 use anyhow::Result;
 use std::sync::Arc;
@@ -15,8 +15,7 @@ pub async fn run(args: MetadataArgs, db: &Database, format: OutputFormat) -> Res
             all,
             doc,
             force,
-            model,
-        } => run_refresh(db, collection, all, doc, force, model).await,
+        } => run_refresh(db, collection, all, doc, force).await,
         MetadataAction::Show { docid } => run_show(db, &docid, format).await,
         MetadataAction::Add {
             docid,
@@ -55,20 +54,31 @@ async fn run_refresh(
     all: bool,
     doc: Option<String>,
     force: bool,
-    model_path: Option<std::path::PathBuf>,
 ) -> Result<()> {
-    // Try HTTP metadata generator first, then fallback to local
-    let generator: Arc<dyn MetadataGenerator> = if let Some(path) = model_path {
-        // User specified a local model path
-        Arc::new(LlamaMetadataGenerator::new(path)?)
-    } else if let Ok(http_gen) = HttpMetadataGenerator::from_env() {
-        // Use HTTP service if configured
-        println!("Using HTTP metadata service: {}", http_gen.model_name());
-        Arc::new(http_gen)
-    } else {
-        // Fallback to local model
-        println!("Using local metadata model");
-        Arc::new(LlamaMetadataGenerator::from_default()?)
+    // Get HTTP metadata generator from environment variables
+    let generator: Arc<dyn MetadataGenerator> = match HttpMetadataGenerator::from_env() {
+        Ok(http_gen) => {
+            println!("Using HTTP metadata service: {}", http_gen.model_name());
+            Arc::new(http_gen)
+        }
+        Err(_) => {
+            eprintln!("Error: No metadata generation service configured");
+            eprintln!();
+            eprintln!("AgentRoot requires an external LLM service for metadata generation.");
+            eprintln!("Configure one by setting environment variables:");
+            eprintln!();
+            eprintln!("  export AGENTROOT_LLM_URL=\"https://your-service.com/v1\"");
+            eprintln!("  export AGENTROOT_LLM_MODEL=\"Qwen/Qwen2.5-7B-Instruct\"");
+            eprintln!();
+            eprintln!("Supported services:");
+            eprintln!("  - vLLM (https://docs.vllm.ai)");
+            eprintln!("  - Basilica (https://basilica.ai) - Recommended");
+            eprintln!("  - OpenAI (https://openai.com/api)");
+            eprintln!("  - Any OpenAI-compatible API");
+            eprintln!();
+            eprintln!("See VLLM_SETUP.md for detailed instructions.");
+            return Err(anyhow::anyhow!("No metadata generation service configured"));
+        }
     };
 
     if let Some(doc_path) = doc {

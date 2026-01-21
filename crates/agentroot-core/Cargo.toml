@@ -37,7 +37,6 @@ regex.workspace = true
 lazy_static.workspace = true
 dirs.workspace = true
 chrono.workspace = true
-llama-cpp-2.workspace = true
 reqwest.workspace = true
 base64.workspace = true
 pdf-extract.workspace = true
