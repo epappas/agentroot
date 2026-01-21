@@ -82,8 +82,8 @@ criterion = "0.5"
 tempfile = "3.14"
 
 # Internal crates
-agentroot-core = { path = "crates/agentroot-core" }
-agentroot-mcp = { path = "crates/agentroot-mcp" }
+agentroot-core = { path = "crates/agentroot-core", version = "0.1.0" }
+agentroot-mcp = { path = "crates/agentroot-mcp", version = "0.1.0" }
 
 [profile.release]
 lto = true
