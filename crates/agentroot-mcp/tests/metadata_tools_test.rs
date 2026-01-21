@@ -1,12 +1,20 @@
 //! Integration test for MCP tools with metadata
+//!
+//! These tests require external HTTP services and are marked as #[ignore].
+//! Run with: cargo test --test metadata_tools_test -- --ignored
+//!
+//! Required environment variables:
+//! - AGENTROOT_LLM_URL
+//! - AGENTROOT_LLM_MODEL
 
-use agentroot_core::{Database, LlamaMetadataGenerator, MetadataGenerator};
+use agentroot_core::{Database, HttpMetadataGenerator, MetadataGenerator};
 use agentroot_mcp::tools::*;
 use serde_json::json;
 use std::fs;
 use tempfile::TempDir;
 
 #[tokio::test]
+#[ignore] // Requires external LLM service via HTTP
 async fn test_search_tool_with_metadata() {
     // Create temporary directory with test files
     let temp_dir = TempDir::new().unwrap();
@@ -39,7 +47,7 @@ async fn test_search_tool_with_metadata() {
     .unwrap();
 
     // Index with metadata
-    let generator_result = LlamaMetadataGenerator::from_default();
+    let generator_result = HttpMetadataGenerator::from_env();
     let generator = generator_result.ok();
 
     if let Some(ref gen) = generator {
@@ -83,6 +91,7 @@ async fn test_search_tool_with_metadata() {
 }
 
 #[tokio::test]
+#[ignore] // Requires external LLM service via HTTP
 async fn test_search_tool_with_filters() {
     // Create temporary directory with test files
     let temp_dir = TempDir::new().unwrap();
@@ -115,7 +124,7 @@ async fn test_search_tool_with_filters() {
     .unwrap();
 
     // Index with metadata
-    let generator_result = LlamaMetadataGenerator::from_default();
+    let generator_result = HttpMetadataGenerator::from_env();
     let generator = generator_result.ok();
 
     if let Some(ref gen) = generator {
@@ -159,6 +168,7 @@ async fn test_search_tool_with_filters() {
 }
 
 #[tokio::test]
+#[ignore] // Requires external LLM service via HTTP
 async fn test_query_tool_with_metadata() {
     // Create temporary directory with test files
     let temp_dir = TempDir::new().unwrap();
@@ -185,7 +195,7 @@ async fn test_query_tool_with_metadata() {
     .unwrap();
 
     // Index with metadata
-    let generator_result = LlamaMetadataGenerator::from_default();
+    let generator_result = HttpMetadataGenerator::from_env();
     let generator = generator_result.ok();
 
     if let Some(ref gen) = generator {
