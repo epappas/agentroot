@@ -223,6 +223,7 @@ mod tests {
 }
 
 #[tokio::test]
+#[ignore] // Requires LLM model download, run manually with: cargo test -- --ignored
 async fn test_end_to_end_metadata_generation() {
     // Create temporary directory with test files
     let temp_dir = TempDir::new().unwrap();
@@ -339,6 +340,7 @@ async fn test_end_to_end_metadata_generation() {
 }
 
 #[tokio::test]
+#[ignore] // Requires LLM model download, run manually with: cargo test -- --ignored
 async fn test_metadata_improves_search_quality() {
     // Create temporary directory with test files
     let temp_dir = TempDir::new().unwrap();
@@ -432,6 +434,7 @@ async fn test_metadata_improves_search_quality() {
 }
 
 #[tokio::test]
+#[ignore] // Requires LLM model download, run manually with: cargo test -- --ignored
 async fn test_metadata_fields_in_search_results() {
     // Create temporary directory with test files
     let temp_dir = TempDir::new().unwrap();
@@ -519,6 +522,7 @@ async fn test_metadata_fields_in_search_results() {
 }
 
 #[tokio::test]
+#[ignore] // Requires LLM model download, run manually with: cargo test -- --ignored
 async fn test_metadata_cache_functionality() {
     // Create temporary directory with one test file
     let temp_dir = TempDir::new().unwrap();

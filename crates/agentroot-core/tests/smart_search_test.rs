@@ -122,6 +122,7 @@ async fn test_smart_search_with_metadata() {
 }
 
 #[tokio::test]
+#[ignore] // Requires running vLLM server, run manually with: cargo test -- --ignored
 async fn test_smart_search_bm25_fallback() {
     let temp_dir = TempDir::new().unwrap();
     let db_path = temp_dir.path().join("test.sqlite");
