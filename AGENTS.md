@@ -1216,173 +1216,81 @@ git push github master
 git push origin master
 ```
 
-## Critical Rules
+## Critical Rules: Life and Death
+
+**"If our changes are not correct, people die. This is the alpha and omega of what we do."**
+
+Verification is NOT optional. Testing is NOT an afterthought. Quality is NOT negotiable.
+
+### Zero-Tolerance Policy
 
 1. **NEVER fake, stub, mock, or use placeholders** - Production code only
-2. **NEVER rewrite or skip tests** - Fix the actual issue
-3. **NEVER delete code to make tests pass** - Understand and fix the root cause
-4. **Keep functions under 50 lines** - Extract helper functions for clarity
-5. **Use explicit error handling** - No unwrap/expect in library code
-6. **Follow Rust conventions** - Use rustfmt and clippy defaults
-7. **Write real tests** - Test actual functionality, not mocks
-8. **Make informed decisions** - Base edits on analysis, not assumptions
-9. **Keep comments concise** - Let code be self-documenting where possible
+2. **NEVER use TODO/FIXME comments** - Complete the work or don't commit
+3. **NEVER lie about what works** - Honesty > Ego, Truth > Convenience
+4. **NEVER rewrite or skip tests** - Fix the actual issue
+5. **NEVER delete code to make tests pass** - Understand and fix the root cause
+6. **NEVER commit without verification** - Tests MUST pass before commit
 
-## When Making Changes
+### Code Quality Standards (DRY, SOLID, KISS)
 
-1. **Read before editing** - Always read files before modifying them
-2. **Understand context** - When asked to analyze/reflect, provide contextual answers before editing
-3. **Run tests** - After changes, run relevant tests to verify
-4. **Check formatting** - Run `cargo fmt` before committing
-5. **Run clippy** - Address any clippy warnings introduced
-6. **Commit atomically** - Stage specific files, not everything at once
-# Engineering Principles for AgentRoot
-
-## Core Principle: Correctness is Life and Death
-
-**"This is not an 'important question', this is the alpha and omega of what we do. If our changes are not correct, people die."**
-
-This is the fundamental truth of software engineering:
-- Verification is NOT an afterthought
-- Verification is NOT optional
-- Verification is NOT something you do "if time permits"
-- **Verification is the FIRST thing, not the last thing**
-
-### Before ANY commit:
-
-1. **Run the complete test suite** - `cargo test --workspace --all-targets`
-2. **Check ALL compilation** - `cargo build --workspace --all-targets`
-3. **Run clippy** - `cargo clippy --workspace --all-targets`
-4. **Build examples** - `cargo build --examples`
-5. **Document what was verified** - What tests passed? What was checked?
-
-### Never:
-
-- ❌ Commit first, test later
-- ❌ "I'll fix the tests in the next commit"
-- ❌ "The tests probably still work"
-- ❌ Assume anything - VERIFY EVERYTHING
-
-### Always:
-
-- ✅ Test BEFORE committing
-- ✅ Verify BEFORE pushing
-- ✅ Document what you verified
-- ✅ Be rigorous, thorough, and exhaustive
+7. **Keep functions under 50 lines** - Extract helper functions for clarity
+8. **Single Responsibility** - Each function/module does ONE thing
+9. **Don't Repeat Yourself** - Extract common code
+10. **Keep It Simple** - Prefer simple solutions over clever ones
+11. **Use explicit error handling** - No unwrap/expect in library code
+12. **Follow Rust conventions** - Use rustfmt and clippy defaults
+13. **Write real tests** - Test actual functionality, not mocks
+14. **Make informed decisions** - Base edits on analysis, not assumptions
 
 ## Task Management (MANDATORY)
 
-**Every multi-step task MUST use the TodoWrite tool:**
+**Every multi-step task MUST use TodoWrite:**
 
 1. **Create TODO list FIRST** - Before writing any code
-2. **Mark tasks in_progress** - One at a time
-3. **Mark tasks completed** - ONLY after verification
-4. **Never skip** - This is not optional
+2. **Mark tasks in_progress** - One at a time, never multiple
+3. **Mark tasks completed** - ONLY after verification (tests pass, compiles)
+4. **Never skip tracking** - As context grows, todos keep you accurate
 
-**Why:** As context grows, todos keep you accurate and on track.
+This is not optional. This is how you stay on track and deliver complete work.
 
-### Todo Usage Pattern:
-```
-1. User requests feature
-2. IMMEDIATELY create todos with TodoWrite
-3. Mark first todo as in_progress
-4. Complete the work
-5. VERIFY it works (tests pass, compiles, etc.)
-6. Mark todo as completed
-7. Move to next todo
-```
+## Verification Checklist (Before ANY Commit)
 
-## Code Quality Principles (NON-NEGOTIABLE)
+**Run these commands and verify success:**
 
-### SOLID Principles
-- **S**ingle Responsibility: Each function/module does ONE thing
-- **O**pen/Closed: Open for extension, closed for modification
-- **L**iskov Substitution: Subtypes must be substitutable
-- **I**nterface Segregation: Many specific interfaces > one general
-- **D**ependency Inversion: Depend on abstractions, not concretions
+```bash
+# 1. Run all tests
+cargo test --workspace --all-targets
 
-### DRY (Don't Repeat Yourself)
-- Extract common code into functions
-- Use traits for shared behavior
-- Never copy-paste code
+# 2. Check compilation  
+cargo build --workspace --all-targets
 
-### KISS (Keep It Simple, Stupid)
-- Prefer simple solutions over clever ones
-- Avoid unnecessary abstractions
-- Write code humans can understand
-- If it's complex, it's probably wrong
+# 3. Run clippy
+cargo clippy --workspace --all-targets
 
-### Additional Quality Standards
-- **Modular code** - Small, focused functions (<50 lines)
-- **Early returns** - Fail fast, avoid nesting
-- **Type safety** - Explicit types, no `unwrap()` in libraries
-- **Clear naming** - No abbreviations, be explicit
+# 4. Build examples
+cargo build --examples
 
-## Zero-Tolerance Policy
-
-### NEVER ALLOWED:
-- ❌ `TODO` comments
-- ❌ `FIXME` comments
-- ❌ Placeholder functions
-- ❌ Stub implementations
-- ❌ Mock data (except in tests)
-- ❌ "I'll fix it later"
-- ❌ Commented-out code
-- ❌ Incomplete features
-
-### THE CARDINAL SIN: LYING
-
-**NEVER LIE. NEVER FAKE. NEVER PRETEND.**
-
-If you don't know - SAY SO.
-If you can't do it - SAY SO.
-If it's broken - SAY SO.
-If you're unsure - SAY SO.
-
-**Honesty > Ego**
-**Truth > Convenience**
-**Reality > Appearance**
-
-### Production-Ready or Nothing
-Every single line of code must be:
-- ✅ Fully implemented
-- ✅ Tested and working
-- ✅ Production-quality
-- ✅ Ready to ship
-
-There is no "good enough for now". There is no "temporary solution". There is no "quick hack".
-
-**If it's not 100% real, working code - DON'T COMMIT IT.**
-
-## Rigor Checklist
-
-Before ANY code change:
-```
-[ ] TodoWrite used to track all tasks
-[ ] Each todo verified as complete before moving on
-[ ] All tests run
-[ ] All tests documented (what passed, what failed, what's expected)
-[ ] All compilation verified
-[ ] All examples checked
-[ ] No TODOs/FIXMEs/placeholders in code
-[ ] Code follows DRY, SOLID, KISS principles
-[ ] Breaking changes identified
-[ ] Impact analyzed
-[ ] Rollback plan exists
+# 5. Check formatting
+cargo fmt --all --check
 ```
 
-## Remember
+**Document your verification:**
+- [ ] All tests pass (or failures documented as pre-existing)
+- [ ] All targets compile
+- [ ] No new clippy warnings
+- [ ] Examples build successfully
+- [ ] TodoWrite list updated and current
+- [ ] No TODOs/FIXMEs in committed code
+- [ ] Breaking changes identified and documented
 
-This is not about being careful. This is not about being thorough.
+## When Making Changes
 
-**This is about life and death.**
-
-If you skip verification, you kill the project. If you slack on rigor, you destroy trust. If you commit broken code, you fail at the most fundamental level.
-
----
-
-*Created: 2026-01-21*
-*Reason: Critical reminder after committing without full verification*
-
----
-
+1. **Create TodoWrite list** - For any multi-step work
+2. **Read before editing** - Always read files before modifying them
+3. **Understand context** - When asked to analyze/reflect, provide contextual answers before editing
+4. **Verify each step** - Mark todos completed only after verification
+5. **Run full test suite** - Before committing (not after)
+6. **Check formatting** - Run `cargo fmt` before committing
+7. **Run clippy** - Address any clippy warnings introduced
+8. **Commit atomically** - Stage specific files, not everything at once
+9. **Document verification** - State what was tested and results
