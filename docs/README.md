@@ -112,7 +112,7 @@ See [Getting Started Guide](getting-started.md) for detailed walkthrough.
 2. **How do I...?** → [How-To Guide](howto-guide.md)
 3. **Command details?** → [CLI Reference](cli-reference.md)
 4. **Something broken?** → [Troubleshooting](troubleshooting.md)
-5. **Still stuck?** → [Open an issue](https://github.com/spacejar/agentroot/issues)
+5. **Still stuck?** → [Open an issue](https://github.com/epappas/agentroot/issues)
 
 ## Examples
 

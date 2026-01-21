@@ -11,8 +11,13 @@ members = [
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
-repository = "https://github.com/spacejar/agentroot"
-authors = ["Spacejar"]
+repository = "https://github.com/epappas/agentroot"
+homepage = "https://github.com/epappas/agentroot"
+documentation = "https://github.com/epappas/agentroot#readme"
+readme = "README.md"
+keywords = ["search", "semantic", "embeddings", "code-search", "knowledge-base"]
+categories = ["command-line-utilities", "development-tools", "text-processing"]
+authors = ["Evangelos Pappas <epappas@evalonlabs.com>"]
 
 [workspace.dependencies]
 # Async runtime

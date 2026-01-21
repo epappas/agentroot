@@ -3,7 +3,13 @@ name = "agentroot-core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Core library for agentroot - local markdown search engine"
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+keywords.workspace = true
+categories.workspace = true
+authors.workspace = true
+description = "Core library for agentroot - semantic search engine with AST-aware chunking and hybrid search"
 
 [dependencies]
 tokio.workspace = true

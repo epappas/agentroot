@@ -3,7 +3,14 @@ name = "agentroot-cli"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "CLI for agentroot - local markdown search engine"
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+authors.workspace = true
+description = "Fast local semantic search for codebases and knowledge bases with AI-powered features"
 
 [[bin]]
 name = "agentroot"

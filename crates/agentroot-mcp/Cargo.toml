@@ -3,7 +3,13 @@ name = "agentroot-mcp"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "MCP server for agentroot - local markdown search engine"
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+keywords.workspace = true
+categories.workspace = true
+authors.workspace = true
+description = "Model Context Protocol server for agentroot - AI assistant integration"
 
 [dependencies]
 agentroot-core.workspace = true

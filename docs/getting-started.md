@@ -18,7 +18,7 @@ Everything runs locally on your machine. No API keys, no cloud services.
 ### Build from Source
 
 ```bash
-git clone https://github.com/spacejar/agentroot
+git clone https://github.com/epappas/agentroot
 cd agentroot
 cargo build --release
 

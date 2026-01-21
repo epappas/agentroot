@@ -144,21 +144,27 @@ See [VLLM_SETUP.md](VLLM_SETUP.md) for Basilica integration details.
 
 ## Installation
 
-### From Source
+### From crates.io (Recommended)
 
 ```bash
-git clone https://github.com/spacejar/agentroot
-cd agentroot
-cargo build --release
-
-# Install to PATH
-cargo install --path crates/agentroot-cli
+cargo install agentroot
 ```
 
 Verify installation:
 
 ```bash
 agentroot --version
+```
+
+### From Source
+
+```bash
+git clone https://github.com/epappas/agentroot
+cd agentroot
+cargo build --release
+
+# Install to PATH
+cargo install --path crates/agentroot-cli
 ```
 
 ### Dependencies

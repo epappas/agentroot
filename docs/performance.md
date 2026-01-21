@@ -426,7 +426,7 @@ sqlite3 ~/.cache/agentroot/index.sqlite "SELECT COUNT(*) FROM chunk_embeddings;"
 
 ## Contributing
 
-Found a performance issue? Please [open an issue](https://github.com/spacejar/agentroot/issues) with:
+Found a performance issue? Please [open an issue](https://github.com/epappas/agentroot/issues) with:
 1. Benchmark results showing regression
 2. System information (OS, CPU, RAM, disk type)
 3. Dataset size (number of files, total size)

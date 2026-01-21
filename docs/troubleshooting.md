@@ -1000,7 +1000,7 @@ Include:
 4. Full error message
 5. Debug logs
 
-Report issues at: https://github.com/spacejar/agentroot/issues
+Report issues at: https://github.com/epappas/agentroot/issues
 
 ## FAQ
 

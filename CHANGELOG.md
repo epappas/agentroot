@@ -233,5 +233,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Terminal UI (agentroot-tui)
 - Experimental interactive interface
 
-[Unreleased]: https://github.com/spacejar/agentroot/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/spacejar/agentroot/releases/tag/v0.1.0
+[Unreleased]: https://github.com/epappas/agentroot/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/epappas/agentroot/releases/tag/v0.1.0
