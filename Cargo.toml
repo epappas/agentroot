@@ -72,7 +72,7 @@ base64 = "0.22"
 pdf-extract = "0.7"
 
 # TUI (optional)
-ratatui = "0.29"
+ratatui = "0.30"
 crossterm = "0.28"
 arboard = "3.4"
 
