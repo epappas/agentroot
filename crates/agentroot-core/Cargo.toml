@@ -117,3 +117,7 @@ path = "../../examples/json_provider.rs"
 name = "test_cache"
 path = "../../examples/test_cache.rs"
 
+[[example]]
+name = "glossary_validation"
+path = "../../examples/glossary_validation.rs"
+
