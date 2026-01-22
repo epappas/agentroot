@@ -32,7 +32,8 @@ pub use providers::{
     ProviderRegistry, SQLProvider, SourceItem, SourceProvider, URLProvider,
 };
 pub use search::{
-    parse_metadata_filters, smart_search, unified_search, SearchOptions, SearchResult, SearchSource,
+    orchestrated_search, parse_metadata_filters, smart_search, unified_search, SearchOptions,
+    SearchResult, SearchSource,
 };
 
 /// Virtual path prefix for agentroot URIs

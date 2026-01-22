@@ -20,6 +20,7 @@ mod metadata_generator;
 mod query_parser;
 mod strategy_analyzer;
 mod traits;
+mod workflow_orchestrator;
 
 pub use client::{generate_metadata_with_llm, ChatMessage, LLMClient, MetricsSnapshot, VLLMClient};
 pub use http_embedder::HttpEmbedder;
@@ -33,3 +34,6 @@ pub use strategy_analyzer::{
     heuristic_strategy, HttpStrategyAnalyzer, SearchStrategy, StrategyAnalysis,
 };
 pub use traits::*;
+pub use workflow_orchestrator::{
+    fallback_workflow, Workflow, WorkflowContext, WorkflowOrchestrator, WorkflowStep,
+};

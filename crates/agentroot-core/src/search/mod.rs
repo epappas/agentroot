@@ -7,15 +7,19 @@
 
 mod bm25;
 mod hybrid;
+mod orchestrated;
 mod smart;
 mod snippet;
 mod unified;
 mod vector;
+mod workflow_executor;
 
 pub use hybrid::*;
+pub use orchestrated::orchestrated_search;
 pub use smart::smart_search;
 pub use snippet::*;
 pub use unified::unified_search;
+pub use workflow_executor::execute_workflow;
 
 /// Search options
 #[derive(Debug, Clone)]
