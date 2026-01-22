@@ -9,8 +9,8 @@ use std::collections::HashMap;
 /// RRF constant (standard value)
 const RRF_K: f64 = 60.0;
 
-/// Maximum documents to send to reranker
-const MAX_RERANK_DOCS: usize = 40;
+/// Maximum documents to send to reranker (reduced for LLM token limits)
+const MAX_RERANK_DOCS: usize = 10;
 
 /// Strong signal threshold
 const STRONG_SIGNAL_SCORE: f64 = 0.85;

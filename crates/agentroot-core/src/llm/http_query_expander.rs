@@ -41,9 +41,7 @@ impl QueryExpander for HttpQueryExpander {
 
         let messages = vec![
             ChatMessage::system(
-                "You are a search query expansion expert. Generate query variations to improve search recall. \
-                 Output ONLY valid JSON with these fields: \
-                 lexical (array of strings), semantic (array of strings), hyde (string or null)"
+                "Expand search queries. Output ONLY JSON: {\"lexical\": [...], \"semantic\": [...], \"hyde\": \"...\" or null}"
             ),
             ChatMessage::user(prompt),
         ];
@@ -60,41 +58,18 @@ impl QueryExpander for HttpQueryExpander {
 
 fn build_expansion_prompt(query: &str, context: Option<&str>) -> String {
     let context_info = context
-        .map(|c| format!("\n\nContext: {}", c))
+        .map(|c| format!(" Context: {}", c))
         .unwrap_or_default();
 
     format!(
-        r#"Expand this search query to improve recall:
+        r#"Query: "{}"{} Expand for better search:
 
-Query: "{}"{}
+- lexical: 2-3 synonyms/related terms
+- semantic: 2-3 rephrased questions  
+- hyde: short hypothetical answer (50 words) or null
 
-Generate query variations:
-1. Lexical variations: synonyms, abbreviations, related terms (for BM25 keyword search)
-2. Semantic variations: rephrased questions, alternative phrasings (for vector search)
-3. HyDE (optional): Generate a hypothetical ideal document that would answer this query
-
-Output JSON with:
-- lexical: array of 2-4 keyword variations
-- semantic: array of 2-4 semantic variations
-- hyde: hypothetical document (100-200 words) or null
-
-Examples:
-
-Input: "provider implementation"
-Output: {{
-  "lexical": ["provider adapter", "data source plugin", "custom provider"],
-  "semantic": ["how to implement a provider", "creating custom data sources", "extending with providers"],
-  "hyde": "A provider in this system is an adapter that connects to external data sources. To implement a custom provider, you need to implement the SourceProvider trait with methods for listing and fetching items. Providers support various backends including files, GitHub, URLs, PDFs, and SQL databases."
-}}
-
-Input: "vector search"
-Output: {{
-  "lexical": ["semantic search", "embedding search", "similarity search"],
-  "semantic": ["how does vector search work", "finding similar documents", "semantic similarity"],
-  "hyde": null
-}}
-
-Now expand the query above. Output only JSON:"#,
+Output JSON only:
+{{"lexical": [...], "semantic": [...], "hyde": "..." or null}}"#,
         query, context_info
     )
 }

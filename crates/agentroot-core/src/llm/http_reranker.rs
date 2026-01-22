@@ -42,8 +42,8 @@ impl Reranker for HttpReranker {
             return Ok(vec![]);
         }
 
-        // Limit to prevent token overflow
-        let max_docs = 40;
+        // Limit to prevent token overflow (reduced to 10 for LLM reliability)
+        let max_docs = 10;
         let docs_to_rerank = if documents.len() > max_docs {
             &documents[..max_docs]
         } else {
@@ -54,8 +54,7 @@ impl Reranker for HttpReranker {
 
         let messages = vec![
             ChatMessage::system(
-                "You are a document relevance scorer. Score each document's relevance to the query from 0.0 to 1.0. \
-                 Output ONLY valid JSON with a 'scores' array of objects with 'id' and 'score' fields."
+                "Score document relevance to query. Output ONLY JSON: {\"scores\": [{\"id\": \"...\", \"score\": 0.0-1.0}, ...]}"
             ),
             ChatMessage::user(prompt),
         ];
@@ -72,35 +71,28 @@ impl Reranker for HttpReranker {
 
 fn build_reranking_prompt(query: &str, documents: &[RerankDocument]) -> String {
     let mut prompt = format!(
-        r#"Score these documents for relevance to the query. Rate from 0.0 (not relevant) to 1.0 (highly relevant).
-
-Query: "{}"
-
-Documents:
+        r#"Q: "{}"
+Docs:
 "#,
         query
     );
 
     for (idx, doc) in documents.iter().enumerate() {
-        // Truncate document text to prevent token overflow
-        let text = if doc.text.len() > 500 {
-            format!("{}...", &doc.text[..500])
+        // Truncate document text very aggressively to prevent token overflow
+        let text = if doc.text.len() > 100 {
+            &doc.text[..100]
         } else {
-            doc.text.clone()
+            &doc.text
         };
 
-        prompt.push_str(&format!("\n[{}] ID: {}\nText: {}\n", idx, doc.id, text));
+        prompt.push_str(&format!("[{}] {}\n", idx, text));
     }
 
     prompt.push_str(
         r#"
-Output JSON with:
-- scores: array of {{"id": "...", "score": 0.0-1.0}}
-
-Example:
-{{"scores": [{{"id": "abc", "score": 0.95}}, {{"id": "def", "score": 0.72}}, {{"id": "ghi", "score": 0.45}}]}}
-
-Score all documents. Output only JSON:"#,
+Score 0-1 JSON:
+{"scores":[0.0,...]}
+"#,
     );
 
     prompt
@@ -148,12 +140,17 @@ fn parse_reranking_response(
         }
     };
 
+    // Handle simplified format: {"scores": [0.9, 0.7, ...]} by index
     let scores = if let Some(arr) = parsed_json["scores"].as_array() {
-        arr.iter()
-            .filter_map(|item| {
-                let id = item["id"].as_str()?.to_string();
-                let score = item["score"].as_f64()?;
-                Some(RerankResult { id, score })
+        documents
+            .iter()
+            .enumerate()
+            .map(|(idx, doc)| {
+                let score = arr.get(idx).and_then(|v| v.as_f64()).unwrap_or(0.5);
+                RerankResult {
+                    id: doc.id.clone(),
+                    score,
+                }
             })
             .collect()
     } else {
