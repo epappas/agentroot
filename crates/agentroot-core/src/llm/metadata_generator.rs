@@ -87,6 +87,15 @@ impl MetadataContext {
     }
 }
 
+/// Extracted concept for glossary
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ExtractedConcept {
+    /// Canonical concept term (normalized)
+    pub term: String,
+    /// Snippet showing usage (~100 chars)
+    pub snippet: String,
+}
+
 /// Generated metadata result
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct DocumentMetadata {
@@ -106,6 +115,9 @@ pub struct DocumentMetadata {
     pub difficulty: String,
     /// Suggested search queries
     pub suggested_queries: Vec<String>,
+    /// Extracted concepts for intelligent glossary
+    #[serde(default)]
+    pub extracted_concepts: Vec<ExtractedConcept>,
 }
 
 impl DocumentMetadata {
@@ -120,6 +132,7 @@ impl DocumentMetadata {
             concepts: Vec::new(),
             difficulty: String::new(),
             suggested_queries: Vec::new(),
+            extracted_concepts: Vec::new(),
         }
     }
 
@@ -134,6 +147,7 @@ impl DocumentMetadata {
             concepts: Vec::new(),
             difficulty: "intermediate".to_string(),
             suggested_queries: Vec::new(),
+            extracted_concepts: Vec::new(),
         }
     }
 
@@ -203,6 +217,7 @@ mod tests {
             concepts: vec!["testing".to_string()],
             difficulty: "beginner".to_string(),
             suggested_queries: vec!["how to test".to_string()],
+            extracted_concepts: Vec::new(),
         };
 
         assert!(metadata.is_complete());
@@ -219,6 +234,7 @@ mod tests {
             concepts: vec!["unit testing".to_string()],
             difficulty: "beginner".to_string(),
             suggested_queries: vec!["rust testing".to_string()],
+            extracted_concepts: Vec::new(),
         };
 
         let json = metadata.to_json().unwrap();

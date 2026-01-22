@@ -9,7 +9,7 @@ pub struct Database {
     pub(crate) conn: Connection,
 }
 
-const SCHEMA_VERSION: i32 = 6;
+const SCHEMA_VERSION: i32 = 7;
 
 const CREATE_TABLES: &str = r#"
 -- Content storage (content-addressable by SHA-256 hash)
@@ -260,6 +260,10 @@ impl Database {
 
         if current < 6 {
             self.migrate_to_v6()?;
+        }
+
+        if current < 7 {
+            self.migrate_to_v7()?;
         }
 
         Ok(())
@@ -679,6 +683,111 @@ impl Database {
 
         Ok(())
     }
+
+    fn migrate_to_v7(&self) -> Result<()> {
+        // Add intelligent glossary support for semantic concept discovery
+        // This adds concept extraction and linking for enhanced search
+
+        // Create concepts table (global across all collections)
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS concepts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                term TEXT NOT NULL UNIQUE,
+                normalized TEXT NOT NULL,
+                chunk_count INTEGER DEFAULT 0,
+                created_at TEXT NOT NULL
+            )",
+            [],
+        )?;
+
+        // Create indexes for concepts
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_concepts_normalized ON concepts(normalized)",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_concepts_term ON concepts(term)",
+            [],
+        )?;
+
+        // Create concept_chunks table (links concepts to specific chunks)
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS concept_chunks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                concept_id INTEGER NOT NULL,
+                chunk_hash TEXT NOT NULL,
+                document_hash TEXT NOT NULL,
+                snippet TEXT,
+                created_at TEXT NOT NULL,
+                UNIQUE(concept_id, chunk_hash),
+                FOREIGN KEY (concept_id) REFERENCES concepts(id)
+            )",
+            [],
+        )?;
+
+        // Create indexes for concept_chunks
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_concept_chunks_concept ON concept_chunks(concept_id)",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_concept_chunks_chunk ON concept_chunks(chunk_hash)",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_concept_chunks_doc ON concept_chunks(document_hash)",
+            [],
+        )?;
+
+        // Create FTS index for concept search
+        self.conn.execute(
+            "CREATE VIRTUAL TABLE IF NOT EXISTS concepts_fts USING fts5(
+                term,
+                normalized,
+                tokenize='porter unicode61'
+            )",
+            [],
+        )?;
+
+        // Create triggers to sync concepts_fts
+        self.conn.execute(
+            "CREATE TRIGGER IF NOT EXISTS concepts_ai
+             AFTER INSERT ON concepts
+             BEGIN
+                 INSERT INTO concepts_fts(rowid, term, normalized)
+                 VALUES (new.id, new.term, new.normalized);
+             END",
+            [],
+        )?;
+
+        self.conn.execute(
+            "CREATE TRIGGER IF NOT EXISTS concepts_au
+             AFTER UPDATE ON concepts
+             BEGIN
+                 DELETE FROM concepts_fts WHERE rowid = old.id;
+                 INSERT INTO concepts_fts(rowid, term, normalized)
+                 VALUES (new.id, new.term, new.normalized);
+             END",
+            [],
+        )?;
+
+        self.conn.execute(
+            "CREATE TRIGGER IF NOT EXISTS concepts_ad
+             AFTER DELETE ON concepts
+             BEGIN
+                 DELETE FROM concepts_fts WHERE rowid = old.id;
+             END",
+            [],
+        )?;
+
+        // Update schema version
+        self.conn.execute(
+            "INSERT OR REPLACE INTO schema_version (version) VALUES (?1)",
+            params![7],
+        )?;
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -725,7 +834,7 @@ mod tests {
 
         db.initialize().unwrap();
 
-        assert_eq!(db.schema_version().unwrap(), Some(6));
+        assert_eq!(db.schema_version().unwrap(), Some(7));
 
         let has_provider_type: bool = db.conn.query_row(
             "SELECT COUNT(*) > 0 FROM pragma_table_info('collections') WHERE name = 'provider_type'",
@@ -802,7 +911,7 @@ mod tests {
 
         db.initialize().unwrap();
 
-        assert_eq!(db.schema_version().unwrap(), Some(6));
+        assert_eq!(db.schema_version().unwrap(), Some(7));
 
         let metadata_columns = vec![
             "llm_summary",
@@ -893,7 +1002,7 @@ mod tests {
 
         db.initialize().unwrap();
 
-        assert_eq!(db.schema_version().unwrap(), Some(6));
+        assert_eq!(db.schema_version().unwrap(), Some(7));
 
         let has_user_metadata: bool = db
             .conn

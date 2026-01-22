@@ -53,13 +53,49 @@ Output JSON with these exact fields:
 {{
   "summary": "100-200 word summary",
   "semantic_title": "improved title", 
-  "keywords": ["keyword1", "keyword2", "keyword3", "keyword4", "keyword5"],
+  "keywords": ["keyword1", "keyword2"],
   "category": "document type (code/documentation/tutorial/reference/guide)",
   "intent": "purpose description",
-  "concepts": ["concept1", "concept2", "concept3"],
+  "concepts": ["concept1", "concept2"],
   "difficulty": "beginner/intermediate/advanced",
-  "suggested_queries": ["query1", "query2", "query3"]
+  "suggested_queries": ["query1", "query2"],
+  "extracted_concepts": [
+    {{"term": "concept phrase", "snippet": "context showing usage (~100 chars)"}}
+  ]
 }}
+
+INSTRUCTIONS for extracted_concepts:
+- Extract 5-10 KEY concepts that define this content
+- Concepts should be 1-5 words (e.g., "machine learning", "distributed system")
+- Focus on QUALITY over quantity - only meaningful concepts
+- Include brief snippet showing how concept is used (~100 chars)
+- Normalize similar terms to canonical form (e.g., "ML" → "machine learning")
+
+FEW-SHOT EXAMPLES:
+
+Example 1 - Code Documentation:
+Content: "Kubernetes orchestrates containers across distributed systems using etcd for state management. Container orchestration enables scaling..."
+extracted_concepts: [
+  {{"term": "kubernetes orchestration", "snippet": "orchestrates containers across distributed systems"}},
+  {{"term": "container management", "snippet": "using etcd for state management"}},
+  {{"term": "distributed systems", "snippet": "across distributed systems using etcd"}}
+]
+
+Example 2 - Tutorial:
+Content: "This guide explains backpropagation in neural networks. The gradient descent algorithm updates weights during training..."
+extracted_concepts: [
+  {{"term": "backpropagation", "snippet": "explains backpropagation in neural networks"}},
+  {{"term": "neural network training", "snippet": "gradient descent algorithm updates weights during"}},
+  {{"term": "gradient descent", "snippet": "gradient descent algorithm updates weights"}}
+]
+
+Example 3 - Configuration:
+Content: "Configure Rust build with cargo.toml dependencies and feature flags for conditional compilation..."
+extracted_concepts: [
+  {{"term": "rust build configuration", "snippet": "Configure Rust build with cargo.toml"}},
+  {{"term": "cargo dependencies", "snippet": "cargo.toml dependencies and feature flags"}},
+  {{"term": "feature flags", "snippet": "feature flags for conditional compilation"}}
+]
 
 JSON:"#,
             context.source_type,
