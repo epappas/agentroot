@@ -162,9 +162,37 @@ pub async fn hybrid_search(
     if let Some(rr) = reranker {
         let docs: Vec<RerankDocument> = fused
             .iter()
-            .map(|r| RerankDocument {
-                id: r.hash.clone(),
-                text: r.body.clone().unwrap_or_default(),
+            .map(|r| {
+                // Build rich context including metadata
+                let mut text = format!("Title: {}\n", r.title);
+
+                if let Some(ref cat) = r.llm_category {
+                    text.push_str(&format!("Category: {}\n", cat));
+                }
+                if let Some(ref diff) = r.llm_difficulty {
+                    text.push_str(&format!("Difficulty: {}\n", diff));
+                }
+                if let Some(ref summary) = r.llm_summary {
+                    text.push_str(&format!("Summary: {}\n", summary));
+                }
+                if let Some(ref keywords) = r.llm_keywords {
+                    text.push_str(&format!("Keywords: {}\n", keywords.join(", ")));
+                }
+
+                // Add snippet of actual content (truncated)
+                if let Some(ref body) = r.body {
+                    let snippet = if body.len() > 300 {
+                        format!("{}...", &body[..300])
+                    } else {
+                        body.clone()
+                    };
+                    text.push_str(&format!("\nContent: {}", snippet));
+                }
+
+                RerankDocument {
+                    id: r.hash.clone(),
+                    text,
+                }
             })
             .collect();
 
