@@ -100,7 +100,7 @@ fn bench_bm25_search(c: &mut Criterion) {
                 min_score: 0.0,
                 collection: None,
                 provider: None,
-                full_content: false,,
+                full_content: false,
         metadata_filters: Vec::new()
             };
 
@@ -126,7 +126,7 @@ fn bench_search_with_limits(c: &mut Criterion) {
                 min_score: 0.0,
                 collection: None,
                 provider: None,
-                full_content: false,,
+                full_content: false,
         metadata_filters: Vec::new()
             };
 
@@ -149,7 +149,7 @@ fn bench_search_with_collection_filter(c: &mut Criterion) {
             min_score: 0.0,
             collection: Some("docs".to_string()),
             provider: None,
-            full_content: false,,
+            full_content: false,
         metadata_filters: Vec::new()
         };
 
@@ -165,7 +165,7 @@ fn bench_search_with_collection_filter(c: &mut Criterion) {
             min_score: 0.0,
             collection: None,
             provider: None,
-            full_content: false,,
+            full_content: false,
         metadata_filters: Vec::new()
         };
 
@@ -191,7 +191,7 @@ fn bench_search_with_min_score(c: &mut Criterion) {
                     min_score,
                     collection: None,
                     provider: None,
-                    full_content: false,,
+                    full_content: false,
         metadata_filters: Vec::new()
                 };
 
@@ -215,7 +215,7 @@ fn bench_search_full_content(c: &mut Criterion) {
             min_score: 0.0,
             collection: None,
             provider: None,
-            full_content: false,,
+            full_content: false,
         metadata_filters: Vec::new()
         };
 
@@ -231,7 +231,7 @@ fn bench_search_full_content(c: &mut Criterion) {
             min_score: 0.0,
             collection: None,
             provider: None,
-            full_content: true,,
+            full_content: true,
         metadata_filters: Vec::new()
         };
 

@@ -141,7 +141,7 @@ fn bench_search_with_metadata(c: &mut Criterion) {
         min_score: 0.0,
         collection: Some("bench".to_string()),
         provider: None,
-        full_content: false,,
+        full_content: false,
         metadata_filters: Vec::new()
     };
 
@@ -347,7 +347,7 @@ fn bench_search_relevance_impact(c: &mut Criterion) {
         min_score: 0.0,
         collection: Some("bench".to_string()),
         provider: None,
-        full_content: false,,
+        full_content: false,
         metadata_filters: Vec::new()
     };
 

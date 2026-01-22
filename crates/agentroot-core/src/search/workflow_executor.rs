@@ -248,9 +248,9 @@ async fn execute_step(
             );
         }
 
-        WorkflowStep::Rerank { limit, query } => {
-            if let Ok(reranker) = HttpReranker::from_env() {
-                let to_rerank: Vec<SearchResult> =
+        WorkflowStep::Rerank { limit, query: _ } => {
+            if let Ok(_reranker) = HttpReranker::from_env() {
+                let _to_rerank: Vec<SearchResult> =
                     context.results.iter().take(*limit).cloned().collect();
                 // Reranking implementation would go here
                 // For now, just take top results
