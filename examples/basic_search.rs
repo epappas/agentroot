@@ -76,6 +76,7 @@ pub fn process_input(input: &str) -> Result<String, AppError> {
         collection: None,
         provider: None,
         full_content: false,
+        metadata_filters: Vec::new(),
     };
 
     let results = db.search_fts("error", &options)?;

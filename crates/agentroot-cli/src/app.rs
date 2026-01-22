@@ -169,11 +169,11 @@ pub struct GetArgs {
     pub file: String,
 
     /// Start from line number
-    #[arg(long)]
+    #[arg(long, alias = "from-line")]
     pub from: Option<usize>,
 
     /// Maximum lines to return
-    #[arg(short)]
+    #[arg(short, long = "max-lines")]
     pub l: Option<usize>,
 
     /// Include line numbers
@@ -187,7 +187,7 @@ pub struct MultiGetArgs {
     pub pattern: String,
 
     /// Maximum lines per file
-    #[arg(short)]
+    #[arg(short, long = "max-lines")]
     pub l: Option<usize>,
 
     /// Maximum file size in bytes

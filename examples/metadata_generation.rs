@@ -219,6 +219,7 @@ rustc main.rs
         collection: None,
         provider: None,
         full_content: false,
+        metadata_filters: Vec::new(),
     };
 
     let results = db.search_fts("Rust programming", &search_opts)?;

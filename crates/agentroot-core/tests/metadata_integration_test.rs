@@ -284,6 +284,7 @@ async fn test_end_to_end_metadata_generation() {
         min_score: 0.0,
         collection: Some(collection_name.to_string()),
         provider: None,
+        metadata_filters: Vec::new(),
         full_content: false,
     };
 
@@ -389,6 +390,7 @@ async fn test_metadata_improves_search_quality() {
         min_score: 0.0,
         collection: Some(collection_name.to_string()),
         provider: None,
+        metadata_filters: Vec::new(),
         full_content: false,
     };
 
@@ -483,6 +485,7 @@ async fn test_metadata_fields_in_search_results() {
         min_score: 0.0,
         collection: Some(collection_name.to_string()),
         provider: None,
+        metadata_filters: Vec::new(),
         full_content: false,
     };
 
@@ -577,6 +580,7 @@ async fn test_metadata_cache_functionality() {
         min_score: 0.0,
         collection: Some(collection_name.to_string()),
         provider: None,
+        metadata_filters: Vec::new(),
         full_content: false,
     };
 

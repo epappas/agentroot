@@ -81,6 +81,7 @@ impl App {
             collection: self.collection_filter.clone(),
             provider: self.provider_filter.clone(),
             full_content: true,
+            metadata_filters: Vec::new(),
         };
 
         match self.db.search_fts(&self.query, &options) {

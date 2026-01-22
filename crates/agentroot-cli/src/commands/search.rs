@@ -27,6 +27,11 @@ pub async fn run_bm25(args: SearchArgs, db: &Database, format: OutputFormat) -> 
 }
 
 pub async fn run_vector(args: SearchArgs, db: &Database, format: OutputFormat) -> Result<()> {
+    eprintln!(
+        "Note: 'vsearch' is deprecated. Use 'agentroot search' for automatic strategy selection."
+    );
+    eprintln!();
+
     let query = args.query.join(" ");
     let options = build_options(&args);
 
@@ -60,6 +65,11 @@ pub async fn run_vector(args: SearchArgs, db: &Database, format: OutputFormat) -
 }
 
 pub async fn run_hybrid(args: SearchArgs, db: &Database, format: OutputFormat) -> Result<()> {
+    eprintln!(
+        "Note: 'query' is deprecated. Use 'agentroot search' for automatic strategy selection."
+    );
+    eprintln!();
+
     let query = args.query.join(" ");
     let options = build_options(&args);
 
@@ -114,6 +124,7 @@ fn build_options(args: &SearchArgs) -> SearchOptions {
         collection: args.collection.clone(),
         provider: None,
         full_content: args.full,
+        metadata_filters: Vec::new(),
     }
 }
 

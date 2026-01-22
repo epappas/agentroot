@@ -331,6 +331,7 @@ pub async fn handle_search(db: &Database, args: Value) -> Result<ToolResult> {
             .and_then(|v| v.as_str())
             .map(String::from),
         full_content: false,
+        metadata_filters: Vec::new(),
     };
 
     let mut results = db.search_fts(query, &options)?;
@@ -435,6 +436,7 @@ pub async fn handle_vsearch(db: &Database, args: Value) -> Result<ToolResult> {
             .and_then(|v| v.as_str())
             .map(String::from),
         full_content: false,
+        metadata_filters: Vec::new(),
     };
 
     // Try HTTP embedder first, fallback to local
@@ -551,6 +553,7 @@ pub async fn handle_query(db: &Database, args: Value) -> Result<ToolResult> {
             .and_then(|v| v.as_str())
             .map(String::from),
         full_content: false,
+        metadata_filters: Vec::new(),
     };
 
     // Try HTTP embedder, fallback to BM25-only if not configured
@@ -665,6 +668,7 @@ pub async fn handle_smart_search(db: &Database, args: Value) -> Result<ToolResul
             .map(String::from),
         provider: None,
         full_content: false,
+        metadata_filters: Vec::new(),
     };
 
     // Use smart_search which handles parsing and fallbacks

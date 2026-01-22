@@ -30,6 +30,8 @@ pub struct SearchOptions {
     pub provider: Option<String>,
     /// Include full document content
     pub full_content: bool,
+    /// Metadata filters (field, value) e.g., ("category", "tutorial")
+    pub metadata_filters: Vec<(String, String)>,
 }
 
 impl Default for SearchOptions {
@@ -40,6 +42,7 @@ impl Default for SearchOptions {
             collection: None,
             provider: None,
             full_content: false,
+            metadata_filters: Vec::new(),
         }
     }
 }
@@ -76,4 +79,32 @@ pub enum SearchSource {
     Bm25,
     Vector,
     Hybrid,
+}
+
+/// Parse metadata filters from query string
+/// Supports syntax: "category:tutorial difficulty:beginner search terms"
+/// Returns: (clean_query, filters)
+pub fn parse_metadata_filters(query: &str) -> (String, Vec<(String, String)>) {
+    let mut filters = Vec::new();
+    let mut remaining_terms = Vec::new();
+
+    for term in query.split_whitespace() {
+        if let Some(colon_pos) = term.find(':') {
+            let field = term[..colon_pos].to_lowercase();
+            let value = term[colon_pos + 1..].to_string();
+
+            // Only parse known metadata fields as filters
+            if matches!(
+                field.as_str(),
+                "category" | "difficulty" | "tag" | "keyword"
+            ) {
+                filters.push((field, value));
+                continue;
+            }
+        }
+        remaining_terms.push(term);
+    }
+
+    let clean_query = remaining_terms.join(" ");
+    (clean_query, filters)
 }

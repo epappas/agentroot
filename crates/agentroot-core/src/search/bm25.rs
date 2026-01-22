@@ -1,14 +1,17 @@
 //! BM25 full-text search via FTS5
 
-use super::{SearchOptions, SearchResult, SearchSource};
+use super::{parse_metadata_filters, SearchOptions, SearchResult, SearchSource};
 use crate::db::{docid_from_hash, Database};
 use crate::error::Result;
 
 impl Database {
     /// Perform BM25 full-text search
     pub fn search_fts(&self, query: &str, options: &SearchOptions) -> Result<Vec<SearchResult>> {
-        // Parse metadata filters from query (e.g., "category:tutorial difficulty:beginner query terms")
-        let (clean_query, filters) = parse_metadata_filters(query);
+        // Parse metadata filters from query or use provided filters
+        let (clean_query, mut filters) = parse_metadata_filters(query);
+
+        // Merge with filters from options (options take precedence)
+        filters.extend(options.metadata_filters.clone());
 
         let mut sql = String::from(
             r#"
@@ -143,32 +146,4 @@ impl Database {
 
         Ok(filtered)
     }
-}
-
-/// Parse metadata filters from query string
-/// Supports syntax: "category:tutorial difficulty:beginner search terms"
-/// Returns: (clean_query, filters)
-fn parse_metadata_filters(query: &str) -> (String, Vec<(String, String)>) {
-    let mut filters = Vec::new();
-    let mut remaining_terms = Vec::new();
-
-    for term in query.split_whitespace() {
-        if let Some(colon_pos) = term.find(':') {
-            let field = term[..colon_pos].to_lowercase();
-            let value = term[colon_pos + 1..].to_string();
-
-            // Only parse known metadata fields as filters
-            if matches!(
-                field.as_str(),
-                "category" | "difficulty" | "tag" | "keyword"
-            ) {
-                filters.push((field, value));
-                continue;
-            }
-        }
-        remaining_terms.push(term);
-    }
-
-    let clean_query = remaining_terms.join(" ");
-    (clean_query, filters)
 }

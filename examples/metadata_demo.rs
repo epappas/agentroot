@@ -228,6 +228,7 @@ See examples/ directory for complete configuration samples.
         collection: Some("demo".to_string()),
         provider: None,
         full_content: false,
+        metadata_filters: Vec::new(),
     };
 
     let results = db.search_fts("programming OR configuration", &search_opts)?;

@@ -310,6 +310,7 @@ async fn main() -> agentroot_core::Result<()> {
         collection: Some("api-logs".to_string()),
         provider: None,
         full_content: true,
+        metadata_filters: Vec::new(),
     };
     let results = db.search_fts("POST", &options)?;
 
@@ -326,6 +327,7 @@ async fn main() -> agentroot_core::Result<()> {
         collection: Some("config".to_string()),
         provider: None,
         full_content: true,
+        metadata_filters: Vec::new(),
     };
     let results = db.search_fts("database", &options)?;
 
@@ -342,6 +344,7 @@ async fn main() -> agentroot_core::Result<()> {
         collection: Some("profiles".to_string()),
         provider: None,
         full_content: true,
+        metadata_filters: Vec::new(),
     };
     let results = db.search_fts("Alice", &options)?;
 

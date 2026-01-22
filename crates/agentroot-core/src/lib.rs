@@ -31,7 +31,9 @@ pub use providers::{
     CSVProvider, FileProvider, GitHubProvider, JSONProvider, PDFProvider, ProviderConfig,
     ProviderRegistry, SQLProvider, SourceItem, SourceProvider, URLProvider,
 };
-pub use search::{smart_search, unified_search, SearchOptions, SearchResult, SearchSource};
+pub use search::{
+    parse_metadata_filters, smart_search, unified_search, SearchOptions, SearchResult, SearchSource,
+};
 
 /// Virtual path prefix for agentroot URIs
 pub const VIRTUAL_PATH_PREFIX: &str = "agentroot://";

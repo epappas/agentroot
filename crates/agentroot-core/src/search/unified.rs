@@ -1,6 +1,6 @@
 //! Unified intelligent search - automatically chooses best strategy
 
-use super::{hybrid_search, SearchOptions, SearchResult};
+use super::{hybrid_search, parse_metadata_filters, SearchOptions, SearchResult};
 use crate::db::Database;
 use crate::error::Result;
 use crate::llm::{HttpEmbedder, HttpQueryExpander, HttpQueryParser, HttpReranker};
@@ -18,9 +18,18 @@ pub async fn unified_search(
     query: &str,
     options: &SearchOptions,
 ) -> Result<Vec<SearchResult>> {
-    // Try to parse natural language query (temporal, metadata filters)
+    // Parse metadata filters from query (category:X, difficulty:Y, etc.)
+    let (clean_query, metadata_filters) = parse_metadata_filters(query);
+
+    // Create enhanced options with parsed metadata filters
+    let mut enhanced_options = options.clone();
+    enhanced_options.metadata_filters.extend(metadata_filters);
+
+    tracing::debug!("Parsed filters: {:?}", enhanced_options.metadata_filters);
+
+    // Try to parse natural language query (temporal filters)
     let parsed_query = if let Ok(parser) = HttpQueryParser::from_env() {
-        match parser.parse(query).await {
+        match parser.parse(&clean_query).await {
             Ok(parsed) => Some(parsed),
             Err(e) => {
                 tracing::debug!("Query parsing failed: {}, using raw query", e);
@@ -31,11 +40,11 @@ pub async fn unified_search(
         None
     };
 
-    // Extract search terms and filters
+    // Extract search terms
     let search_terms = if let Some(ref pq) = parsed_query {
         &pq.search_terms
     } else {
-        query
+        &clean_query
     };
 
     // Check if embeddings are available
@@ -45,7 +54,7 @@ pub async fn unified_search(
     let results = if !has_embeddings {
         // No embeddings → BM25 only
         tracing::info!("Strategy: BM25 (no embeddings available)");
-        db.search_fts(search_terms, options)?
+        db.search_fts(search_terms, &enhanced_options)?
     } else {
         // Analyze query characteristics to choose strategy
         let is_natural_language = is_natural_language_query(query);
@@ -55,7 +64,8 @@ pub async fn unified_search(
             // Natural language question → Vector search is best
             tracing::info!("Strategy: Vector (natural language query)");
             let embedder = HttpEmbedder::from_env()?;
-            db.search_vec(search_terms, &embedder, options).await?
+            db.search_vec(search_terms, &embedder, &enhanced_options)
+                .await?
         } else {
             // Mixed or technical query → Use full hybrid with expansion & reranking
             tracing::info!("Strategy: Hybrid (mixed query)");
@@ -67,7 +77,7 @@ pub async fn unified_search(
             hybrid_search(
                 db,
                 search_terms,
-                options,
+                &enhanced_options,
                 &embedder,
                 expander
                     .as_ref()

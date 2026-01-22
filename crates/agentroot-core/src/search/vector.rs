@@ -91,7 +91,8 @@ impl Database {
         }
         let hash = parts[1];
 
-        let result = self.conn.query_row(
+        // Build SQL with metadata filters
+        let mut sql = String::from(
             "SELECT
                 'agentroot://' || d.collection || '/' || d.path as filepath,
                 d.collection || '/' || d.path as display_path,
@@ -111,9 +112,41 @@ impl Database {
              FROM documents d
              JOIN content c ON c.hash = d.hash
              JOIN content_vectors cv ON cv.hash = d.hash
-             WHERE d.hash = ?1 AND d.active = 1
-             LIMIT 1",
-            rusqlite::params![hash],
+             WHERE d.hash = ?1 AND d.active = 1",
+        );
+
+        let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(hash.to_string())];
+
+        // Apply metadata filters
+        for (field, value) in &options.metadata_filters {
+            match field.as_str() {
+                "category" => {
+                    sql.push_str(&format!(" AND d.llm_category = ?{}", params_vec.len() + 1));
+                    params_vec.push(Box::new(value.clone()));
+                }
+                "difficulty" => {
+                    sql.push_str(&format!(
+                        " AND d.llm_difficulty = ?{}",
+                        params_vec.len() + 1
+                    ));
+                    params_vec.push(Box::new(value.clone()));
+                }
+                "tag" | "keyword" => {
+                    sql.push_str(&format!(
+                        " AND d.llm_keywords LIKE ?{}",
+                        params_vec.len() + 1
+                    ));
+                    params_vec.push(Box::new(format!("%{}%", value)));
+                }
+                _ => {}
+            }
+        }
+
+        sql.push_str(" LIMIT 1");
+
+        let result = self.conn.query_row(
+            &sql,
+            rusqlite::params_from_iter(params_vec.iter().map(|p| p.as_ref())),
             |row| {
                 let keywords_json: Option<String> = row.get(11)?;
                 let keywords =

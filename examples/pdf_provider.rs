@@ -146,6 +146,7 @@ async fn main() -> anyhow::Result<()> {
             collection: Some("pdfs".to_string()),
             provider: Some("pdf".to_string()),
             full_content: false,
+        metadata_filters: Vec::new(),
         };
 
         println!("  Searching for 'document'...");

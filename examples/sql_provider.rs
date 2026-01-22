@@ -204,6 +204,7 @@ async fn main() -> anyhow::Result<()> {
         collection: Some("articles".to_string()),
         provider: Some("sql".to_string()),
         full_content: false,
+        metadata_filters: Vec::new(),
     };
 
     let queries = vec!["async programming", "database", "error handling"];

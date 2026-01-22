@@ -225,12 +225,19 @@ agentroot embed
 
 Now you can search your indexed content.
 
-#### BM25 Full-Text Search
+#### Unified Intelligent Search (Recommended)
 
-Fast keyword search using SQLite FTS5:
+The `search` command automatically chooses the best search strategy based on your query:
 
 ```bash
-agentroot search "error handling"
+# Natural language → Vector search
+agentroot search "how to handle errors"
+
+# Technical terms → Hybrid search
+agentroot search "Result<T> error handling"
+
+# General keywords → Hybrid search
+agentroot search "database connection"
 ```
 
 Output:
@@ -241,46 +248,45 @@ Output:
  68% myproject/src/main.rs #789abc
 ```
 
-Search in specific collection:
+**Metadata Filtering**: Filter by auto-generated metadata:
 
 ```bash
+agentroot search "provider category:tutorial"
+agentroot search "async difficulty:beginner"
+agentroot search "error tag:rust"
+```
+
+**Search Options**:
+
+```bash
+# Search in specific collection
 agentroot search "function" -c myproject
-```
 
-Get more results:
-
-```bash
+# Get more results
 agentroot search "database" -n 20
-```
 
-Show full document content:
-
-```bash
+# Show full document content
 agentroot search "config" --full
 ```
 
-#### Vector Similarity Search
+#### Advanced: Explicit Search Types
 
-Semantic search using embeddings:
+For power users who want control over the search strategy:
 
+**Vector Search** (semantic understanding):
 ```bash
 agentroot vsearch "how to handle errors"
 ```
 
-This finds semantically similar content even if exact keywords don't match.
-
-#### Hybrid Search (Best Quality)
-
-Combines BM25 and vector search with Reciprocal Rank Fusion:
-
+**Hybrid Search** (BM25 + vector + RRF):
 ```bash
 agentroot query "error handling"
 ```
 
-Hybrid search provides the best results by leveraging both:
-- BM25 for exact keyword matches
-- Vector search for semantic understanding
-- RRF fusion to combine rankings intelligently
+**Smart Search** (LLM-powered query understanding):
+```bash
+agentroot smart "show me all async error handlers"
+```
 
 ### Step 5: Retrieve Documents
 

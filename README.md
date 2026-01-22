@@ -185,10 +185,11 @@ agentroot update
 # 3. Generate embeddings (downloads model on first run)
 agentroot embed
 
-# 4. Search
-agentroot search "error handling"      # BM25 full-text search
-agentroot vsearch "error handling"     # Vector similarity search
-agentroot query "error handling"       # Hybrid search (best quality)
+# 4. Search (unified intelligent search - automatically chooses best strategy)
+agentroot search "error handling"      # Automatically uses BM25/vector/hybrid based on query
+agentroot search "how to handle errors"  # Natural language → vector search
+agentroot search "Result<T>"           # Technical terms → hybrid search
+agentroot search "provider category:tutorial"  # With metadata filtering
 ```
 
 ### Option 2: AI-Powered with Basilica (Recommended)
@@ -352,17 +353,15 @@ agentroot embed
 ### Search for Error Handling Patterns
 
 ```bash
-# Keyword search (fast, <10ms)
-agentroot search "Result<T>"
+# Unified intelligent search - automatically chooses best strategy
+agentroot search "Result<T>"                    # Technical → hybrid search
+agentroot search "how to handle database errors"  # Natural language → vector search
+agentroot search "error handling"                # General → hybrid search
+agentroot search "async category:code"           # With metadata filtering
 
-# Semantic search (understands meaning, ~100ms)
-agentroot vsearch "how to handle database errors"
-
-# Hybrid search (best quality, ~150ms)
-agentroot query "error handling patterns in async code"
-
-# AI natural language search (with vLLM, understands complex queries)
-agentroot smart "show me all files that deal with async error handling"
+# Advanced: explicit search types (for power users)
+agentroot vsearch "how to..."     # Force vector search
+agentroot query "Result<T>"       # Force hybrid search
 ```
 
 Example output:
