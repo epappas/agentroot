@@ -125,3 +125,7 @@ path = "../../examples/glossary_validation.rs"
 name = "test_glossary_search"
 path = "../../examples/test_glossary_search.rs"
 
+[[example]]
+name = "glossary_benchmark"
+path = "../../examples/glossary_benchmark.rs"
+
