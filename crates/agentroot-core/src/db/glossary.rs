@@ -78,8 +78,10 @@ impl Database {
 
     /// Search concepts using FTS
     pub fn search_concepts(&self, query: &str, limit: usize) -> Result<Vec<ConceptInfo>> {
-        // Use raw query for FTS search (don't normalize)
-        // FTS5 will tokenize naturally on word boundaries
+        // Search only the 'term' column using column-specific FTS query
+        // This ensures multi-word queries like "semantic search" work correctly
+        let fts_query = format!("term:{}", query);
+
         let mut stmt = self.conn.prepare(
             "SELECT c.id, c.term, c.normalized, c.chunk_count
              FROM concepts c
@@ -90,7 +92,7 @@ impl Database {
         )?;
 
         let concepts = stmt
-            .query_map(params![query, limit], map_concept_row)?
+            .query_map(params![fts_query, limit], map_concept_row)?
             .collect::<std::result::Result<Vec<_>, _>>()?;
 
         Ok(concepts)

@@ -440,6 +440,8 @@ async fn execute_step(
             // Search concepts using FTS
             let concepts = db.search_concepts(query, *limit)?;
 
+            eprintln!("[DEBUG] GlossarySearch: query='{}', found {} concepts", query, concepts.len());
+            
             if concepts.is_empty() {
                 tracing::debug!("GlossarySearch: No concepts found for query '{}'", query);
             } else {
@@ -448,6 +450,9 @@ async fn execute_step(
                     concepts.len(),
                     query
                 );
+                for c in &concepts {
+                    eprintln!("[DEBUG]   - Concept: '{}' (id={})", c.term, c.id);
+                }
             }
 
             let mut glossary_results = Vec::new();
@@ -455,8 +460,10 @@ async fn execute_step(
             for concept in concepts {
                 // Get chunks for each concept
                 let chunk_infos = db.get_chunks_for_concept(concept.id)?;
+                eprintln!("[DEBUG]   Concept '{}' has {} chunks", concept.term, chunk_infos.len());
 
                 for chunk_info in chunk_infos {
+                    eprintln!("[DEBUG]     Querying doc with hash: {}", &chunk_info.document_hash[..16]);
                     // Query document metadata directly from database
                     let doc_query = db.conn.query_row(
                         "SELECT d.collection, d.modified_at, d.llm_summary, d.llm_title, d.llm_keywords, d.llm_category, d.llm_difficulty
@@ -478,6 +485,7 @@ async fn execute_step(
 
                     match doc_query {
                         Ok((collection_name, modified_at, llm_summary, llm_title, llm_keywords_json, llm_category, llm_difficulty)) => {
+                            eprintln!("[DEBUG]       Document found! path={}", chunk_info.document_path);
                         // Parse keywords JSON if present
                         let llm_keywords = llm_keywords_json
                             .and_then(|json| serde_json::from_str::<Vec<String>>(&json).ok());

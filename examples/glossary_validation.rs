@@ -190,11 +190,14 @@ async fn main() {
         )
         .unwrap();
 
+        // Create proper chunk hash using blake3 (64-char hex string)
+        let chunk_hash = blake3::hash(content.as_bytes()).to_hex().to_string();
+        
         db.insert_chunk_embedding(
             &hash,
             0,
             0,
-            &format!("chunk_{}", path.replace('/', "_")),
+            &chunk_hash,
             "test-model",
             &vec![0.1; 128],
         )
@@ -204,7 +207,7 @@ async fn main() {
             let concept_id = db.upsert_concept(&concept.term).unwrap();
             db.link_concept_to_chunk(
                 concept_id,
-                &format!("chunk_{}", path.replace('/', "_")),
+                &chunk_hash,
                 &hash,
                 &concept.snippet,
             )
@@ -225,31 +228,52 @@ async fn main() {
         std::process::exit(1);
     }
 
+    // DEBUG: Test concept searching and chunk linkage
+    println!("\n  🔍 DEBUG: Testing concept search and document query...");
+    
+    let test_searches = vec!["semantic", "provider"];
+    for test_q in &test_searches {
+        let concepts = db.search_concepts(test_q, 10).unwrap();
+        println!("    Search '{}': {} concepts", test_q, concepts.len());
+        if !concepts.is_empty() {
+            for concept in &concepts {
+                let chunks = db.get_chunks_for_concept(concept.id).unwrap();
+                println!("      Concept '{}': {} chunks", concept.term, chunks.len());
+                if !chunks.is_empty() {
+                    let chunk = &chunks[0];
+                    println!("        Chunk hash: {}", &chunk.chunk_hash[..16]);
+                    println!("        Doc hash: {}", &chunk.document_hash[..16]);
+                    println!("        Doc path: {}", chunk.document_path);
+                }
+            }
+        }
+    }
+
     println!("\n▶ Phase 3: Running comparative search tests");
 
     let test_queries = vec![
         QueryTest {
-            query: "workflow orchestration",
-            category: "Abstract technical term",
-            expected_keywords: vec!["workflow", "coordinator", "manager"],
+            query: "code indexing",
+            category: "Abstract process (maps to AST-aware chunking)",
+            expected_keywords: vec!["ast", "chunking", "parser"],
             should_use_glossary: true,
         },
         QueryTest {
-            query: "provider system",
-            category: "Architecture concept",
-            expected_keywords: vec!["source", "file", "github", "plugin"],
+            query: "data sources",
+            category: "Architecture (maps to provider system)",
+            expected_keywords: vec!["provider", "source", "file"],
             should_use_glossary: true,
         },
         QueryTest {
-            query: "semantic search",
-            category: "Feature description",
-            expected_keywords: vec!["vector", "embedding", "similarity"],
+            query: "search algorithms",
+            category: "Technical concept (maps to BM25, hybrid search)",
+            expected_keywords: vec!["bm25", "hybrid", "vector"],
             should_use_glossary: true,
         },
         QueryTest {
-            query: "testing guidelines",
-            category: "Development process",
-            expected_keywords: vec!["test", "quality", "verification"],
+            query: "database tables",
+            category: "Implementation detail (maps to schema)",
+            expected_keywords: vec!["schema", "documents", "collections"],
             should_use_glossary: true,
         },
     ];
