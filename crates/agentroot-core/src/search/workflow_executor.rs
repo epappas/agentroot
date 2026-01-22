@@ -4,7 +4,8 @@ use super::{hybrid_search, SearchOptions, SearchResult};
 use crate::db::Database;
 use crate::error::Result;
 use crate::llm::{
-    HttpEmbedder, HttpQueryExpander, HttpReranker, Workflow, WorkflowContext, WorkflowStep,
+    HttpEmbedder, HttpQueryExpander, HttpReranker, MergeStrategy, QueryExpander, RerankDocument,
+    Reranker, Workflow, WorkflowContext, WorkflowStep,
 };
 use chrono::{DateTime, Duration, Utc};
 use std::collections::HashMap;
@@ -248,14 +249,72 @@ async fn execute_step(
             );
         }
 
-        WorkflowStep::Rerank { limit, query: _ } => {
-            if let Ok(_reranker) = HttpReranker::from_env() {
-                let _to_rerank: Vec<SearchResult> =
-                    context.results.iter().take(*limit).cloned().collect();
-                // Reranking implementation would go here
-                // For now, just take top results
-                context.results = context.results.into_iter().take(*limit).collect();
+        WorkflowStep::Rerank { limit, query } => {
+            if let Ok(reranker) = HttpReranker::from_env() {
+                // Prepare documents for reranking
+                let to_rerank: Vec<(usize, SearchResult)> = context
+                    .results
+                    .iter()
+                    .enumerate()
+                    .take(*limit)
+                    .map(|(idx, result)| (idx, result.clone()))
+                    .collect();
+
+                if !to_rerank.is_empty() {
+                    // Convert to RerankDocument
+                    let rerank_docs: Vec<RerankDocument> = to_rerank
+                        .iter()
+                        .map(|(idx, result)| RerankDocument {
+                            id: idx.to_string(),
+                            text: format!(
+                                "{} {}\n{}",
+                                result.title,
+                                result.llm_summary.as_deref().unwrap_or(""),
+                                result
+                                    .body
+                                    .as_deref()
+                                    .unwrap_or("")
+                                    .chars()
+                                    .take(500)
+                                    .collect::<String>()
+                            ),
+                        })
+                        .collect();
+
+                    // Rerank
+                    match reranker.rerank(query, &rerank_docs).await {
+                        Ok(reranked) => {
+                            // Map back to SearchResults in new order
+                            let mut reranked_results = Vec::new();
+                            for rr in reranked {
+                                if let Ok(idx) = rr.id.parse::<usize>() {
+                                    if let Some((_, mut result)) = to_rerank.get(idx).cloned() {
+                                        // Update score with reranker score
+                                        result.score = rr.score;
+                                        reranked_results.push(result);
+                                    }
+                                }
+                            }
+
+                            // Replace with reranked results
+                            context.results = reranked_results;
+
+                            tracing::debug!(
+                                "Reranked {} results using {}",
+                                context.results.len(),
+                                reranker.model_name()
+                            );
+                        }
+                        Err(e) => {
+                            tracing::warn!("Reranking failed: {}, keeping original order", e);
+                            context.results = context.results.into_iter().take(*limit).collect();
+                        }
+                    }
+                } else {
+                    context.results = context.results.into_iter().take(*limit).collect();
+                }
             } else {
+                // No reranker available, just limit results
                 context.results = context.results.into_iter().take(*limit).collect();
             }
 
@@ -295,10 +354,97 @@ async fn execute_step(
                 .push(("limit".to_string(), context.results.len()));
         }
 
-        WorkflowStep::ExpandQuery { .. } | WorkflowStep::Merge { .. } => {
-            // These would require more complex state management
-            // Not implemented in initial version
-            tracing::warn!("Step {:?} not yet implemented", step);
+        WorkflowStep::ExpandQuery { original_query } => {
+            // Expand query and perform searches for each variant
+            if let Ok(expander) = HttpQueryExpander::from_env() {
+                match expander.expand(original_query, None).await {
+                    Ok(expanded) => {
+                        let mut all_results = Vec::new();
+
+                        // Search using lexical variations (BM25)
+                        for variant in &expanded.lexical {
+                            if variant != original_query {
+                                let opts = base_options.clone();
+                                match db.search_fts(variant, &opts) {
+                                    Ok(mut results) => {
+                                        all_results.append(&mut results);
+                                    }
+                                    Err(e) => {
+                                        tracing::warn!(
+                                            "ExpandQuery: Failed to search variant '{}': {}",
+                                            variant,
+                                            e
+                                        );
+                                    }
+                                }
+                            }
+                        }
+
+                        // Search using semantic variations (vector search)
+                        if let Ok(embedder) = HttpEmbedder::from_env() {
+                            for variant in &expanded.semantic {
+                                if variant != original_query {
+                                    let opts = base_options.clone();
+                                    match db.search_vec(variant, &embedder, &opts).await {
+                                        Ok(mut results) => {
+                                            all_results.append(&mut results);
+                                        }
+                                        Err(e) => {
+                                            tracing::warn!(
+                                                "ExpandQuery: Failed to vector search variant '{}': {}",
+                                                variant,
+                                                e
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Merge with existing results using RRF
+                        context.results.append(&mut all_results);
+                        context.results = merge_results_rrf(&context.results);
+
+                        tracing::debug!(
+                            "ExpandQuery: Expanded to {} lexical + {} semantic variants, merged {} results",
+                            expanded.lexical.len(),
+                            expanded.semantic.len(),
+                            context.results.len()
+                        );
+                    }
+                    Err(e) => {
+                        tracing::warn!("ExpandQuery: Query expansion failed: {}", e);
+                    }
+                }
+            } else {
+                tracing::debug!("ExpandQuery: QueryExpander not available, skipping");
+            }
+
+            context
+                .step_results
+                .push(("expand_query".to_string(), context.results.len()));
+        }
+
+        WorkflowStep::Merge { strategy } => {
+            // Merge duplicate results using the specified strategy
+            let initial_count = context.results.len();
+
+            context.results = match strategy {
+                MergeStrategy::Rrf => merge_results_rrf(&context.results),
+                MergeStrategy::Interleave => merge_results_interleave(&context.results),
+                MergeStrategy::Append => merge_results_append(&context.results),
+            };
+
+            context
+                .step_results
+                .push(("merge".to_string(), context.results.len()));
+
+            tracing::debug!(
+                "Merge ({:?}): {} → {} results",
+                strategy,
+                initial_count,
+                context.results.len()
+            );
         }
     }
 
@@ -311,36 +457,82 @@ fn parse_temporal_expression(expr: Option<&str>) -> Result<Option<DateTime<Utc>>
         return Ok(None);
     };
 
+    let expr_trimmed = expr.trim();
+    if expr_trimmed.is_empty() {
+        return Ok(None);
+    }
+
     // Try parsing as ISO date first
-    if let Ok(dt) = DateTime::parse_from_rfc3339(expr) {
+    if let Ok(dt) = DateTime::parse_from_rfc3339(expr_trimmed) {
         return Ok(Some(dt.with_timezone(&Utc)));
     }
 
     // Parse relative expressions
-    let expr_lower = expr.to_lowercase();
+    let expr_lower = expr_trimmed.to_lowercase();
 
     if expr_lower.contains("ago") {
         let now = Utc::now();
+        let now_naive = now.naive_utc();
 
         if expr_lower.contains("month") {
             if let Some(num) = extract_number(&expr_lower) {
-                return Ok(Some(now - Duration::days(num * 30)));
+                // Use proper month arithmetic with chrono
+                let target_date = now_naive
+                    .date()
+                    .checked_sub_months(chrono::Months::new(num as u32))
+                    .ok_or_else(|| {
+                        crate::error::AgentRootError::Search(format!(
+                            "Invalid month calculation: {} months ago",
+                            num
+                        ))
+                    })?;
+                let target_datetime = target_date.and_time(now_naive.time());
+                return Ok(Some(DateTime::from_naive_utc_and_offset(
+                    target_datetime,
+                    Utc,
+                )));
+            } else {
+                tracing::warn!("Failed to parse number from temporal expression: '{}'", expr);
+                return Ok(None);
             }
         } else if expr_lower.contains("week") {
             if let Some(num) = extract_number(&expr_lower) {
                 return Ok(Some(now - Duration::weeks(num)));
+            } else {
+                tracing::warn!("Failed to parse number from temporal expression: '{}'", expr);
+                return Ok(None);
             }
         } else if expr_lower.contains("day") {
             if let Some(num) = extract_number(&expr_lower) {
                 return Ok(Some(now - Duration::days(num)));
+            } else {
+                tracing::warn!("Failed to parse number from temporal expression: '{}'", expr);
+                return Ok(None);
             }
         } else if expr_lower.contains("year") {
             if let Some(num) = extract_number(&expr_lower) {
-                return Ok(Some(now - Duration::days(num * 365)));
+                // Use proper year arithmetic with chrono
+                let years = if num % 4 == 0 {
+                    // Account for leap years (366 days)
+                    num * 365 + (num / 4)
+                } else {
+                    num * 365 + ((num + 3) / 4)
+                };
+                return Ok(Some(now - Duration::days(years)));
+            } else {
+                tracing::warn!("Failed to parse number from temporal expression: '{}'", expr);
+                return Ok(None);
             }
+        } else {
+            tracing::warn!(
+                "Temporal expression '{}' contains 'ago' but no recognized time unit (day/week/month/year)",
+                expr
+            );
+            return Ok(None);
         }
     }
 
+    tracing::warn!("Unable to parse temporal expression: '{}'", expr);
     Ok(None)
 }
 
@@ -348,4 +540,64 @@ fn parse_temporal_expression(expr: Option<&str>) -> Result<Option<DateTime<Utc>>
 fn extract_number(s: &str) -> Option<i64> {
     s.split_whitespace()
         .find_map(|word| word.parse::<i64>().ok())
+}
+
+/// Merge results using Reciprocal Rank Fusion (RRF)
+fn merge_results_rrf(results: &[SearchResult]) -> Vec<SearchResult> {
+    const RRF_K: f64 = 60.0;
+
+    // Group results by hash
+    let mut score_map: HashMap<String, (f64, SearchResult)> = HashMap::new();
+
+    for (rank, result) in results.iter().enumerate() {
+        let rrf_score = 1.0 / (rank as f64 + RRF_K);
+
+        score_map
+            .entry(result.hash.clone())
+            .and_modify(|(score, _)| *score += rrf_score)
+            .or_insert((rrf_score, result.clone()));
+    }
+
+    // Sort by combined RRF score
+    let mut merged: Vec<(f64, SearchResult)> = score_map.into_values().collect();
+    merged.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+
+    merged
+        .into_iter()
+        .map(|(score, mut result)| {
+            result.score = score;
+            result
+        })
+        .collect()
+}
+
+/// Merge results by interleaving (round-robin)
+fn merge_results_interleave(results: &[SearchResult]) -> Vec<SearchResult> {
+    // Group by hash to deduplicate
+    let mut seen = HashMap::new();
+    let mut deduped = Vec::new();
+
+    for result in results {
+        if !seen.contains_key(&result.hash) {
+            seen.insert(result.hash.clone(), true);
+            deduped.push(result.clone());
+        }
+    }
+
+    deduped
+}
+
+/// Merge results by appending (preserve order, deduplicate)
+fn merge_results_append(results: &[SearchResult]) -> Vec<SearchResult> {
+    let mut seen = HashMap::new();
+    let mut merged = Vec::new();
+
+    for result in results {
+        if !seen.contains_key(&result.hash) {
+            seen.insert(result.hash.clone(), true);
+            merged.push(result.clone());
+        }
+    }
+
+    merged
 }

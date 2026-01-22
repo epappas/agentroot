@@ -35,5 +35,6 @@ pub use strategy_analyzer::{
 };
 pub use traits::*;
 pub use workflow_orchestrator::{
-    fallback_workflow, Workflow, WorkflowContext, WorkflowOrchestrator, WorkflowStep,
+    fallback_workflow, MergeStrategy, Workflow, WorkflowContext, WorkflowOrchestrator,
+    WorkflowStep,
 };
