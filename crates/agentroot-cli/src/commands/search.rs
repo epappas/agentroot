@@ -3,16 +3,18 @@
 use crate::app::{OutputFormat, SearchArgs};
 use crate::output::{format_search_results, FormatOptions};
 use agentroot_core::{
-    smart_search, Database, Embedder, HttpEmbedder, HttpQueryExpander, HttpReranker, QueryExpander,
-    Reranker, SearchOptions,
+    smart_search, unified_search, Database, Embedder, HttpEmbedder, HttpQueryExpander,
+    HttpReranker, QueryExpander, Reranker, SearchOptions,
 };
 use anyhow::Result;
 
+/// Unified intelligent search - automatically chooses best strategy
 pub async fn run_bm25(args: SearchArgs, db: &Database, format: OutputFormat) -> Result<()> {
     let query = args.query.join(" ");
     let options = build_options(&args);
 
-    let results = db.search_fts(&query, &options)?;
+    // Use unified search that automatically handles everything
+    let results = unified_search(db, &query, &options).await?;
 
     let format_opts = FormatOptions {
         full: args.full,

@@ -9,11 +9,13 @@ mod bm25;
 mod hybrid;
 mod smart;
 mod snippet;
+mod unified;
 mod vector;
 
 pub use hybrid::*;
 pub use smart::smart_search;
 pub use snippet::*;
+pub use unified::unified_search;
 
 /// Search options
 #[derive(Debug, Clone)]
