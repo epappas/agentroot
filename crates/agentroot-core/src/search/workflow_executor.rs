@@ -60,10 +60,12 @@ async fn execute_step(
             let mut opts = base_options.clone();
             opts.limit = *limit;
 
-            context.results = db.search_fts(query, &opts)?;
+            let mut new_results = db.search_fts(query, &opts)?;
+            let count = new_results.len();
+            context.results.append(&mut new_results);
             context
                 .step_results
-                .push(("bm25_search".to_string(), context.results.len()));
+                .push(("bm25_search".to_string(), count));
         }
 
         WorkflowStep::VectorSearch { query, limit } => {
@@ -71,10 +73,12 @@ async fn execute_step(
             let mut opts = base_options.clone();
             opts.limit = *limit;
 
-            context.results = db.search_vec(query, &embedder, &opts).await?;
+            let mut new_results = db.search_vec(query, &embedder, &opts).await?;
+            let count = new_results.len();
+            context.results.append(&mut new_results);
             context
                 .step_results
-                .push(("vector_search".to_string(), context.results.len()));
+                .push(("vector_search".to_string(), count));
         }
 
         WorkflowStep::HybridSearch {
@@ -99,7 +103,7 @@ async fn execute_step(
                 None
             };
 
-            context.results = hybrid_search(
+            let mut new_results = hybrid_search(
                 db,
                 query,
                 &opts,
@@ -111,9 +115,11 @@ async fn execute_step(
             )
             .await?;
 
+            let count = new_results.len();
+            context.results.append(&mut new_results);
             context
                 .step_results
-                .push(("hybrid_search".to_string(), context.results.len()));
+                .push(("hybrid_search".to_string(), count));
         }
 
         WorkflowStep::FilterMetadata {
@@ -470,7 +476,8 @@ async fn execute_step(
                         },
                     );
 
-                    if let Ok((collection_name, modified_at, llm_summary, llm_title, llm_keywords_json, llm_category, llm_difficulty)) = doc_query {
+                    match doc_query {
+                        Ok((collection_name, modified_at, llm_summary, llm_title, llm_keywords_json, llm_category, llm_difficulty)) => {
                         // Parse keywords JSON if present
                         let llm_keywords = llm_keywords_json
                             .and_then(|json| serde_json::from_str::<Vec<String>>(&json).ok());
@@ -497,21 +504,31 @@ async fn execute_step(
                             user_metadata: None,
                         };
                         glossary_results.push(result);
+                        }
+                        Err(e) => {
+                            tracing::warn!(
+                                "Failed to query document metadata for hash {}: {}",
+                                &chunk_info.document_hash,
+                                e
+                            );
+                        }
                     }
                 }
             }
 
             // Deduplicate by document hash
             let mut seen = std::collections::HashSet::new();
-            context.results = glossary_results
+            let mut new_results: Vec<SearchResult> = glossary_results
                 .into_iter()
                 .filter(|r| seen.insert(r.hash.clone()))
                 .take(*limit)
                 .collect();
 
+            let count = new_results.len();
+            context.results.append(&mut new_results);
             context
                 .step_results
-                .push(("glossary_search".to_string(), context.results.len()));
+                .push(("glossary_search".to_string(), count));
 
             tracing::debug!(
                 "GlossarySearch: Returned {} unique documents",

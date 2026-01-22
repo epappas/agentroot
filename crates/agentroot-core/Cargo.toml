@@ -121,3 +121,7 @@ path = "../../examples/test_cache.rs"
 name = "glossary_validation"
 path = "../../examples/glossary_validation.rs"
 
+[[example]]
+name = "test_glossary_search"
+path = "../../examples/test_glossary_search.rs"
+
