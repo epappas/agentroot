@@ -18,6 +18,7 @@ mod http_query_parser;
 mod http_reranker;
 mod metadata_generator;
 mod query_parser;
+mod strategy_analyzer;
 mod traits;
 
 pub use client::{generate_metadata_with_llm, ChatMessage, LLMClient, MetricsSnapshot, VLLMClient};
@@ -28,4 +29,7 @@ pub use http_query_parser::HttpQueryParser;
 pub use http_reranker::HttpReranker;
 pub use metadata_generator::{DocumentMetadata, MetadataContext, MetadataGenerator};
 pub use query_parser::{MetadataFilterHint, ParsedQuery, SearchType, TemporalFilter};
+pub use strategy_analyzer::{
+    heuristic_strategy, HttpStrategyAnalyzer, SearchStrategy, StrategyAnalysis,
+};
 pub use traits::*;

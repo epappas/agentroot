@@ -1,9 +1,15 @@
 //! Unified intelligent search - automatically chooses best strategy
+//!
+//! Uses LLM to analyze query intent and select optimal search strategy.
+//! Falls back to heuristics if LLM unavailable.
 
 use super::{hybrid_search, parse_metadata_filters, SearchOptions, SearchResult};
 use crate::db::Database;
 use crate::error::Result;
-use crate::llm::{HttpEmbedder, HttpQueryExpander, HttpQueryParser, HttpReranker};
+use crate::llm::{
+    heuristic_strategy, HttpEmbedder, HttpQueryExpander, HttpQueryParser, HttpReranker,
+    HttpStrategyAnalyzer, SearchStrategy,
+};
 
 /// Unified intelligent search that automatically:
 /// 1. Parses metadata filters (category:X, difficulty:Y)
@@ -50,26 +56,64 @@ pub async fn unified_search(
     // Check if embeddings are available
     let has_embeddings = db.has_vector_index();
 
-    // Automatically choose best search strategy
-    let results = if !has_embeddings {
+    if !has_embeddings {
         // No embeddings → BM25 only
         tracing::info!("Strategy: BM25 (no embeddings available)");
-        db.search_fts(search_terms, &enhanced_options)?
-    } else {
-        // Analyze query characteristics to choose strategy
-        let is_natural_language = is_natural_language_query(query);
-        let has_exact_terms = has_exact_technical_terms(query);
+        return db.search_fts(search_terms, &enhanced_options);
+    }
 
-        if is_natural_language && !has_exact_terms {
-            // Natural language question → Vector search is best
-            tracing::info!("Strategy: Vector (natural language query)");
+    // Try LLM-based strategy selection first
+    let strategy = match HttpStrategyAnalyzer::from_env() {
+        Ok(analyzer) => match analyzer.analyze(search_terms).await {
+            Ok(analysis) => {
+                tracing::info!(
+                    "LLM Strategy: {:?} (confidence: {:.2}, reasoning: {})",
+                    analysis.strategy,
+                    analysis.confidence,
+                    analysis.reasoning
+                );
+                if analysis.is_multilingual {
+                    tracing::info!("Multilingual query detected");
+                }
+                analysis.strategy
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "LLM strategy analysis failed: {}, using heuristic fallback",
+                    e
+                );
+                let fallback = heuristic_strategy(search_terms, has_embeddings);
+                tracing::info!(
+                    "Heuristic Strategy: {:?} (reasoning: {})",
+                    fallback.strategy,
+                    fallback.reasoning
+                );
+                fallback.strategy
+            }
+        },
+        Err(_) => {
+            // LLM not configured, use heuristics
+            let fallback = heuristic_strategy(search_terms, has_embeddings);
+            tracing::debug!(
+                "Heuristic Strategy: {:?} (reasoning: {})",
+                fallback.strategy,
+                fallback.reasoning
+            );
+            fallback.strategy
+        }
+    };
+
+    // Execute search based on strategy
+    let results = match strategy {
+        SearchStrategy::Bm25 => db.search_fts(search_terms, &enhanced_options)?,
+
+        SearchStrategy::Vector => {
             let embedder = HttpEmbedder::from_env()?;
             db.search_vec(search_terms, &embedder, &enhanced_options)
                 .await?
-        } else {
-            // Mixed or technical query → Use full hybrid with expansion & reranking
-            tracing::info!("Strategy: Hybrid (mixed query)");
+        }
 
+        SearchStrategy::Hybrid => {
             let embedder = HttpEmbedder::from_env()?;
             let expander = HttpQueryExpander::from_env().ok();
             let reranker = HttpReranker::from_env().ok();
@@ -111,42 +155,6 @@ pub async fn unified_search(
     };
 
     Ok(results)
-}
-
-/// Detect if query is natural language (vs technical terms)
-fn is_natural_language_query(query: &str) -> bool {
-    let nl_indicators = [
-        "how to",
-        "how do",
-        "what is",
-        "what are",
-        "why does",
-        "why do",
-        "when should",
-        "where can",
-        "who is",
-        "explain",
-        "show me",
-        "help me",
-        "tutorial",
-        "guide",
-        "example",
-    ];
-
-    let lower = query.to_lowercase();
-    nl_indicators
-        .iter()
-        .any(|indicator| lower.contains(indicator))
-}
-
-/// Detect if query has exact technical terms (code symbols, trait names, etc.)
-fn has_exact_technical_terms(query: &str) -> bool {
-    // Look for PascalCase, snake_case, SCREAMING_CASE, or :: (Rust paths)
-    query.contains("::")
-        || query
-            .chars()
-            .any(|c| c.is_uppercase() && query.chars().filter(|&c| c == '_').count() == 0)
-        || query.contains('_')
 }
 
 /// Apply temporal filter to results
