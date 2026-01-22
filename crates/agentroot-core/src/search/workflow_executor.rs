@@ -1,6 +1,6 @@
 //! Workflow execution engine - runs planned workflows step-by-step
 
-use super::{hybrid_search, SearchOptions, SearchResult};
+use super::{hybrid_search, SearchOptions, SearchResult, SearchSource};
 use crate::db::Database;
 use crate::error::Result;
 use crate::llm::{
@@ -8,6 +8,7 @@ use crate::llm::{
     Reranker, Workflow, WorkflowContext, WorkflowStep,
 };
 use chrono::{DateTime, Duration, Utc};
+use rusqlite::params;
 use std::collections::HashMap;
 
 /// Execute a planned workflow
@@ -423,6 +424,99 @@ async fn execute_step(
             context
                 .step_results
                 .push(("expand_query".to_string(), context.results.len()));
+        }
+
+        WorkflowStep::GlossarySearch {
+            query,
+            limit,
+            min_confidence,
+        } => {
+            // Search concepts using FTS
+            let concepts = db.search_concepts(query, *limit)?;
+
+            if concepts.is_empty() {
+                tracing::debug!("GlossarySearch: No concepts found for query '{}'", query);
+            } else {
+                tracing::debug!(
+                    "GlossarySearch: Found {} concepts for query '{}'",
+                    concepts.len(),
+                    query
+                );
+            }
+
+            let mut glossary_results = Vec::new();
+
+            for concept in concepts {
+                // Get chunks for each concept
+                let chunk_infos = db.get_chunks_for_concept(concept.id)?;
+
+                for chunk_info in chunk_infos {
+                    // Query document metadata directly from database
+                    let doc_query = db.conn.query_row(
+                        "SELECT d.collection, d.modified_at, d.llm_summary, d.llm_title, d.llm_keywords, d.llm_category, d.llm_difficulty
+                         FROM documents d
+                         WHERE d.hash = ?1 AND d.active = 1",
+                        params![&chunk_info.document_hash],
+                        |row| {
+                            Ok((
+                                row.get::<_, String>(0)?,  // collection
+                                row.get::<_, String>(1)?,  // modified_at
+                                row.get::<_, Option<String>>(2)?,  // llm_summary
+                                row.get::<_, Option<String>>(3)?,  // llm_title
+                                row.get::<_, Option<String>>(4)?,  // llm_keywords
+                                row.get::<_, Option<String>>(5)?,  // llm_category
+                                row.get::<_, Option<String>>(6)?,  // llm_difficulty
+                            ))
+                        },
+                    );
+
+                    if let Ok((collection_name, modified_at, llm_summary, llm_title, llm_keywords_json, llm_category, llm_difficulty)) = doc_query {
+                        // Parse keywords JSON if present
+                        let llm_keywords = llm_keywords_json
+                            .and_then(|json| serde_json::from_str::<Vec<String>>(&json).ok());
+
+                        let result = SearchResult {
+                            filepath: chunk_info.document_path.clone(),
+                            display_path: chunk_info.document_path.clone(),
+                            title: chunk_info.document_title.clone(),
+                            hash: chunk_info.document_hash.clone(),
+                            collection_name,
+                            modified_at,
+                            body: Some(chunk_info.snippet.clone()),
+                            body_length: chunk_info.snippet.len(),
+                            docid: format!("#chunk-{}", &chunk_info.chunk_hash[..8]),
+                            context: Some(format!("Found via concept: {}", concept.term)),
+                            score: *min_confidence,
+                            source: SearchSource::Glossary,
+                            chunk_pos: None,
+                            llm_summary,
+                            llm_title,
+                            llm_keywords,
+                            llm_category,
+                            llm_difficulty,
+                            user_metadata: None,
+                        };
+                        glossary_results.push(result);
+                    }
+                }
+            }
+
+            // Deduplicate by document hash
+            let mut seen = std::collections::HashSet::new();
+            context.results = glossary_results
+                .into_iter()
+                .filter(|r| seen.insert(r.hash.clone()))
+                .take(*limit)
+                .collect();
+
+            context
+                .step_results
+                .push(("glossary_search".to_string(), context.results.len()));
+
+            tracing::debug!(
+                "GlossarySearch: Returned {} unique documents",
+                context.results.len()
+            );
         }
 
         WorkflowStep::Merge { strategy } => {

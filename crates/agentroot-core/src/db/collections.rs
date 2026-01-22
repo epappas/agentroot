@@ -366,6 +366,59 @@ impl Database {
         Ok(())
     }
 
+    /// Extract concepts from metadata and link to document chunks
+    fn extract_and_link_concepts(
+        &self,
+        doc_hash: &str,
+        metadata: &crate::llm::DocumentMetadata,
+    ) -> Result<()> {
+        // Delete old concept links for this document (in case of re-indexing)
+        self.delete_concepts_for_document(doc_hash)?;
+
+        // Skip if no extracted concepts
+        if metadata.extracted_concepts.is_empty() {
+            return Ok(());
+        }
+
+        // Get chunk hashes for this document
+        let chunk_hashes = self.get_chunk_hashes_for_doc(doc_hash)?;
+
+        // If no chunks, we can't link concepts
+        if chunk_hashes.is_empty() {
+            tracing::debug!("No chunks found for document {}, skipping concept linking", doc_hash);
+            return Ok(());
+        }
+
+        // For each extracted concept
+        for extracted in &metadata.extracted_concepts {
+            // Upsert concept (get or create)
+            let concept_id = self.upsert_concept(&extracted.term)?;
+
+            // Link concept to all chunks of this document
+            // (Concepts are document-level, not chunk-specific)
+            for (_, chunk_hash) in &chunk_hashes {
+                self.link_concept_to_chunk(
+                    concept_id,
+                    chunk_hash,
+                    doc_hash,
+                    &extracted.snippet,
+                )?;
+            }
+
+            // Update concept statistics
+            self.update_concept_stats(concept_id)?;
+
+            tracing::debug!(
+                "Linked concept '{}' to {} chunks for document {}",
+                extracted.term,
+                chunk_hashes.len(),
+                doc_hash
+            );
+        }
+
+        Ok(())
+    }
+
     /// Reindex all documents in a collection with optional metadata generation
     pub async fn reindex_collection_with_metadata(
         &self,
@@ -434,6 +487,9 @@ impl Database {
                             &metadata,
                             generator.unwrap().model_name(),
                         )?;
+
+                        // Extract and link concepts to chunks
+                        self.extract_and_link_concepts(&item.hash, &metadata)?;
                     } else {
                         self.update_document(existing.id, &item.title, &item.hash, &now)?;
                     }
@@ -463,6 +519,9 @@ impl Database {
                         &metadata,
                         generator.unwrap().model_name(),
                     )?;
+
+                    // Extract and link concepts to chunks
+                    self.extract_and_link_concepts(&item.hash, &metadata)?;
                 } else {
                     self.insert_document(
                         name,

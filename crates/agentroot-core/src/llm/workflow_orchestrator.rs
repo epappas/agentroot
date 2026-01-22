@@ -59,6 +59,15 @@ pub enum WorkflowStep {
     /// Expand query with variations
     ExpandQuery { original_query: String },
 
+    /// Search intelligent glossary for semantic concepts
+    GlossarySearch {
+        query: String,
+        #[serde(default = "default_limit")]
+        limit: usize,
+        #[serde(default = "default_glossary_confidence")]
+        min_confidence: f64,
+    },
+
     /// Rerank results
     Rerank {
         #[serde(default = "default_rerank_limit")]
@@ -81,6 +90,9 @@ fn default_limit() -> usize {
 }
 fn default_rerank_limit() -> usize {
     10
+}
+fn default_glossary_confidence() -> f64 {
+    0.3
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -177,20 +189,37 @@ fn build_workflow_prompt(query: &str, has_embeddings: bool) -> String {
 1. "bm25_search": Keyword matching (exact terms, fast)
 2. "vector_search": Semantic similarity (concepts, meanings)
 3. "hybrid_search": Combines BM25 + vector (best quality)
-4. "filter_metadata": Filter by category, difficulty, tags
-5. "filter_temporal": Filter by date ranges
-6. "filter_collection": Filter by specific collections
-7. "expand_query": Generate query variations
-8. "rerank": LLM reranking for quality
-9. "deduplicate": Remove duplicate results
-10. "merge": Combine results from multiple searches
-11. "limit": Take top N results"#
+4. "glossary_search": Intelligent concept glossary (USE SPARINGLY - see guidelines)
+5. "filter_metadata": Filter by category, difficulty, tags
+6. "filter_temporal": Filter by date ranges
+7. "filter_collection": Filter by specific collections
+8. "expand_query": Generate query variations
+9. "rerank": LLM reranking for quality
+10. "deduplicate": Remove duplicate results
+11. "merge": Combine results from multiple searches
+12. "limit": Take top N results
+
+GlossarySearch Guidelines (IMPORTANT):
+- USE SPARINGLY - glossary is a SUPPLEMENTARY aid, NOT a primary search mechanism
+- Use ONLY for abstract/exploratory queries (e.g., "distributed systems", "orchestration")
+- DO NOT use for:
+  * Specific technical terms (function/class names)
+  * Exact code references
+  * Simple keyword lookups
+- Glossary finds semantically related content through concept relationships
+- Example: query "orchestrator" → finds docs about "kubernetes", "container management"
+- Typical placement: AFTER primary search to expand with related concepts"#
     } else {
         r#"Available operations:
 1. "bm25_search": Keyword matching (only option without embeddings)
-2. "filter_metadata": Filter by category, difficulty, tags
-3. "filter_temporal": Filter by date ranges
-4. "limit": Take top N results"#
+2. "glossary_search": Intelligent concept glossary (USE SPARINGLY for abstract queries)
+3. "filter_metadata": Filter by category, difficulty, tags
+4. "filter_temporal": Filter by date ranges
+5. "limit": Take top N results
+
+GlossarySearch Guidelines:
+- USE SPARINGLY - for abstract/exploratory queries only
+- DO NOT use for specific technical terms or exact matches"#
     };
 
     format!(
@@ -246,6 +275,20 @@ Workflow:
   ],
   "reasoning": "Natural language with constraints - semantic search + metadata filtering + reranking",
   "expected_results": 10,
+  "complexity": "moderate"
+}}
+
+Query: "distributed systems architecture patterns"
+Workflow:
+{{
+  "steps": [
+    {{"step": "hybrid_search", "query": "distributed systems architecture patterns", "limit": 30}},
+    {{"step": "glossary_search", "query": "distributed systems", "limit": 20}},
+    {{"step": "merge", "strategy": "rrf"}},
+    {{"step": "rerank", "limit": 15, "query": "distributed systems architecture"}}
+  ],
+  "reasoning": "Abstract exploratory query - hybrid search + glossary for concept relationships + merge + rerank",
+  "expected_results": 15,
   "complexity": "moderate"
 }}
 

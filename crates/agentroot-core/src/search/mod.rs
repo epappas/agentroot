@@ -83,6 +83,7 @@ pub enum SearchSource {
     Bm25,
     Vector,
     Hybrid,
+    Glossary,
 }
 
 /// Parse metadata filters from query string
