@@ -320,5 +320,6 @@ fn generate_fallback_metadata(content: &str) -> DocumentMetadata {
             "getting started tutorial".to_string(),
             "programming guide".to_string(),
         ],
+        extracted_concepts: vec![],
     }
 }

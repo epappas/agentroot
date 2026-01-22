@@ -9,6 +9,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### Intelligent Glossary System
+- **Semantic Concept Discovery** - Automatically extract and index key concepts from documents
+  - LLM-powered concept extraction during metadata generation (5-10 concepts per document)
+  - Concept normalization for deduplication (e.g., "Machine Learning" → "machine_learning")
+  - Snippet-based linking showing concept usage in context (~100 chars)
+  - FTS5-powered concept search for fast semantic queries
+  - Global glossary spanning all collections
+  - Database schema v7 with 3 new tables: `concepts`, `concept_chunks`, `concepts_fts`
+  - Comprehensive test coverage: 6 unit tests + 5 integration tests
+
+- **GlossarySearch Workflow Step** - New search mode for abstract/exploratory queries
+  - Integrated into orchestrated workflows via `WorkflowStep::GlossarySearch`
+  - Supplementary search aid (not primary mechanism)
+  - Returns documents via semantic concept relationships
+  - Example: Query "orchestrator" finds docs about "kubernetes", "container management"
+  - LLM-guided usage (only triggers for appropriate queries)
+  - Configurable confidence threshold (default 0.3)
+
+- **Enhanced Metadata Generation** - Extended metadata with concept extraction
+  - New `ExtractedConcept` struct with `term` and `snippet` fields
+  - Few-shot prompt examples teaching concept extraction
+  - Automatic normalization of concept variations
+  - Concepts extracted per document (not per chunk)
+  - Integration with indexing pipeline via `extract_and_link_concepts()`
+
 #### New Providers
 - **URLProvider** - Index content from web pages and HTTP(S) documents
   - Automatic title extraction from HTML `<title>` tags or markdown headers

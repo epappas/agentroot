@@ -36,21 +36,24 @@ impl Database {
         let normalized = normalize_term(term);
         let now = Utc::now().to_rfc3339();
 
-        // Try to insert, if exists just return the existing id
+        // Check if concept with this normalized term already exists
+        if let Ok(id) = self.conn.query_row(
+            "SELECT id FROM concepts WHERE normalized = ?1",
+            params![normalized],
+            |row| row.get::<_, i64>(0),
+        ) {
+            return Ok(id);
+        }
+
+        // Insert new concept
         self.conn.execute(
-            "INSERT OR IGNORE INTO concepts (term, normalized, created_at)
+            "INSERT INTO concepts (term, normalized, created_at)
              VALUES (?1, ?2, ?3)",
             params![term, normalized, now],
         )?;
 
-        // Get the id (either newly inserted or existing)
-        let id: i64 = self.conn.query_row(
-            "SELECT id FROM concepts WHERE term = ?1",
-            params![term],
-            |row| row.get(0),
-        )?;
-
-        Ok(id)
+        // Get the newly inserted id
+        Ok(self.conn.last_insert_rowid())
     }
 
     /// Link a concept to a chunk
