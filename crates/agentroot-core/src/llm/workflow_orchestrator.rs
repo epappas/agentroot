@@ -238,6 +238,13 @@ Guidelines:
 - Keep workflows simple (2-5 steps usually sufficient)
 - Consider query complexity and user intent
 
+CRITICAL: Choose search strategy based on query type:
+- ACRONYMS (MCP, API, CLI, etc.) → Use BM25 for exact matching
+- SPECIFIC TERMS (function names, file names, ::, _) → Use BM25
+- TECHNICAL KEYWORDS (single technical words) → Use BM25
+- CONCEPTUAL/NATURAL LANGUAGE → Use vector or hybrid
+- "does X have Y?" where Y is specific → Use BM25 to find Y
+
 Examples:
 
 Query: "recent tutorials about providers"
@@ -261,6 +268,28 @@ Workflow:
     {{"step": "bm25_search", "query": "SourceProvider::list_items", "limit": 20}}
   ],
   "reasoning": "Exact technical term - BM25 keyword matching is optimal",
+  "expected_results": 20,
+  "complexity": "simple"
+}}
+
+Query: "does agentroot have mcp?"
+Workflow:
+{{
+  "steps": [
+    {{"step": "bm25_search", "query": "mcp", "limit": 20}}
+  ],
+  "reasoning": "Query asks about specific acronym 'MCP' - BM25 will find exact keyword matches in titles/content",
+  "expected_results": 20,
+  "complexity": "simple"
+}}
+
+Query: "MCP server setup"
+Workflow:
+{{
+  "steps": [
+    {{"step": "bm25_search", "query": "MCP server setup", "limit": 20}}
+  ],
+  "reasoning": "Specific technical term 'MCP' with keywords - BM25 for exact matching",
   "expected_results": 20,
   "complexity": "simple"
 }}
