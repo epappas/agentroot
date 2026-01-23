@@ -2,7 +2,7 @@
 //!
 //! Computes cosine similarity between query embedding and stored embeddings.
 
-use super::{SearchOptions, SearchResult, SearchSource};
+use super::{extract_snippet, SearchOptions, SearchResult, SearchSource};
 use crate::db::vectors::cosine_similarity;
 use crate::db::{docid_from_hash, Database};
 use crate::error::Result;
@@ -174,20 +174,29 @@ impl Database {
                 let path: String = row.get(16)?;
                 let collection_name: String = row.get(4)?;
 
+                // Track boost reasons for explainability
+                let mut boost_reasons = vec!["Semantic similarity".to_string()];
+
                 // Apply importance boost (like BM25 does)
                 let mut boosted_score = score as f64 * importance_score;
+                if importance_score > 1.0 {
+                    boost_reasons.push(format!("PageRank boost ({:.1}x)", importance_score));
+                }
 
                 // Collection boost: prefer documentation collections over source code
                 // agentroot (docs) > agentroot-src (source code with tests)
                 if collection_name == "agentroot" {
                     boosted_score *= 1.5; // Boost documentation collection
+                    boost_reasons.push("Documentation collection (+50%)".to_string());
                 } else if collection_name.contains("-src") {
                     boosted_score *= 0.7; // Demote source code collections
+                    boost_reasons.push("Source code collection (-30%)".to_string());
                 }
 
                 // Path-based demotion: heavily penalize test files
                 if path.contains("/tests/") || path.contains("/test/") {
                     boosted_score *= 0.1; // 90% penalty for test files
+                    boost_reasons.push("Test file penalty (-90%)".to_string());
                 }
 
                 // Title/filename boost: strongly prefer documents with query terms in title/path
@@ -209,15 +218,23 @@ impl Database {
                     // Extra strong boost if term appears in filename (path)
                     if path_lower.contains(term) {
                         title_boost *= 10.0; // VERY strong boost for filename match
+                        boost_reasons.push(format!("Filename match: '{}'", term));
                         break; // One match is enough for max boost
                     }
                     // Strong boost if term appears in title  
                     else if title_lower.contains(term) {
                         title_boost *= 4.0; // Strong boost for title match
+                        boost_reasons.push(format!("Title match: '{}'", term));
                     }
                 }
                 
                 boosted_score *= title_boost;
+
+                // Extract snippet from document body
+                let body: String = row.get(6)?;
+                let chunk_pos_val: i32 = row.get(8)?;
+                let chunk_pos_usize = chunk_pos_val.max(0) as usize;
+                let snippet = extract_snippet(&body, query, Some(150), Some(chunk_pos_usize));
 
                 Ok(SearchResult {
                     filepath: row.get(0)?,
@@ -227,16 +244,16 @@ impl Database {
                     collection_name,
                     modified_at: row.get(5)?,
                     body: if options.full_content {
-                        Some(row.get(6)?)
+                        Some(body)
                     } else {
                         None
                     },
                     body_length: row.get(7)?,
                     docid: docid_from_hash(&row.get::<_, String>(3)?),
-                    context: None,
+                    context: Some(snippet.snippet),
                     score: boosted_score,
                     source: SearchSource::Vector,
-                    chunk_pos: Some(row.get(8)?),
+                    chunk_pos: Some(chunk_pos_usize),
                     llm_summary: row.get(9)?,
                     llm_title: row.get(10)?,
                     llm_keywords: keywords,
@@ -255,6 +272,7 @@ impl Database {
                     chunk_purpose: None,
                     chunk_concepts: Vec::new(),
                     chunk_labels: std::collections::HashMap::new(),
+                    boost_reasons,
                 })
             },
         );
@@ -309,7 +327,7 @@ impl Database {
                 continue;
             }
 
-            if let Some(result) = self.get_chunk_search_result(&chunk_hash, score, options)? {
+            if let Some(result) = self.get_chunk_search_result(&chunk_hash, score, query, options)? {
                 results.push(result);
             }
         }
@@ -322,6 +340,7 @@ impl Database {
         &self,
         chunk_hash: &str,
         score: f32,
+        query: &str,
         options: &SearchOptions,
     ) -> Result<Option<SearchResult>> {
         let mut sql = String::from(
@@ -376,6 +395,13 @@ impl Database {
                     .and_then(|json| serde_json::from_str::<std::collections::HashMap<String, String>>(&json).ok())
                     .unwrap_or_default();
 
+                // Extract snippet from chunk body
+                let body: String = row.get(6)?;
+                let snippet = extract_snippet(&body, query, Some(150), None);
+                
+                // Boost reasons for chunk search
+                let boost_reasons = vec!["Semantic similarity in code chunk".to_string()];
+
                 Ok(SearchResult {
                     filepath: row.get(0)?,
                     display_path: row.get(1)?,
@@ -384,13 +410,13 @@ impl Database {
                     collection_name: row.get(4)?,
                     modified_at: row.get(5)?,
                     body: if options.full_content {
-                        Some(row.get(6)?)
+                        Some(body)
                     } else {
                         None
                     },
                     body_length: row.get(7)?,
                     docid: docid_from_hash(&doc_hash),
-                    context: None,
+                    context: Some(snippet.snippet),
                     score: score as f64,
                     source: SearchSource::Vector,
                     chunk_pos: None,
@@ -412,6 +438,7 @@ impl Database {
                     chunk_purpose: row.get(16)?,
                     chunk_concepts: concepts,
                     chunk_labels: labels,
+                    boost_reasons,
                 })
             },
         );

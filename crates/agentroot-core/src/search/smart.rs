@@ -242,6 +242,19 @@ mod tests {
             llm_category: None,
             llm_difficulty: None,
             user_metadata: None,
+            // Chunk fields
+            is_chunk: false,
+            chunk_hash: None,
+            chunk_type: None,
+            chunk_breadcrumb: None,
+            chunk_start_line: None,
+            chunk_end_line: None,
+            chunk_language: None,
+            chunk_summary: None,
+            chunk_purpose: None,
+            chunk_concepts: Vec::new(),
+            chunk_labels: std::collections::HashMap::new(),
+            boost_reasons: Vec::new(),
         }
     }
 }

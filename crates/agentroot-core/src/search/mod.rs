@@ -53,9 +53,10 @@ impl Default for SearchOptions {
 
 use crate::db::UserMetadata;
 
-/// Search result
+/// Search result (can represent document or chunk)
 #[derive(Debug, Clone)]
 pub struct SearchResult {
+    // Document-level fields
     pub filepath: String,
     pub display_path: String,
     pub title: String,
@@ -75,6 +76,22 @@ pub struct SearchResult {
     pub llm_category: Option<String>,
     pub llm_difficulty: Option<String>,
     pub user_metadata: Option<UserMetadata>,
+    
+    // Chunk-level fields (when result is a chunk)
+    pub is_chunk: bool,
+    pub chunk_hash: Option<String>,
+    pub chunk_type: Option<String>,
+    pub chunk_breadcrumb: Option<String>,
+    pub chunk_start_line: Option<i32>,
+    pub chunk_end_line: Option<i32>,
+    pub chunk_language: Option<String>,
+    pub chunk_summary: Option<String>,
+    pub chunk_purpose: Option<String>,
+    pub chunk_concepts: Vec<String>,
+    pub chunk_labels: std::collections::HashMap<String, String>,
+    
+    // Explainability: why was this result selected
+    pub boost_reasons: Vec<String>,
 }
 
 /// Source of search result
@@ -84,6 +101,53 @@ pub enum SearchSource {
     Vector,
     Hybrid,
     Glossary,
+}
+
+/// Common English stop words to remove from natural language queries
+const STOP_WORDS: &[&str] = &[
+    "a", "an", "and", "are", "as", "at", "be", "by", "for", "from",
+    "has", "have", "he", "in", "is", "it", "its", "of", "on", "that",
+    "the", "to", "was", "will", "with", "does", "do", "did", "can",
+    "could", "should", "would", "what", "where", "when", "why", "how",
+    "who", "which", "this", "these", "those", "there", "here",
+];
+
+/// Sanitize query for FTS5 to prevent syntax errors
+/// Removes stop words and problematic FTS5 operator characters
+pub fn sanitize_fts5_query(query: &str) -> String {
+    if query.trim().is_empty() {
+        return query.to_string();
+    }
+    
+    // First, remove FTS5 special operator characters
+    let cleaned = query
+        .replace('?', "")       // Remove question marks
+        .replace('!', "")       // Remove exclamation
+        .replace('^', "")        // Remove caret
+        .replace('(', "")        // Remove unbalanced parens
+        .replace(')', "")
+        .replace('[', "")        // Remove brackets
+        .replace(']', "")
+        .replace('{', "")        // Remove braces
+        .replace('}', "");
+    
+    // Split into words and filter out stop words
+    let words: Vec<&str> = cleaned
+        .split_whitespace()
+        .filter(|word| {
+            let lower = word.to_lowercase();
+            // Keep word if it's not a stop word or if it's part of a field filter (contains :)
+            !STOP_WORDS.contains(&lower.as_str()) || word.contains(':')
+        })
+        .collect();
+    
+    if words.is_empty() {
+        return String::new();
+    }
+    
+    // Keep AND logic (default) for better precision
+    // Natural language queries like "does agentroot have mcp?" become "agentroot mcp"
+    words.join(" ")
 }
 
 /// Parse metadata filters from query string
@@ -111,5 +175,6 @@ pub fn parse_metadata_filters(query: &str) -> (String, Vec<(String, String)>) {
     }
 
     let clean_query = remaining_terms.join(" ");
-    (clean_query, filters)
+    let sanitized_query = sanitize_fts5_query(&clean_query);
+    (sanitized_query, filters)
 }
