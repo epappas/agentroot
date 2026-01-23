@@ -472,8 +472,6 @@ async fn execute_step(
         } => {
             // Search concepts using FTS
             let concepts = db.search_concepts(query, *limit)?;
-
-            eprintln!("[DEBUG] GlossarySearch: query='{}', found {} concepts", query, concepts.len());
             
             if concepts.is_empty() {
                 tracing::debug!("GlossarySearch: No concepts found for query '{}'", query);

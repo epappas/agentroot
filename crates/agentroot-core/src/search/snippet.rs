@@ -42,7 +42,13 @@ pub fn extract_snippet(
     // Adjust to word boundaries
     let (start, end) = adjust_to_word_boundaries(content, start, end);
 
-    let mut snippet = content[start..end].to_string();
+    // Safely extract substring respecting UTF-8 boundaries
+    let mut snippet = if let Some(s) = content.get(start..end) {
+        s.to_string()
+    } else {
+        // Fallback if boundaries are invalid
+        content.chars().skip(start).take(end - start).collect()
+    };
 
     // Add ellipsis
     if start > 0 {
@@ -59,14 +65,16 @@ pub fn extract_snippet(
     }
 }
 
-/// Find the position of query terms in content
+/// Find the position of query terms in content (case-insensitive)
 fn find_query_position(content: &str, query: &str) -> usize {
-    let content_lower = content.to_lowercase();
     let query_lower = query.to_lowercase();
 
-    // Try to find exact match first
-    if let Some(pos) = content_lower.find(&query_lower) {
-        return pos;
+    // Try to find exact match first (case-insensitive)
+    if let Some(pos) = content.to_lowercase().find(&query_lower) {
+        // Find actual position in original content using case-insensitive character-by-character search
+        if let Some(actual_pos) = find_case_insensitive(content, &query_lower) {
+            return actual_pos;
+        }
     }
 
     // Try individual terms
@@ -76,13 +84,31 @@ fn find_query_position(content: &str, query: &str) -> usize {
         .collect();
 
     for term in terms {
-        if let Some(pos) = content_lower.find(term) {
+        if let Some(pos) = find_case_insensitive(content, term) {
             return pos;
         }
     }
 
     // Default to start
     0
+}
+
+/// Find substring in content (case-insensitive) and return byte position
+fn find_case_insensitive(content: &str, pattern: &str) -> Option<usize> {
+    let pattern_lower = pattern.to_lowercase();
+
+    // Iterate through content and check each potential match position
+    for (idx, _) in content.char_indices() {
+        // Try to extract a substring of the same character length as pattern
+        let chars_to_take = pattern.chars().count();
+        let test_str: String = content[idx..].chars().take(chars_to_take).collect();
+
+        if test_str.to_lowercase() == pattern_lower {
+            return Some(idx);
+        }
+    }
+
+    None
 }
 
 /// Adjust positions to word boundaries
