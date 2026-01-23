@@ -69,9 +69,9 @@ pub async fn orchestrated_search(
                 }
             }
         }
-        Err(_) => {
+        Err(e) => {
             // LLM not configured, use fallback workflow
-            tracing::debug!("LLM not configured, using fallback workflow");
+            tracing::debug!("LLM not configured, using fallback workflow: {}", e);
             let workflow = fallback_workflow(&clean_query, has_embeddings);
             execute_workflow(db, &workflow, &clean_query, &enhanced_options).await
         }
