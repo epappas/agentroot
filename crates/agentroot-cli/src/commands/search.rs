@@ -8,22 +8,24 @@ use agentroot_core::{
 };
 use anyhow::Result;
 
-/// Unified intelligent search - automatically chooses best strategy
+/// Intelligent search - tries LLM orchestration first, falls back to unified search
 pub async fn run_bm25(args: SearchArgs, db: &Database, format: OutputFormat) -> Result<()> {
     let query = args.query.join(" ");
     let options = build_options(&args);
 
-    // Check if orchestrated mode is enabled (ReAct-style workflow planning)
-    let use_orchestrated = std::env::var("AGENTROOT_ORCHESTRATED")
-        .map(|v| v == "true" || v == "1")
-        .unwrap_or(false);
-
-    let results = if use_orchestrated {
-        // Use workflow orchestration - LLM plans custom multi-step workflows
-        agentroot_core::orchestrated_search(db, &query, &options).await?
-    } else {
-        // Use unified search - LLM picks single strategy
-        unified_search(db, &query, &options).await?
+    // Try LLM orchestrated search first (production default)
+    // This provides best results by planning optimal multi-step workflows
+    let results = match agentroot_core::orchestrated_search(db, &query, &options).await {
+        Ok(results) => {
+            tracing::info!("Using LLM orchestrated search");
+            results
+        }
+        Err(e) => {
+            // LLM not available or failed → graceful fallback to unified search
+            // Unified search uses heuristics to choose BM25/vector/hybrid
+            tracing::debug!("Orchestrated search unavailable ({}), falling back to unified search", e);
+            unified_search(db, &query, &options).await?
+        }
     };
 
     let format_opts = FormatOptions {
