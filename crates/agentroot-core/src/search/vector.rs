@@ -46,7 +46,7 @@ impl Database {
         // Fetch document details for top candidates
         let mut results = Vec::new();
         for (hash_seq, score) in top_candidates {
-            if let Some(result) = self.get_search_result_for_hash_seq(&hash_seq, score, options)? {
+            if let Some(result) = self.get_search_result_for_hash_seq(&hash_seq, score, query, options)? {
                 results.push(result);
             }
         }
@@ -68,11 +68,21 @@ impl Database {
         });
 
         // Filter by min_score and limit
-        let filtered: Vec<SearchResult> = final_results
+        let mut filtered: Vec<SearchResult> = final_results
             .into_iter()
             .filter(|r| r.score >= options.min_score)
             .take(options.limit)
             .collect();
+
+        // Normalize scores relative to top result for better differentiation
+        // Top result = 100%, others proportional
+        if let Some(top_score) = filtered.first().map(|r| r.score) {
+            if top_score > 0.0 {
+                for result in &mut filtered {
+                    result.score = (result.score / top_score) * 100.0;
+                }
+            }
+        }
 
         Ok(filtered)
     }
@@ -82,6 +92,7 @@ impl Database {
         &self,
         hash_seq: &str,
         score: f32,
+        query: &str,
         options: &SearchOptions,
     ) -> Result<Option<SearchResult>> {
         // Parse hash_seq (format: "hash_seq")
@@ -178,6 +189,35 @@ impl Database {
                 if path.contains("/tests/") || path.contains("/test/") {
                     boosted_score *= 0.1; // 90% penalty for test files
                 }
+
+                // Title/filename boost: strongly prefer documents with query terms in title/path
+                // This helps exact keyword queries (e.g., "mcp" should rank "mcp-server.md" highly)
+                let title: String = row.get(2)?;
+                let query_lower = query.to_lowercase();
+                let title_lower = title.to_lowercase();
+                let path_lower = path.to_lowercase();
+                
+                // Extract query terms (split on whitespace and common delimiters)
+                let query_terms: Vec<&str> = query_lower
+                    .split(|c: char| c.is_whitespace() || c == '?' || c == '!')
+                    .filter(|s| !s.is_empty() && s.len() >= 2) // Keep acronyms and short terms
+                    .collect();
+                
+                // Check for title/filename matches with graduated boosting
+                let mut title_boost = 1.0;
+                for term in &query_terms {
+                    // Extra strong boost if term appears in filename (path)
+                    if path_lower.contains(term) {
+                        title_boost *= 10.0; // VERY strong boost for filename match
+                        break; // One match is enough for max boost
+                    }
+                    // Strong boost if term appears in title  
+                    else if title_lower.contains(term) {
+                        title_boost *= 4.0; // Strong boost for title match
+                    }
+                }
+                
+                boosted_score *= title_boost;
 
                 Ok(SearchResult {
                     filepath: row.get(0)?,
