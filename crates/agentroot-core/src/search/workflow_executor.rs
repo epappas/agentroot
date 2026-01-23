@@ -45,7 +45,14 @@ pub async fn execute_workflow(
         tracing::debug!("  {}: {} results", step_name, count);
     }
 
-    Ok(context.results)
+    // Apply final limit from SearchOptions
+    let final_results: Vec<SearchResult> = context
+        .results
+        .into_iter()
+        .take(options.limit)
+        .collect();
+
+    Ok(final_results)
 }
 
 /// Execute a single workflow step
@@ -122,6 +129,9 @@ async fn execute_step(
                 .push(("hybrid_search".to_string(), count));
         }
 
+        // Filter by metadata (category, difficulty, tags)
+        // Safety: If filter removes >90% of results, skip it to prevent
+        // overly restrictive LLM-planned filters from eliminating good results
         WorkflowStep::FilterMetadata {
             category,
             difficulty,
@@ -130,8 +140,9 @@ async fn execute_step(
             exclude_difficulty,
         } => {
             let initial_count = context.results.len();
+            let mut filtered_results = context.results.clone();
 
-            context.results.retain(|result| {
+            filtered_results.retain(|result| {
                 // Category filter
                 if let Some(ref cat) = category {
                     if let Some(ref result_cat) = result.llm_category {
@@ -191,15 +202,37 @@ async fn execute_step(
                 true
             });
 
+            let filtered_count = filtered_results.len();
+            let removal_rate = if initial_count > 0 {
+                1.0 - (filtered_count as f64 / initial_count as f64)
+            } else {
+                0.0
+            };
+
+            if removal_rate > 0.9 && initial_count >= 5 {
+                tracing::warn!(
+                    "FilterMetadata removed {:.0}% of results ({} → {}), skipping overly restrictive filter",
+                    removal_rate * 100.0,
+                    initial_count,
+                    filtered_count
+                );
+                eprintln!(
+                    "[WARN] Metadata filter too aggressive ({} → {}), keeping unfiltered results",
+                    initial_count, filtered_count
+                );
+            } else {
+                context.results = filtered_results;
+                tracing::debug!(
+                    "Metadata filter: {} → {} results ({:.0}% kept)",
+                    initial_count,
+                    context.results.len(),
+                    (1.0 - removal_rate) * 100.0
+                );
+            }
+
             context
                 .step_results
                 .push(("filter_metadata".to_string(), context.results.len()));
-
-            tracing::debug!(
-                "Metadata filter: {} → {} results",
-                initial_count,
-                context.results.len()
-            );
         }
 
         WorkflowStep::FilterTemporal { after, before } => {
@@ -510,6 +543,18 @@ async fn execute_step(
                             llm_category,
                             llm_difficulty,
                             user_metadata: None,
+                            // Chunk fields (glossary already provides chunk info)
+                            is_chunk: true,
+                            chunk_hash: Some(chunk_info.chunk_hash.clone()),
+                            chunk_type: None,
+                            chunk_breadcrumb: None,
+                            chunk_start_line: None,
+                            chunk_end_line: None,
+                            chunk_language: None,
+                            chunk_summary: None,
+                            chunk_purpose: None,
+                            chunk_concepts: Vec::new(),
+                            chunk_labels: std::collections::HashMap::new(),
                         };
                         glossary_results.push(result);
                         }
