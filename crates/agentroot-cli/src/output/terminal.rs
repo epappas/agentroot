@@ -80,7 +80,19 @@ pub fn format_results(results: &[SearchResult], options: &FormatOptions) -> Stri
 
             // Show context snippet for all document results
             if let Some(ref context) = result.context {
-                output.push_str(&format!("  \"{}\"\n", context.trim()));
+                // Clean up snippet: replace newlines with spaces, limit length
+                let cleaned = context
+                    .replace('\n', " ")
+                    .replace('\r', " ")
+                    .split_whitespace()
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                let display = if cleaned.len() > 150 {
+                    format!("{}...", &cleaned[..150])
+                } else {
+                    cleaned
+                };
+                output.push_str(&format!("  {}\n", display));
             }
         }
 
