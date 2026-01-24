@@ -254,7 +254,6 @@ mod tests {
             chunk_purpose: None,
             chunk_concepts: Vec::new(),
             chunk_labels: std::collections::HashMap::new(),
-            boost_reasons: Vec::new(),
         }
     }
 }

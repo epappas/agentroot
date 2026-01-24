@@ -113,9 +113,6 @@ impl Database {
                     let body: String = row.get(6)?;
                     let snippet = extract_snippet(&body, &clean_query, Some(150), None);
 
-                    // Track boost reasons for BM25
-                    let boost_reasons = vec!["Keyword match".to_string()];
-
                     Ok(SearchResult {
                         filepath: row.get(0)?,
                         display_path: row.get(1)?,
@@ -152,7 +149,6 @@ impl Database {
                         chunk_purpose: None,
                         chunk_concepts: Vec::new(),
                         chunk_labels: std::collections::HashMap::new(),
-                        boost_reasons,
                     })
                 },
             )?
@@ -307,9 +303,6 @@ impl Database {
                     let body: String = row.get(6)?;
                     let snippet = extract_snippet(&body, &clean_query, Some(150), None);
 
-                    // Track boost reasons for chunk search
-                    let boost_reasons = vec!["Keyword match in code chunk".to_string()];
-
                     Ok(SearchResult {
                         filepath: row.get(0)?,
                         display_path: row.get(1)?,
@@ -346,7 +339,6 @@ impl Database {
                         chunk_purpose: row.get(16)?,
                         chunk_concepts: concepts,
                         chunk_labels: labels,
-                        boost_reasons,
                     })
                 },
             )?

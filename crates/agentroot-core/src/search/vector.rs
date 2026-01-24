@@ -174,29 +174,20 @@ impl Database {
                 let path: String = row.get(16)?;
                 let collection_name: String = row.get(4)?;
 
-                // Track boost reasons for explainability
-                let mut boost_reasons = vec!["Semantic similarity".to_string()];
-
                 // Apply importance boost (like BM25 does)
                 let mut boosted_score = score as f64 * importance_score;
-                if importance_score > 1.0 {
-                    boost_reasons.push(format!("PageRank boost ({:.1}x)", importance_score));
-                }
 
                 // Collection boost: prefer documentation collections over source code
                 // agentroot (docs) > agentroot-src (source code with tests)
                 if collection_name == "agentroot" {
                     boosted_score *= 1.5; // Boost documentation collection
-                    boost_reasons.push("Documentation collection (+50%)".to_string());
                 } else if collection_name.contains("-src") {
                     boosted_score *= 0.7; // Demote source code collections
-                    boost_reasons.push("Source code collection (-30%)".to_string());
                 }
 
                 // Path-based demotion: heavily penalize test files
                 if path.contains("/tests/") || path.contains("/test/") {
                     boosted_score *= 0.1; // 90% penalty for test files
-                    boost_reasons.push("Test file penalty (-90%)".to_string());
                 }
 
                 // Title/filename boost: strongly prefer documents with query terms in title/path
@@ -218,13 +209,11 @@ impl Database {
                     // Extra strong boost if term appears in filename (path)
                     if path_lower.contains(term) {
                         title_boost *= 10.0; // VERY strong boost for filename match
-                        boost_reasons.push(format!("Filename match: '{}'", term));
                         break; // One match is enough for max boost
                     }
                     // Strong boost if term appears in title  
                     else if title_lower.contains(term) {
                         title_boost *= 4.0; // Strong boost for title match
-                        boost_reasons.push(format!("Title match: '{}'", term));
                     }
                 }
                 
@@ -272,7 +261,6 @@ impl Database {
                     chunk_purpose: None,
                     chunk_concepts: Vec::new(),
                     chunk_labels: std::collections::HashMap::new(),
-                    boost_reasons,
                 })
             },
         );
@@ -398,9 +386,6 @@ impl Database {
                 // Extract snippet from chunk body
                 let body: String = row.get(6)?;
                 let snippet = extract_snippet(&body, query, Some(150), None);
-                
-                // Boost reasons for chunk search
-                let boost_reasons = vec!["Semantic similarity in code chunk".to_string()];
 
                 Ok(SearchResult {
                     filepath: row.get(0)?,
@@ -438,7 +423,6 @@ impl Database {
                     chunk_purpose: row.get(16)?,
                     chunk_concepts: concepts,
                     chunk_labels: labels,
-                    boost_reasons,
                 })
             },
         );

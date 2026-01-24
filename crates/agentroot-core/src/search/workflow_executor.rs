@@ -553,7 +553,6 @@ async fn execute_step(
                             chunk_purpose: None,
                             chunk_concepts: Vec::new(),
                             chunk_labels: std::collections::HashMap::new(),
-                            boost_reasons: vec![format!("Glossary match: '{}'", concept.term)],
                         };
                         glossary_results.push(result);
                         }

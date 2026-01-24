@@ -89,9 +89,6 @@ pub struct SearchResult {
     pub chunk_purpose: Option<String>,
     pub chunk_concepts: Vec<String>,
     pub chunk_labels: std::collections::HashMap<String, String>,
-    
-    // Explainability: why was this result selected
-    pub boost_reasons: Vec<String>,
 }
 
 /// Source of search result
