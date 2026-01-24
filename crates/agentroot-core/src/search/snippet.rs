@@ -94,14 +94,30 @@ fn find_query_position(content: &str, query: &str) -> usize {
 }
 
 /// Find substring in content (case-insensitive) and return byte position
+/// Optimized: Uses stdlib's fast find, then validates the position
 fn find_case_insensitive(content: &str, pattern: &str) -> Option<usize> {
     let pattern_lower = pattern.to_lowercase();
+    let content_lower = content.to_lowercase();
 
-    // Iterate through content and check each potential match position
+    // Fast path: Use stdlib's optimized find on lowercased strings
+    let pos = content_lower.find(&pattern_lower)?;
+
+    // Verify the position is valid in the original content
+    // This handles edge cases where lowercasing changed byte positions (rare)
+    if let Some(slice) = content.get(pos..) {
+        let pattern_char_count = pattern.chars().count();
+        let test_str: String = slice.chars().take(pattern_char_count).collect();
+
+        if test_str.to_lowercase() == pattern_lower {
+            return Some(pos);
+        }
+    }
+
+    // Slow fallback: Only used when lowercasing changed byte positions (rare)
+    // Search character-by-character to find correct position
     for (idx, _) in content.char_indices() {
-        // Try to extract a substring of the same character length as pattern
-        let chars_to_take = pattern.chars().count();
-        let test_str: String = content[idx..].chars().take(chars_to_take).collect();
+        let pattern_char_count = pattern.chars().count();
+        let test_str: String = content[idx..].chars().take(pattern_char_count).collect();
 
         if test_str.to_lowercase() == pattern_lower {
             return Some(idx);

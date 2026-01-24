@@ -80,15 +80,24 @@ pub fn format_results(results: &[SearchResult], options: &FormatOptions) -> Stri
 
             // Show context snippet for all document results
             if let Some(ref context) = result.context {
-                // Clean up snippet: replace newlines with spaces, limit length
+                // Clean up snippet: replace newlines with spaces and collapse whitespace
+                // Using split_whitespace + join is simple and efficient for this use case
                 let cleaned = context
-                    .replace('\n', " ")
-                    .replace('\r', " ")
+                    .replace(['\n', '\r'], " ")
                     .split_whitespace()
                     .collect::<Vec<_>>()
                     .join(" ");
+
+                // Truncate if needed (using char boundaries for UTF-8 safety)
                 let display = if cleaned.len() > 150 {
-                    format!("{}...", &cleaned[..150])
+                    // Find safe truncation point at char boundary
+                    let truncate_pos = cleaned
+                        .char_indices()
+                        .take_while(|(pos, _)| *pos <= 150)
+                        .last()
+                        .map(|(pos, _)| pos)
+                        .unwrap_or(0);
+                    format!("{}...", &cleaned[..truncate_pos])
                 } else {
                     cleaned
                 };
