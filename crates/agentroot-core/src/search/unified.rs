@@ -216,24 +216,14 @@ fn detect_language_context(db: &Database, collection: Option<&str>) -> Option<St
             .collect()
     };
 
-    let mut language_counts: HashMap<&str, usize> = HashMap::new();
+    let mut language_counts: HashMap<String, usize> = HashMap::new();
 
     // Check patterns for language indicators and count document counts
+    // Extract language from file extension pattern (no hardcoded mapping)
     for coll_name in collections {
         if let Ok(Some(coll)) = db.get_collection(&coll_name) {
-            let lang = if coll.pattern.contains("*.rs") || coll.pattern.contains(".rs") {
-                Some("Rust")
-            } else if coll.pattern.contains("*.py") || coll.pattern.contains(".py") {
-                Some("Python")
-            } else if coll.pattern.contains("*.ts") || coll.pattern.contains(".ts") {
-                Some("TypeScript")
-            } else if coll.pattern.contains("*.js") || coll.pattern.contains(".js") {
-                Some("JavaScript")
-            } else if coll.pattern.contains("*.go") || coll.pattern.contains(".go") {
-                Some("Go")
-            } else {
-                None
-            };
+            // Extract extension from pattern like "**/*.rs" or "*.py"
+            let lang = extract_language_from_pattern(&coll.pattern);
 
             if let Some(language) = lang {
                 *language_counts.entry(language).or_insert(0) += coll.document_count;
@@ -324,4 +314,63 @@ fn apply_metadata_filters(
     }
 
     Ok(results)
+}
+
+/// Extract language name from file pattern (no hardcoded mappings)
+/// Uses file extension as the language identifier
+fn extract_language_from_pattern(pattern: &str) -> Option<String> {
+    // Match patterns like "**/*.rs", "*.py", "**/*.{ts,tsx}"
+    // Extract the extension(s) after the last dot
+    
+    if let Some(ext_part) = pattern.split("*.").last() {
+        // Handle simple extension: "*.rs" -> "rs"
+        if !ext_part.contains('{') && !ext_part.contains(',') {
+            let ext = ext_part.trim();
+            if !ext.is_empty() && ext.chars().all(|c| c.is_alphanumeric()) {
+                // Capitalize: "rs" -> "Rust"
+                return Some(capitalize_extension(ext));
+            }
+        }
+        
+        // Handle multiple extensions: "*.{ts,tsx}" -> use first one
+        if ext_part.contains('{') {
+            if let Some(first_ext) = ext_part
+                .trim_start_matches('{')
+                .split(',')
+                .next()
+            {
+                return Some(capitalize_extension(first_ext.trim()));
+            }
+        }
+    }
+    
+    None
+}
+
+/// Map file extension to language name
+/// This is metadata mapping (extension -> display name), not search logic
+fn capitalize_extension(ext: &str) -> String {
+    // Common extension to language name mappings for display
+    match ext {
+        "rs" => "Rust",
+        "py" => "Python", 
+        "js" => "JavaScript",
+        "ts" => "TypeScript",
+        "go" => "Go",
+        "java" => "Java",
+        "cpp" | "cc" | "cxx" => "C++",
+        "c" => "C",
+        "rb" => "Ruby",
+        "php" => "PHP",
+        "swift" => "Swift",
+        "kt" => "Kotlin",
+        // Fallback: capitalize first letter
+        _ => {
+            let mut chars = ext.chars();
+            return match chars.next() {
+                Some(first) => first.to_uppercase().chain(chars).collect(),
+                None => ext.to_string(),
+            };
+        }
+    }.to_string()
 }

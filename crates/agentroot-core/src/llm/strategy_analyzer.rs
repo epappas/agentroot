@@ -207,8 +207,8 @@ pub fn heuristic_strategy(query: &str, has_embeddings: bool) -> StrategyAnalysis
     let is_nl = is_natural_language_heuristic(query);
     let has_tech = has_technical_terms_heuristic(query);
     
-    // Decide granularity based on query pattern
-    let granularity = if has_tech || query.contains("fn ") || query.contains("impl ") || query.contains("struct ") {
+    // Decide granularity based on query pattern (no hardcoded keywords)
+    let granularity = if has_tech {
         // Technical query likely looking for specific code
         SearchGranularity::Chunk
     } else if is_nl {
