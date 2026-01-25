@@ -96,9 +96,9 @@ impl VLLMClient {
         })
     }
 
-    /// Create from environment variables
+    /// Create from environment variables (with config file fallback)
     pub fn from_env() -> Result<Self> {
-        let config = LLMServiceConfig::default();
+        let config = LLMServiceConfig::from_env_or_config();
         Self::new(config)
     }
 

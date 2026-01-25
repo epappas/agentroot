@@ -59,6 +59,25 @@ impl LLMServiceConfig {
     pub fn embeddings_url(&self) -> &str {
         self.embedding_url.as_deref().unwrap_or(&self.url)
     }
+
+    /// Load config from ENV vars first, then config file, then defaults
+    pub fn from_env_or_config() -> Self {
+        // Check if ENV vars are set (primary source)
+        if std::env::var("AGENTROOT_LLM_URL").is_ok()
+            || std::env::var("AGENTROOT_EMBEDDING_URL").is_ok()
+        {
+            // At least one URL is set via ENV - use ENV vars
+            return Self::default();
+        }
+
+        // Try loading from config file (fallback)
+        if let Ok(config) = Config::load() {
+            return config.llm_service;
+        }
+
+        // No ENV vars or config file - use defaults
+        Self::default()
+    }
 }
 
 impl Default for LLMServiceConfig {

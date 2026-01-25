@@ -1,0 +1,19 @@
+#!/bin/bash
+# Agentroot Environment Variables
+# Copy this to agentroot-env.sh and customize, then run: source agentroot-env.sh
+
+export AGENTROOT_LLM_URL="https://68e9761a-6912-4f90-bb50-45f5520ba743.deployments.basilica.ai"
+export AGENTROOT_LLM_MODEL="Qwen/Qwen2.5-7B-Instruct"
+export AGENTROOT_EMBEDDING_URL="https://1ff15927-4101-43e5-869b-929925b34083.deployments.basilica.ai"
+export AGENTROOT_EMBEDDING_MODEL="intfloat/e5-mistral-7b-instruct"
+export AGENTROOT_EMBEDDING_DIMS="4096"
+
+# Optional: API key for authenticated services
+# export AGENTROOT_LLM_API_KEY="your-api-key-here"
+
+echo "Agentroot environment configured:"
+echo "  LLM URL: $AGENTROOT_LLM_URL"
+echo "  LLM Model: $AGENTROOT_LLM_MODEL"
+echo "  Embedding URL: $AGENTROOT_EMBEDDING_URL"
+echo "  Embedding Model: $AGENTROOT_EMBEDDING_MODEL"
+echo "  Embedding Dims: $AGENTROOT_EMBEDDING_DIMS"

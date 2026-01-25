@@ -1,0 +1,37 @@
+# Agentroot Configuration
+# Copy this to ~/.config/agentroot/config.yml and customize
+
+# LLM Service Configuration
+llm_service:
+  # Base URL for LLM chat/completions
+  url: "https://68e9761a-6912-4f90-bb50-45f5520ba743.deployments.basilica.ai"
+  
+  # Model name for chat completions
+  model: "Qwen/Qwen2.5-7B-Instruct"
+  
+  # Base URL for embeddings (optional, defaults to main URL)
+  embedding_url: "https://1ff15927-4101-43e5-869b-929925b34083.deployments.basilica.ai"
+  
+  # Model name for embeddings
+  embedding_model: "intfloat/e5-mistral-7b-instruct"
+  
+  # Embedding dimensions (optional, will be auto-detected if not specified)
+  embedding_dimensions: 4096
+  
+  # API key for authenticated services (optional)
+  # api_key: "your-api-key-here"
+  
+  # Request timeout in seconds
+  timeout_secs: 30
+
+# Global context applied to all searches (optional)
+# global_context: "This is a Rust codebase for semantic search"
+
+# Per-collection configuration (optional)
+# collections:
+#   my-docs:
+#     path: /path/to/docs
+#     pattern: "**/*.md"
+#     context:
+#       "/": "General documentation"
+#       "/api/": "API reference documentation"
