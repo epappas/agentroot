@@ -10,6 +10,9 @@ impl Database {
         // Parse metadata filters from query or use provided filters
         let (clean_query, mut filters) = parse_metadata_filters(query);
 
+        // Preprocess query for FTS5 compatibility (handle :: and other special chars)
+        let clean_query = preprocess_fts_query(&clean_query);
+
         // Merge with filters from options (options take precedence)
         filters.extend(options.metadata_filters.clone());
 
@@ -352,4 +355,19 @@ impl Database {
 
         Ok(filtered)
     }
+}
+
+/// Preprocess query for FTS5 compatibility
+/// Handles special characters that FTS5 can't tokenize properly
+fn preprocess_fts_query(query: &str) -> String {
+    query
+        // Replace :: with space (Rust path separator)
+        .replace("::", " ")
+        // Replace -> with space (function return type)
+        .replace("->", " ")
+        // Replace < and > with spaces (generics)
+        .replace('<', " ")
+        .replace('>', " ")
+        // Preserve other characters that FTS5 handles well
+        .to_string()
 }
