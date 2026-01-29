@@ -83,6 +83,20 @@ pub enum WorkflowStep {
 
     /// Take top N results
     Limit { count: usize },
+
+    /// BM25 keyword search on chunks (functions, sections)
+    Bm25ChunkSearch {
+        query: String,
+        #[serde(default = "default_limit")]
+        limit: usize,
+    },
+
+    /// Vector semantic search on chunks
+    VectorChunkSearch {
+        query: String,
+        #[serde(default = "default_limit")]
+        limit: usize,
+    },
 }
 
 fn default_limit() -> usize {
@@ -186,18 +200,27 @@ impl WorkflowOrchestrator {
 fn build_workflow_prompt(query: &str, has_embeddings: bool) -> String {
     let available_ops = if has_embeddings {
         r#"Available operations:
-1. "bm25_search": Keyword matching (exact terms, fast)
-2. "vector_search": Semantic similarity (concepts, meanings)
-3. "hybrid_search": Combines BM25 + vector (best quality)
-4. "glossary_search": Intelligent concept glossary (USE SPARINGLY - see guidelines)
-5. "filter_metadata": Filter by category, difficulty, tags
-6. "filter_temporal": Filter by date ranges
-7. "filter_collection": Filter by specific collections
-8. "expand_query": Generate query variations
-9. "rerank": LLM reranking for quality
-10. "deduplicate": Remove duplicate results
-11. "merge": Combine results from multiple searches
-12. "limit": Take top N results
+1. "bm25_search": Keyword matching on documents (exact terms, fast)
+2. "vector_search": Semantic similarity on documents (concepts, meanings)
+3. "hybrid_search": Combines BM25 + vector on documents (best quality)
+4. "bm25_chunk_search": Keyword matching on code chunks (functions, classes, sections)
+5. "vector_chunk_search": Semantic similarity on code chunks
+6. "glossary_search": Intelligent concept glossary (USE SPARINGLY - see guidelines)
+7. "filter_metadata": Filter by category, difficulty, tags
+8. "filter_temporal": Filter by date ranges
+9. "filter_collection": Filter by specific collections
+10. "expand_query": Generate query variations
+11. "rerank": LLM reranking for quality
+12. "deduplicate": Remove duplicate results
+13. "merge": Combine results from multiple searches
+14. "limit": Take top N results
+
+Chunk Search Guidelines (IMPORTANT):
+- Use chunk search for TECHNICAL/CODE queries (function names, class names, implementations)
+- Use chunk search when query targets specific code constructs (::, ->, impl, fn, class, def)
+- Chunk results include: breadcrumb, start/end line, language, purpose, concepts
+- Prefer document search for conceptual/natural language queries
+- You CAN combine document + chunk search with merge for comprehensive results
 
 GlossarySearch Guidelines (IMPORTANT):
 - USE SPARINGLY - glossary is a SUPPLEMENTARY aid, NOT a primary search mechanism
@@ -211,11 +234,16 @@ GlossarySearch Guidelines (IMPORTANT):
 - Typical placement: AFTER primary search to expand with related concepts"#
     } else {
         r#"Available operations:
-1. "bm25_search": Keyword matching (only option without embeddings)
-2. "glossary_search": Intelligent concept glossary (USE SPARINGLY for abstract queries)
-3. "filter_metadata": Filter by category, difficulty, tags
-4. "filter_temporal": Filter by date ranges
-5. "limit": Take top N results
+1. "bm25_search": Keyword matching on documents (only option without embeddings)
+2. "bm25_chunk_search": Keyword matching on code chunks (functions, classes, sections)
+3. "glossary_search": Intelligent concept glossary (USE SPARINGLY for abstract queries)
+4. "filter_metadata": Filter by category, difficulty, tags
+5. "filter_temporal": Filter by date ranges
+6. "limit": Take top N results
+
+Chunk Search Guidelines:
+- Use chunk search for TECHNICAL/CODE queries targeting specific code constructs
+- Prefer document search for conceptual/natural language queries
 
 GlossarySearch Guidelines:
 - USE SPARINGLY - for abstract/exploratory queries only
@@ -240,8 +268,9 @@ Guidelines:
 
 CRITICAL: Choose search strategy based on query type:
 - ACRONYMS (MCP, API, CLI, etc.) → Use BM25 for exact matching
-- SPECIFIC TERMS (function names, file names, ::, _) → Use BM25
+- SPECIFIC TERMS (function names, file names, ::, _) → Use BM25 chunk search
 - TECHNICAL KEYWORDS (single technical words) → Use BM25
+- CODE CONSTRUCTS (impl, fn, class, def, struct) → Use BM25 chunk search
 - CONCEPTUAL/NATURAL LANGUAGE → Use vector or hybrid
 - "does X have Y?" where Y is specific → Use BM25 to find Y
 
@@ -265,9 +294,9 @@ Query: "SourceProvider::list_items"
 Workflow:
 {{
   "steps": [
-    {{"step": "bm25_search", "query": "SourceProvider::list_items", "limit": 20}}
+    {{"step": "bm25_chunk_search", "query": "SourceProvider list_items", "limit": 20}}
   ],
-  "reasoning": "Exact technical term - BM25 keyword matching is optimal",
+  "reasoning": "Specific code reference - chunk search finds exact function/method definitions",
   "expected_results": 20,
   "complexity": "simple"
 }}
@@ -283,13 +312,13 @@ Workflow:
   "complexity": "simple"
 }}
 
-Query: "MCP server setup"
+Query: "fn search_chunks"
 Workflow:
 {{
   "steps": [
-    {{"step": "bm25_search", "query": "MCP server setup", "limit": 20}}
+    {{"step": "bm25_chunk_search", "query": "search_chunks", "limit": 20}}
   ],
-  "reasoning": "Specific technical term 'MCP' with keywords - BM25 for exact matching",
+  "reasoning": "Looking for a specific function - chunk search targets function-level code",
   "expected_results": 20,
   "complexity": "simple"
 }}
@@ -304,6 +333,21 @@ Workflow:
   ],
   "reasoning": "Natural language with constraints - semantic search + metadata filtering + reranking",
   "expected_results": 10,
+  "complexity": "moderate"
+}}
+
+Query: "database connection implementation"
+Workflow:
+{{
+  "steps": [
+    {{"step": "bm25_chunk_search", "query": "database connection", "limit": 20}},
+    {{"step": "bm25_search", "query": "database connection implementation", "limit": 20}},
+    {{"step": "merge", "strategy": "rrf"}},
+    {{"step": "deduplicate"}},
+    {{"step": "limit", "count": 20}}
+  ],
+  "reasoning": "Technical implementation query - chunk search for code + document search for docs, merged",
+  "expected_results": 20,
   "complexity": "moderate"
 }}
 
@@ -361,19 +405,49 @@ fn parse_workflow_response(response: &str) -> Result<Workflow> {
 
 /// Fallback workflow when LLM unavailable
 pub fn fallback_workflow(query: &str, has_embeddings: bool) -> Workflow {
-    // Simple heuristic-based workflow
-    let is_nl = query.to_lowercase().contains("how")
-        || query.to_lowercase().contains("what")
-        || query.to_lowercase().contains("why");
+    let query_lower = query.to_lowercase();
+    let is_nl = query_lower.contains("how")
+        || query_lower.contains("what")
+        || query_lower.contains("why");
 
-    let has_tech = query.contains("::") || query.contains('_');
+    let is_code_query = query.contains("::")
+        || query.contains("->")
+        || query.contains("fn ")
+        || query.contains("impl ")
+        || query.contains("class ")
+        || query.contains("def ")
+        || query.contains("struct ")
+        || is_pascal_or_snake_case(query);
 
-    let steps = if !has_embeddings {
+    let steps = if !has_embeddings && is_code_query {
+        // Technical query without embeddings: chunk BM25
+        vec![WorkflowStep::Bm25ChunkSearch {
+            query: query.to_string(),
+            limit: 20,
+        }]
+    } else if !has_embeddings {
         vec![WorkflowStep::Bm25Search {
             query: query.to_string(),
             limit: 20,
         }]
-    } else if is_nl && !has_tech {
+    } else if is_code_query {
+        // Technical query with embeddings: chunk BM25 + document BM25, merged
+        vec![
+            WorkflowStep::Bm25ChunkSearch {
+                query: query.to_string(),
+                limit: 20,
+            },
+            WorkflowStep::Bm25Search {
+                query: query.to_string(),
+                limit: 20,
+            },
+            WorkflowStep::Merge {
+                strategy: MergeStrategy::Rrf,
+            },
+            WorkflowStep::Deduplicate,
+            WorkflowStep::Limit { count: 20 },
+        ]
+    } else if is_nl {
         vec![WorkflowStep::VectorSearch {
             query: query.to_string(),
             limit: 20,
@@ -391,8 +465,28 @@ pub fn fallback_workflow(query: &str, has_embeddings: bool) -> Workflow {
         steps,
         reasoning: "Fallback workflow (LLM unavailable)".to_string(),
         expected_results: 20,
-        complexity: "simple".to_string(),
+        complexity: if is_code_query { "moderate" } else { "simple" }.to_string(),
     }
+}
+
+/// Check if the query contains PascalCase or snake_case identifiers
+fn is_pascal_or_snake_case(query: &str) -> bool {
+    query.split_whitespace().any(|word| {
+        // snake_case: contains underscore with alphanumeric
+        if word.contains('_') && word.chars().all(|c| c.is_alphanumeric() || c == '_') {
+            return true;
+        }
+        // PascalCase: starts with uppercase, has at least one lowercase after
+        let chars: Vec<char> = word.chars().collect();
+        if chars.len() >= 2
+            && chars[0].is_uppercase()
+            && chars.iter().skip(1).any(|c| c.is_lowercase())
+            && chars.iter().skip(1).any(|c| c.is_uppercase())
+        {
+            return true;
+        }
+        false
+    })
 }
 
 #[cfg(test)]
@@ -430,5 +524,143 @@ mod tests {
 
         let workflow = parse_workflow_response(json).unwrap();
         assert_eq!(workflow.steps.len(), 3);
+    }
+
+    #[test]
+    fn test_parse_bm25_chunk_search_step() {
+        let json = r#"{
+            "steps": [
+                {"step": "bm25_chunk_search", "query": "search_chunks", "limit": 15}
+            ],
+            "reasoning": "Code function lookup via chunk search",
+            "expected_results": 15,
+            "complexity": "simple"
+        }"#;
+
+        let workflow = parse_workflow_response(json).unwrap();
+        assert_eq!(workflow.steps.len(), 1);
+        match &workflow.steps[0] {
+            WorkflowStep::Bm25ChunkSearch { query, limit } => {
+                assert_eq!(query, "search_chunks");
+                assert_eq!(*limit, 15);
+            }
+            other => panic!("Expected Bm25ChunkSearch, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_vector_chunk_search_step() {
+        let json = r#"{
+            "steps": [
+                {"step": "vector_chunk_search", "query": "database connection", "limit": 10}
+            ],
+            "reasoning": "Semantic chunk search",
+            "expected_results": 10,
+            "complexity": "simple"
+        }"#;
+
+        let workflow = parse_workflow_response(json).unwrap();
+        assert_eq!(workflow.steps.len(), 1);
+        match &workflow.steps[0] {
+            WorkflowStep::VectorChunkSearch { query, limit } => {
+                assert_eq!(query, "database connection");
+                assert_eq!(*limit, 10);
+            }
+            other => panic!("Expected VectorChunkSearch, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_mixed_doc_and_chunk_workflow() {
+        let json = r#"{
+            "steps": [
+                {"step": "bm25_chunk_search", "query": "database", "limit": 20},
+                {"step": "bm25_search", "query": "database implementation", "limit": 20},
+                {"step": "merge", "strategy": "rrf"},
+                {"step": "deduplicate"},
+                {"step": "limit", "count": 20}
+            ],
+            "reasoning": "Combined chunk + document search for comprehensive results",
+            "expected_results": 20,
+            "complexity": "moderate"
+        }"#;
+
+        let workflow = parse_workflow_response(json).unwrap();
+        assert_eq!(workflow.steps.len(), 5);
+        assert!(matches!(&workflow.steps[0], WorkflowStep::Bm25ChunkSearch { .. }));
+        assert!(matches!(&workflow.steps[1], WorkflowStep::Bm25Search { .. }));
+        assert!(matches!(&workflow.steps[2], WorkflowStep::Merge { .. }));
+        assert!(matches!(&workflow.steps[3], WorkflowStep::Deduplicate));
+        assert!(matches!(&workflow.steps[4], WorkflowStep::Limit { count: 20 }));
+    }
+
+    #[test]
+    fn test_fallback_workflow_code_query_no_embeddings() {
+        let workflow = fallback_workflow("SourceProvider::list_items", false);
+        assert_eq!(workflow.steps.len(), 1);
+        assert!(matches!(&workflow.steps[0], WorkflowStep::Bm25ChunkSearch { .. }));
+    }
+
+    #[test]
+    fn test_fallback_workflow_code_query_with_embeddings() {
+        let workflow = fallback_workflow("fn search_chunks", true);
+        // Should produce chunk + doc + merge + dedup + limit
+        assert!(workflow.steps.len() >= 3);
+        assert!(matches!(&workflow.steps[0], WorkflowStep::Bm25ChunkSearch { .. }));
+        assert!(matches!(&workflow.steps[1], WorkflowStep::Bm25Search { .. }));
+    }
+
+    #[test]
+    fn test_fallback_workflow_snake_case_query() {
+        let workflow = fallback_workflow("search_chunks_bm25", false);
+        assert!(matches!(&workflow.steps[0], WorkflowStep::Bm25ChunkSearch { .. }));
+    }
+
+    #[test]
+    fn test_fallback_workflow_pascal_case_query() {
+        let workflow = fallback_workflow("WorkflowStep", false);
+        assert!(matches!(&workflow.steps[0], WorkflowStep::Bm25ChunkSearch { .. }));
+    }
+
+    #[test]
+    fn test_fallback_workflow_natural_language() {
+        let workflow = fallback_workflow("how to implement search", true);
+        assert!(matches!(&workflow.steps[0], WorkflowStep::VectorSearch { .. }));
+    }
+
+    #[test]
+    fn test_fallback_workflow_generic_query() {
+        let workflow = fallback_workflow("search providers", true);
+        assert!(matches!(&workflow.steps[0], WorkflowStep::HybridSearch { .. }));
+    }
+
+    #[test]
+    fn test_is_pascal_or_snake_case() {
+        assert!(is_pascal_or_snake_case("search_chunks"));
+        assert!(is_pascal_or_snake_case("WorkflowStep"));
+        assert!(is_pascal_or_snake_case("HttpReranker"));
+        assert!(!is_pascal_or_snake_case("search"));
+        assert!(!is_pascal_or_snake_case("how to search"));
+        assert!(!is_pascal_or_snake_case("MCP")); // all caps is not PascalCase
+    }
+
+    #[test]
+    fn test_chunk_search_step_default_limit() {
+        let json = r#"{
+            "steps": [
+                {"step": "bm25_chunk_search", "query": "test"}
+            ],
+            "reasoning": "test",
+            "expected_results": 20,
+            "complexity": "simple"
+        }"#;
+
+        let workflow = parse_workflow_response(json).unwrap();
+        match &workflow.steps[0] {
+            WorkflowStep::Bm25ChunkSearch { limit, .. } => {
+                assert_eq!(*limit, 20); // default_limit
+            }
+            other => panic!("Expected Bm25ChunkSearch, got {:?}", other),
+        }
     }
 }

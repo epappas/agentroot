@@ -587,6 +587,31 @@ async fn execute_step(
             );
         }
 
+        WorkflowStep::Bm25ChunkSearch { query, limit } => {
+            let mut opts = base_options.clone();
+            opts.limit = *limit;
+
+            let mut new_results = db.search_chunks_bm25(query, &opts)?;
+            let count = new_results.len();
+            context.results.append(&mut new_results);
+            context
+                .step_results
+                .push(("bm25_chunk_search".to_string(), count));
+        }
+
+        WorkflowStep::VectorChunkSearch { query, limit } => {
+            let embedder = HttpEmbedder::from_env()?;
+            let mut opts = base_options.clone();
+            opts.limit = *limit;
+
+            let mut new_results = db.search_chunks_vec(query, &embedder, &opts).await?;
+            let count = new_results.len();
+            context.results.append(&mut new_results);
+            context
+                .step_results
+                .push(("vector_chunk_search".to_string(), count));
+        }
+
         WorkflowStep::Merge { strategy } => {
             // Merge duplicate results using the specified strategy
             let initial_count = context.results.len();
