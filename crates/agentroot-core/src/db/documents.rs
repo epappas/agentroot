@@ -447,6 +447,36 @@ impl Database {
 
         Ok(results)
     }
+
+    /// Get all documents in a collection (for testing/analysis)
+    pub fn get_documents_in_collection(&self, collection: &str) -> Result<Vec<Document>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, collection, path, title, hash, created_at, modified_at, active, source_type, source_uri, llm_model
+             FROM documents 
+             WHERE collection = ?1 AND active = 1
+             ORDER BY path",
+        )?;
+
+        let results = stmt
+            .query_map(rusqlite::params![collection], |row| {
+                Ok(Document {
+                    id: row.get(0)?,
+                    collection: row.get(1)?,
+                    path: row.get(2)?,
+                    title: row.get(3)?,
+                    hash: row.get(4)?,
+                    created_at: row.get(5)?,
+                    modified_at: row.get(6)?,
+                    active: row.get::<_, i32>(7)? == 1,
+                    source_type: row.get(8)?,
+                    source_uri: row.get(9)?,
+                    llm_model: row.get(10)?,
+                })
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+
+        Ok(results)
+    }
 }
 
 /// Document list item (for ls command)

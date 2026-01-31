@@ -12,6 +12,7 @@
 pub mod config;
 pub mod db;
 pub mod error;
+pub mod graph;
 pub mod index;
 pub mod llm;
 pub mod providers;
@@ -19,6 +20,7 @@ pub mod search;
 
 pub use config::{CollectionConfig, Config, LLMServiceConfig};
 pub use db::{Database, MetadataBuilder, MetadataFilter, MetadataValue, UserMetadata};
+pub use graph::{compute_pagerank, extract_links};
 pub use error::{AgentRootError, Error, Result};
 pub use index::{chunk_semantic, ChunkType, SemanticChunk, SemanticChunker};
 pub use llm::{

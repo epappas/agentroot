@@ -189,6 +189,21 @@ impl Database {
 
         Ok((total_concepts, total_links))
     }
+
+    /// List all concepts ordered by chunk count (for testing/analysis)
+    pub fn list_concepts(&self) -> Result<Vec<ConceptInfo>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, term, normalized, chunk_count 
+             FROM concepts 
+             ORDER BY chunk_count DESC",
+        )?;
+
+        let results = stmt
+            .query_map([], map_concept_row)?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+
+        Ok(results)
+    }
 }
 
 /// Normalize term for search

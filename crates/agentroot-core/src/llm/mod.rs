@@ -10,6 +10,7 @@
 //! No local models are downloaded or executed.
 
 mod cache;
+mod chunk_metadata_generator;
 mod client;
 mod http_embedder;
 mod http_metadata_generator;
@@ -22,6 +23,9 @@ mod strategy_analyzer;
 mod traits;
 mod workflow_orchestrator;
 
+pub use chunk_metadata_generator::{
+    generate_batch_chunk_metadata, generate_chunk_metadata, ChunkContext, ChunkMetadata,
+};
 pub use client::{generate_metadata_with_llm, ChatMessage, LLMClient, MetricsSnapshot, VLLMClient};
 pub use http_embedder::HttpEmbedder;
 pub use http_metadata_generator::HttpMetadataGenerator;
@@ -33,7 +37,7 @@ pub use metadata_generator::{
 };
 pub use query_parser::{MetadataFilterHint, ParsedQuery, SearchType, TemporalFilter};
 pub use strategy_analyzer::{
-    heuristic_strategy, HttpStrategyAnalyzer, SearchStrategy, StrategyAnalysis,
+    heuristic_strategy, HttpStrategyAnalyzer, SearchGranularity, SearchStrategy, StrategyAnalysis,
 };
 pub use traits::*;
 pub use workflow_orchestrator::{

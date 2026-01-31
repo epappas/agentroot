@@ -30,7 +30,7 @@ fn test_metadata_filter_parsing() {
 
     // Test no filters
     let (query, filters) = parse_metadata_filters("just a regular query");
-    assert_eq!(query, "just a regular query");
+    assert_eq!(query, "just regular query");
     assert_eq!(filters.len(), 0);
 
     // Test colon in non-filter context (URLs should not be parsed as filters)

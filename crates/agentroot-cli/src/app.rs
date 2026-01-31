@@ -67,6 +67,9 @@ pub enum Commands {
     /// Manage LLM-generated metadata
     Metadata(MetadataArgs),
 
+    /// Compute PageRank scores for documents
+    Pagerank,
+
     /// Start MCP server
     Mcp,
 }
@@ -161,6 +164,10 @@ pub struct SearchArgs {
     /// Return all matches
     #[arg(long)]
     pub all: bool,
+
+    /// Search at chunk-level instead of document-level
+    #[arg(long)]
+    pub chunks: bool,
 }
 
 #[derive(Args)]

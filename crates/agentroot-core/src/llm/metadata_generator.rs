@@ -17,6 +17,9 @@ pub trait MetadataGenerator: Send + Sync {
 
     /// Get model name
     fn model_name(&self) -> &str;
+
+    /// Get LLM client for additional operations (e.g., chunk metadata)
+    fn llm_client(&self) -> Option<&dyn crate::llm::LLMClient>;
 }
 
 /// Context information for metadata generation

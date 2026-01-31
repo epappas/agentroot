@@ -1099,17 +1099,288 @@ pub async fn handle_metadata_get(db: &Database, args: Value) -> Result<ToolResul
                 is_error: None,
             })
         }
-        None => Ok(ToolResult {
-            content: vec![Content::Text {
-                text: format!("No user metadata found for document: {}", docid),
-            }],
-            structured_content: Some(serde_json::json!({
-                "docid": docid,
-                "metadata": null
-            })),
-            is_error: None,
+        None => Err(anyhow::anyhow!("No metadata found for document: {}", docid)),
+    }
+}
+
+// ============================================================================
+// Chunk-Level Search Tools
+// ============================================================================
+
+pub fn search_chunks_tool_definition() -> ToolDefinition {
+    ToolDefinition {
+        name: "search_chunks".to_string(),
+        description: "Search for specific code chunks (functions, methods, classes) using BM25 full-text search. Returns granular results with line numbers and breadcrumbs.".to_string(),
+        input_schema: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search query (keywords or phrases to find in code chunks)"
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum results (default: 20)",
+                    "default": 20
+                },
+                "minScore": {
+                    "type": "number",
+                    "description": "Minimum relevance score 0-1 (default: 0)",
+                    "default": 0
+                },
+                "collection": {
+                    "type": "string",
+                    "description": "Filter by collection name"
+                },
+                "label": {
+                    "type": "string",
+                    "description": "Filter by chunk label (format: key:value, e.g., 'layer:service')"
+                }
+            },
+            "required": ["query"]
         }),
     }
+}
+
+pub fn get_chunk_tool_definition() -> ToolDefinition {
+    ToolDefinition {
+        name: "get_chunk".to_string(),
+        description: "Retrieve a specific code chunk by its hash, including all metadata and surrounding context.".to_string(),
+        input_schema: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "chunk_hash": {
+                    "type": "string",
+                    "description": "Chunk hash identifier"
+                },
+                "include_context": {
+                    "type": "boolean",
+                    "description": "Include surrounding chunks (previous/next) (default: true)",
+                    "default": true
+                }
+            },
+            "required": ["chunk_hash"]
+        }),
+    }
+}
+
+pub fn navigate_chunks_tool_definition() -> ToolDefinition {
+    ToolDefinition {
+        name: "navigate_chunks".to_string(),
+        description: "Navigate to previous or next chunk within the same document. Useful for exploring code context.".to_string(),
+        input_schema: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "chunk_hash": {
+                    "type": "string",
+                    "description": "Current chunk hash"
+                },
+                "direction": {
+                    "type": "string",
+                    "description": "Navigation direction: 'previous' or 'next'",
+                    "enum": ["previous", "next"]
+                }
+            },
+            "required": ["chunk_hash", "direction"]
+        }),
+    }
+}
+
+pub async fn handle_search_chunks(db: &Database, args: Value) -> Result<ToolResult> {
+    let query = args
+        .get("query")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing query"))?;
+
+    let mut options = SearchOptions {
+        limit: args.get("limit").and_then(|v| v.as_u64()).unwrap_or(20) as usize,
+        min_score: args.get("minScore").and_then(|v| v.as_f64()).unwrap_or(0.0),
+        collection: args
+            .get("collection")
+            .and_then(|v| v.as_str())
+            .map(String::from),
+        provider: None,
+        full_content: true,
+        metadata_filters: Vec::new(),
+    };
+
+    // Handle label filter
+    if let Some(label) = args.get("label").and_then(|v| v.as_str()) {
+        options.metadata_filters.push(("label".to_string(), label.to_string()));
+    }
+
+    let results = db.search_chunks_bm25(query, &options)?;
+
+    let summary = format!("Found {} chunk(s) for \"{}\"", results.len(), query);
+    let structured: Vec<Value> = results
+        .iter()
+        .map(|r| {
+            let mut result_json = serde_json::json!({
+                "chunk_hash": r.chunk_hash.as_ref().unwrap_or(&"".to_string()),
+                "file": r.display_path,
+                "breadcrumb": r.chunk_breadcrumb.as_ref().unwrap_or(&"".to_string()),
+                "type": r.chunk_type.as_ref().unwrap_or(&"".to_string()),
+                "lines": format!("{}-{}", 
+                    r.chunk_start_line.unwrap_or(0), 
+                    r.chunk_end_line.unwrap_or(0)
+                ),
+                "score": (r.score * 100.0).round() / 100.0
+            });
+
+            // Include chunk metadata
+            if let Some(summary) = &r.chunk_summary {
+                result_json["summary"] = Value::String(summary.clone());
+            }
+            if let Some(purpose) = &r.chunk_purpose {
+                result_json["purpose"] = Value::String(purpose.clone());
+            }
+            if !r.chunk_concepts.is_empty() {
+                result_json["concepts"] = serde_json::to_value(&r.chunk_concepts).unwrap();
+            }
+            if !r.chunk_labels.is_empty() {
+                result_json["labels"] = serde_json::to_value(&r.chunk_labels).unwrap();
+            }
+            if let Some(content) = &r.body {
+                result_json["content"] = Value::String(content.clone());
+            }
+
+            result_json
+        })
+        .collect();
+
+    Ok(ToolResult {
+        content: vec![Content::Text { text: summary }],
+        structured_content: Some(serde_json::json!({ "results": structured })),
+        is_error: None,
+    })
+}
+
+pub async fn handle_get_chunk(db: &Database, args: Value) -> Result<ToolResult> {
+    let chunk_hash = args
+        .get("chunk_hash")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing chunk_hash"))?;
+
+    let include_context = args
+        .get("include_context")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
+
+    // Get the chunk
+    let chunk = db
+        .get_chunk(chunk_hash)?
+        .ok_or_else(|| anyhow::anyhow!("Chunk not found: {}", chunk_hash))?;
+
+    let mut result_json = serde_json::json!({
+        "chunk_hash": chunk.hash,
+        "document_hash": chunk.document_hash,
+        "type": chunk.chunk_type.as_ref().unwrap_or(&"".to_string()),
+        "breadcrumb": chunk.breadcrumb.as_ref().unwrap_or(&"".to_string()),
+        "lines": format!("{}-{}", chunk.start_line, chunk.end_line),
+        "language": chunk.language.as_ref().unwrap_or(&"".to_string()),
+        "content": chunk.content
+    });
+
+    // Add LLM metadata
+    if let Some(summary) = &chunk.llm_summary {
+        result_json["summary"] = Value::String(summary.clone());
+    }
+    if let Some(purpose) = &chunk.llm_purpose {
+        result_json["purpose"] = Value::String(purpose.clone());
+    }
+    if !chunk.llm_concepts.is_empty() {
+        result_json["concepts"] = serde_json::to_value(&chunk.llm_concepts).unwrap();
+    }
+    if !chunk.llm_labels.is_empty() {
+        result_json["labels"] = serde_json::to_value(&chunk.llm_labels).unwrap();
+    }
+
+    // Get surrounding chunks if requested
+    let mut context_text = String::new();
+    if include_context {
+        let (prev, next) = db.get_surrounding_chunks(chunk_hash)?;
+        
+        if let Some(prev_chunk) = prev {
+            result_json["previous_chunk"] = serde_json::json!({
+                "hash": prev_chunk.hash,
+                "breadcrumb": prev_chunk.breadcrumb.as_ref().unwrap_or(&"".to_string())
+            });
+            context_text.push_str(&format!("\n[Previous: {}]", 
+                prev_chunk.breadcrumb.as_ref().unwrap_or(&"".to_string())));
+        }
+        
+        if let Some(next_chunk) = next {
+            result_json["next_chunk"] = serde_json::json!({
+                "hash": next_chunk.hash,
+                "breadcrumb": next_chunk.breadcrumb.as_ref().unwrap_or(&"".to_string())
+            });
+            context_text.push_str(&format!("\n[Next: {}]", 
+                next_chunk.breadcrumb.as_ref().unwrap_or(&"".to_string())));
+        }
+    }
+
+    let summary = format!(
+        "Chunk: {} ({})\nLines: {}-{}{}",
+        chunk.breadcrumb.as_ref().unwrap_or(&"Unknown".to_string()),
+        chunk.chunk_type.as_ref().unwrap_or(&"".to_string()),
+        chunk.start_line,
+        chunk.end_line,
+        context_text
+    );
+
+    Ok(ToolResult {
+        content: vec![Content::Text { text: summary }],
+        structured_content: Some(result_json),
+        is_error: None,
+    })
+}
+
+pub async fn handle_navigate_chunks(db: &Database, args: Value) -> Result<ToolResult> {
+    let chunk_hash = args
+        .get("chunk_hash")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing chunk_hash"))?;
+
+    let direction = args
+        .get("direction")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing direction"))?;
+
+    let (prev, next) = db.get_surrounding_chunks(chunk_hash)?;
+
+    let target_chunk = match direction {
+        "previous" => prev.ok_or_else(|| anyhow::anyhow!("No previous chunk"))?,
+        "next" => next.ok_or_else(|| anyhow::anyhow!("No next chunk"))?,
+        _ => return Err(anyhow::anyhow!("Invalid direction: {}", direction)),
+    };
+
+    let result_json = serde_json::json!({
+        "chunk_hash": target_chunk.hash,
+        "document_hash": target_chunk.document_hash,
+        "type": target_chunk.chunk_type.as_ref().unwrap_or(&"".to_string()),
+        "breadcrumb": target_chunk.breadcrumb.as_ref().unwrap_or(&"".to_string()),
+        "lines": format!("{}-{}", target_chunk.start_line, target_chunk.end_line),
+        "content": target_chunk.content,
+        "summary": target_chunk.llm_summary.as_ref().unwrap_or(&"".to_string()),
+        "purpose": target_chunk.llm_purpose.as_ref().unwrap_or(&"".to_string()),
+        "concepts": target_chunk.llm_concepts,
+        "labels": target_chunk.llm_labels
+    });
+
+    let summary = format!(
+        "{} chunk: {} ({})\nLines: {}-{}",
+        if direction == "previous" { "Previous" } else { "Next" },
+        target_chunk.breadcrumb.as_ref().unwrap_or(&"Unknown".to_string()),
+        target_chunk.chunk_type.as_ref().unwrap_or(&"".to_string()),
+        target_chunk.start_line,
+        target_chunk.end_line
+    );
+
+    Ok(ToolResult {
+        content: vec![Content::Text { text: summary }],
+        structured_content: Some(result_json),
+        is_error: None,
+    })
 }
 
 pub async fn handle_metadata_query(db: &Database, args: Value) -> Result<ToolResult> {

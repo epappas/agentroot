@@ -5,21 +5,24 @@
 //! - sqlite-vec vector storage
 //! - Content-addressable storage
 
+mod chunks;
 mod collections;
 mod content;
 mod context;
 mod documents;
 pub mod glossary;
 pub mod metadata;
+mod pagerank;
 mod schema;
 mod stats;
 mod user_metadata;
 pub mod vectors;
 
+pub use chunks::ChunkInfo;
 pub use collections::CollectionInfo;
 pub use content::{docid_from_hash, hash_content};
 pub use context::ContextInfo;
-pub use documents::DocumentInsert;
+pub use documents::{Document, DocumentInsert};
 pub use glossary::{ConceptChunkInfo, ConceptInfo};
 pub use metadata::{MetadataBuilder, MetadataFilter, MetadataValue, UserMetadata};
 pub use schema::Database;

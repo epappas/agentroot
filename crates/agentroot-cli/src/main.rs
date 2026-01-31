@@ -47,6 +47,7 @@ async fn main() -> Result<()> {
         Commands::Smart(args) => commands::search::run_smart(args, &db, cli.format).await,
         Commands::Cleanup => commands::cleanup::run(&db).await,
         Commands::Metadata(args) => commands::metadata::run(args, &db, cli.format).await,
+        Commands::Pagerank => commands::pagerank::run(&db).await,
         Commands::Mcp => agentroot_mcp::start_server(&db).await,
     };
 

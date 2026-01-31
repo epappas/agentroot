@@ -111,6 +111,10 @@ impl<'a> McpServer<'a> {
             tools::metadata_add_tool_definition(),
             tools::metadata_get_tool_definition(),
             tools::metadata_query_tool_definition(),
+            // Chunk-level search tools
+            tools::search_chunks_tool_definition(),
+            tools::get_chunk_tool_definition(),
+            tools::navigate_chunks_tool_definition(),
         ];
 
         JsonRpcResponse::success(request.id.clone(), serde_json::json!({ "tools": tools }))
@@ -143,6 +147,10 @@ impl<'a> McpServer<'a> {
             "metadata_add" => tools::handle_metadata_add(self.db, arguments).await,
             "metadata_get" => tools::handle_metadata_get(self.db, arguments).await,
             "metadata_query" => tools::handle_metadata_query(self.db, arguments).await,
+            // Chunk-level search tools
+            "search_chunks" => tools::handle_search_chunks(self.db, arguments).await,
+            "get_chunk" => tools::handle_get_chunk(self.db, arguments).await,
+            "navigate_chunks" => tools::handle_navigate_chunks(self.db, arguments).await,
             _ => Err(anyhow::anyhow!("Unknown tool: {}", name)),
         };
 

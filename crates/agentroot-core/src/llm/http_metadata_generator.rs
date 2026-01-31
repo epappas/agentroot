@@ -251,6 +251,10 @@ impl MetadataGenerator for HttpMetadataGenerator {
     fn model_name(&self) -> &str {
         self.client.model_name()
     }
+
+    fn llm_client(&self) -> Option<&dyn crate::llm::LLMClient> {
+        Some(self.client.as_ref())
+    }
 }
 
 #[cfg(test)]

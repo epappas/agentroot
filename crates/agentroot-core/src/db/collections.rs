@@ -419,6 +419,110 @@ impl Database {
         Ok(())
     }
 
+    /// Process and store chunks with LLM-generated metadata
+    async fn process_chunks_with_metadata(
+        &self,
+        doc_hash: &str,
+        content: &str,
+        path: &str,
+        chunk_generator: Option<&dyn crate::llm::LLMClient>,
+    ) -> Result<usize> {
+        use crate::index::ast_chunker::{language::Language, SemanticChunker};
+        use crate::llm::{generate_batch_chunk_metadata, ChunkMetadata};
+        use std::path::Path;
+
+        // Delete old chunks for this document (in case of re-indexing)
+        self.delete_chunks_for_document(doc_hash)?;
+
+        // Create semantic chunks
+        let chunker = SemanticChunker::new();
+        let semantic_chunks = chunker.chunk(content, Path::new(path))?;
+
+        if semantic_chunks.is_empty() {
+            tracing::debug!("No chunks created for document {}", doc_hash);
+            return Ok(0);
+        }
+
+        let now = Utc::now().to_rfc3339();
+        let mut chunks_inserted = 0;
+
+        // Generate metadata for all chunks if LLM client is provided
+        let metadata_list: Option<Vec<ChunkMetadata>> = if let Some(client) = chunk_generator {
+            let language = Language::from_path(Path::new(path)).map(|l| l.as_str());
+
+            match generate_batch_chunk_metadata(
+                &semantic_chunks,
+                path,
+                language,
+                client,
+            )
+            .await
+            {
+                Ok(meta) => Some(meta),
+                Err(e) => {
+                    tracing::warn!("Failed to generate chunk metadata for {}: {}", path, e);
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        // Insert chunks with or without metadata
+        for (seq, chunk) in semantic_chunks.iter().enumerate() {
+            let chunk_hash = chunk.chunk_hash.clone();
+
+            // Get metadata for this chunk if available
+            let chunk_meta = metadata_list.as_ref().and_then(|list: &Vec<ChunkMetadata>| list.get(seq));
+
+            // Extract metadata fields
+            let (summary, purpose, concepts, labels, model_name) = if let Some(meta) = chunk_meta {
+                (
+                    Some(meta.summary.as_str()),
+                    Some(meta.purpose.as_str()),
+                    &meta.concepts,
+                    &meta.labels,
+                    Some("chunk-metadata"),
+                )
+            } else {
+                (None, None, &vec![], &std::collections::HashMap::new(), None)
+            };
+
+            // Insert chunk
+            self.insert_chunk(
+                &chunk_hash,
+                doc_hash,
+                seq as i32,
+                chunk.position as i32,
+                &chunk.text,
+                Some(&format!("{:?}", chunk.chunk_type)),
+                chunk.metadata.breadcrumb.as_deref(),
+                chunk.metadata.start_line as i32,
+                chunk.metadata.end_line as i32,
+                chunk.metadata.language,
+                summary,
+                purpose,
+                concepts,
+                labels,
+                &vec![], // related_to - can be populated later via semantic analysis
+                model_name,
+                if chunk_meta.is_some() { Some(&now) } else { None },
+                &now,
+            )?;
+
+            chunks_inserted += 1;
+        }
+
+        tracing::debug!(
+            "Inserted {} chunks for document {} (with_metadata: {})",
+            chunks_inserted,
+            doc_hash,
+            metadata_list.is_some()
+        );
+
+        Ok(chunks_inserted)
+    }
+
     /// Reindex all documents in a collection with optional metadata generation
     pub async fn reindex_collection_with_metadata(
         &self,
@@ -488,10 +592,19 @@ impl Database {
                             generator.unwrap().model_name(),
                         )?;
 
+                        // Process chunks with LLM metadata
+                        let llm_client = generator.and_then(|g| g.llm_client());
+                        self.process_chunks_with_metadata(&item.hash, &item.content, &item.uri, llm_client)
+                            .await?;
+
                         // Extract and link concepts to chunks
                         self.extract_and_link_concepts(&item.hash, &metadata)?;
                     } else {
                         self.update_document(existing.id, &item.title, &item.hash, &now)?;
+
+                        // Still create chunks without LLM metadata
+                        self.process_chunks_with_metadata(&item.hash, &item.content, &item.uri, None)
+                            .await?;
                     }
                     updated += 1;
                 }
@@ -520,6 +633,11 @@ impl Database {
                         generator.unwrap().model_name(),
                     )?;
 
+                    // Process chunks with LLM metadata
+                    let llm_client = generator.and_then(|g| g.llm_client());
+                    self.process_chunks_with_metadata(&item.hash, &item.content, &item.uri, llm_client)
+                        .await?;
+
                     // Extract and link concepts to chunks
                     self.extract_and_link_concepts(&item.hash, &metadata)?;
                 } else {
@@ -533,6 +651,10 @@ impl Database {
                         &item.source_type,
                         item.metadata.get("source_uri").map(|s| s.as_str()),
                     )?;
+
+                    // Still create chunks without LLM metadata
+                    self.process_chunks_with_metadata(&item.hash, &item.content, &item.uri, None)
+                        .await?;
                 }
                 updated += 1;
             }

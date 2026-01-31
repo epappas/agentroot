@@ -7,6 +7,7 @@ pub mod embed;
 pub mod get;
 pub mod ls;
 pub mod metadata;
+pub mod pagerank;
 pub mod search;
 pub mod status;
 pub mod update;

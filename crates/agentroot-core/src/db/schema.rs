@@ -9,7 +9,7 @@ pub struct Database {
     pub(crate) conn: Connection,
 }
 
-const SCHEMA_VERSION: i32 = 7;
+const SCHEMA_VERSION: i32 = 9;
 
 const CREATE_TABLES: &str = r#"
 -- Content storage (content-addressable by SHA-256 hash)
@@ -264,6 +264,14 @@ impl Database {
 
         if current < 7 {
             self.migrate_to_v7()?;
+        }
+
+        if current < 8 {
+            self.migrate_to_v8()?;
+        }
+
+        if current < 9 {
+            self.migrate_to_v9()?;
         }
 
         Ok(())
@@ -788,6 +796,182 @@ impl Database {
 
         Ok(())
     }
+
+    fn migrate_to_v8(&self) -> Result<()> {
+        // Add chunk-level storage and LLM-generated chunk metadata
+        // This enables returning specific chunks instead of whole documents
+
+        // Create chunks table - stores chunk content and metadata
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS chunks (
+                hash TEXT PRIMARY KEY,
+                document_hash TEXT NOT NULL REFERENCES content(hash),
+                seq INTEGER NOT NULL,
+                pos INTEGER NOT NULL,
+                content TEXT NOT NULL,
+                chunk_type TEXT,
+                breadcrumb TEXT,
+                start_line INTEGER,
+                end_line INTEGER,
+                language TEXT,
+                llm_summary TEXT,
+                llm_purpose TEXT,
+                llm_concepts TEXT,
+                llm_labels TEXT,
+                llm_related_to TEXT,
+                llm_model TEXT,
+                llm_generated_at TEXT,
+                created_at TEXT NOT NULL,
+                UNIQUE(document_hash, seq)
+            )",
+            [],
+        )?;
+
+        // Create indexes for chunks
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_chunks_document ON chunks(document_hash)",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_chunks_type ON chunks(chunk_type)",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_chunks_breadcrumb ON chunks(breadcrumb)",
+            [],
+        )?;
+
+        // Create chunk_labels table for normalized labels
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS chunk_labels (
+                chunk_hash TEXT NOT NULL REFERENCES chunks(hash),
+                key TEXT NOT NULL,
+                value TEXT NOT NULL,
+                PRIMARY KEY (chunk_hash, key, value)
+            )",
+            [],
+        )?;
+
+        // Create indexes for chunk_labels
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_chunk_labels_key ON chunk_labels(key)",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_chunk_labels_value ON chunk_labels(value)",
+            [],
+        )?;
+
+        // Create FTS index for chunk search
+        self.conn.execute(
+            "CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
+                content,
+                breadcrumb,
+                llm_summary,
+                llm_purpose,
+                content='chunks',
+                content_rowid='rowid',
+                tokenize='porter unicode61'
+            )",
+            [],
+        )?;
+
+        // Create triggers to sync chunks_fts
+        self.conn.execute(
+            "CREATE TRIGGER IF NOT EXISTS chunks_ai
+             AFTER INSERT ON chunks
+             BEGIN
+                 INSERT INTO chunks_fts(rowid, content, breadcrumb, llm_summary, llm_purpose)
+                 VALUES (new.rowid, new.content, new.breadcrumb, new.llm_summary, new.llm_purpose);
+             END",
+            [],
+        )?;
+
+        self.conn.execute(
+            "CREATE TRIGGER IF NOT EXISTS chunks_au
+             AFTER UPDATE ON chunks
+             BEGIN
+                 DELETE FROM chunks_fts WHERE rowid = old.rowid;
+                 INSERT INTO chunks_fts(rowid, content, breadcrumb, llm_summary, llm_purpose)
+                 VALUES (new.rowid, new.content, new.breadcrumb, new.llm_summary, new.llm_purpose);
+             END",
+            [],
+        )?;
+
+        self.conn.execute(
+            "CREATE TRIGGER IF NOT EXISTS chunks_ad
+             AFTER DELETE ON chunks
+             BEGIN
+                 DELETE FROM chunks_fts WHERE rowid = old.rowid;
+             END",
+            [],
+        )?;
+
+        // Update schema version
+        self.conn.execute(
+            "INSERT OR REPLACE INTO schema_version (version) VALUES (?1)",
+            params![8],
+        )?;
+
+        Ok(())
+    }
+
+    fn migrate_to_v9(&self) -> Result<()> {
+        // Add PageRank support: document_links table and importance_score column
+
+        // Add importance_score column to documents table
+        let has_importance: bool = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('documents') WHERE name = 'importance_score'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+
+        if !has_importance {
+            self.conn.execute(
+                "ALTER TABLE documents ADD COLUMN importance_score REAL DEFAULT 1.0",
+                [],
+            )?;
+            self.conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_documents_importance ON documents(importance_score DESC)",
+                [],
+            )?;
+        }
+
+        // Create document_links table (if not exists)
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS document_links (
+                source_id INTEGER NOT NULL,
+                target_id INTEGER NOT NULL,
+                link_type TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (source_id) REFERENCES documents(id) ON DELETE CASCADE,
+                FOREIGN KEY (target_id) REFERENCES documents(id) ON DELETE CASCADE,
+                PRIMARY KEY (source_id, target_id, link_type)
+            )",
+            [],
+        )?;
+
+        // Create indexes for document_links
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_document_links_source ON document_links(source_id)",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_document_links_target ON document_links(target_id)",
+            [],
+        )?;
+
+        // Update schema version
+        self.conn.execute(
+            "INSERT OR REPLACE INTO schema_version (version) VALUES (?1)",
+            params![9],
+        )?;
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -834,7 +1018,7 @@ mod tests {
 
         db.initialize().unwrap();
 
-        assert_eq!(db.schema_version().unwrap(), Some(7));
+        assert_eq!(db.schema_version().unwrap(), Some(9));
 
         let has_provider_type: bool = db.conn.query_row(
             "SELECT COUNT(*) > 0 FROM pragma_table_info('collections') WHERE name = 'provider_type'",
@@ -911,7 +1095,7 @@ mod tests {
 
         db.initialize().unwrap();
 
-        assert_eq!(db.schema_version().unwrap(), Some(7));
+        assert_eq!(db.schema_version().unwrap(), Some(9));
 
         let metadata_columns = vec![
             "llm_summary",
@@ -1002,7 +1186,7 @@ mod tests {
 
         db.initialize().unwrap();
 
-        assert_eq!(db.schema_version().unwrap(), Some(7));
+        assert_eq!(db.schema_version().unwrap(), Some(9));
 
         let has_user_metadata: bool = db
             .conn
