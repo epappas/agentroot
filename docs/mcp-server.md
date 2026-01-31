@@ -21,9 +21,11 @@ This starts a server that:
 
 ## Available Tools
 
-The MCP server exposes six tools for AI assistants:
+The MCP server exposes 16 tools for AI assistants:
 
-### 1. search
+### Search Tools
+
+#### 1. search
 
 BM25 full-text search across your knowledge base.
 
@@ -32,8 +34,12 @@ BM25 full-text search across your knowledge base.
 - `limit` (integer, optional) - Maximum results (default: 20)
 - `minScore` (number, optional) - Minimum relevance score 0-1 (default: 0)
 - `collection` (string, optional) - Filter by collection name
+- `provider` (string, optional) - Filter by provider type
+- `category` (string, optional) - Filter by LLM-generated category
+- `difficulty` (string, optional) - Filter by difficulty level
+- `concept` (string, optional) - Filter by concept/keyword
 
-**Returns**: List of matching documents with scores.
+**Returns**: List of matching documents with scores, metadata, and summaries.
 
 **Example tool call**:
 ```json
@@ -42,12 +48,12 @@ BM25 full-text search across your knowledge base.
   "arguments": {
     "query": "error handling",
     "limit": 10,
-    "minScore": 0.5
+    "category": "tutorial"
   }
 }
 ```
 
-### 2. vsearch
+#### 2. vsearch
 
 Vector similarity search using embeddings.
 
@@ -56,25 +62,39 @@ Vector similarity search using embeddings.
 - `limit` (integer, optional) - Maximum results (default: 20)
 - `minScore` (number, optional) - Minimum similarity score 0-1 (default: 0.3)
 - `collection` (string, optional) - Filter by collection name
+- `provider`, `category`, `difficulty`, `concept` (optional) - Metadata filters
 
 **Returns**: Semantically similar documents.
 
-**Note**: Requires embeddings to be generated first (`agentroot embed`). Currently returns an error if vector index is not available.
+**Note**: Requires embeddings to be generated first (`agentroot embed`).
 
-### 3. query
+#### 3. query
 
-Hybrid search combining BM25 and vector similarity.
+Hybrid search combining BM25 and vector similarity with RRF fusion.
 
 **Parameters**:
 - `query` (string, required) - Search query
 - `limit` (integer, optional) - Maximum results (default: 20)
 - `collection` (string, optional) - Filter by collection name
+- `provider`, `category`, `difficulty`, `concept` (optional) - Metadata filters
 
 **Returns**: Best results from combined search approaches.
 
-**Note**: Currently falls back to BM25 search. Full hybrid implementation pending.
+#### 4. smart_search
 
-### 4. get
+Intelligent natural language search with automatic query understanding and fallback.
+
+**Parameters**:
+- `query` (string, required) - Natural language query
+- `limit` (integer, optional) - Maximum results (default: 20)
+- `minScore` (number, optional) - Minimum relevance score
+- `collection` (string, optional) - Filter by collection name
+
+**Returns**: Search results with automatic strategy selection.
+
+### Document Retrieval Tools
+
+#### 5. get
 
 Retrieve a single document by path, docid, or virtual URI.
 
@@ -86,17 +106,14 @@ Retrieve a single document by path, docid, or virtual URI.
 
 **Returns**: Document content as a resource.
 
-**Example tool call**:
 ```json
 {
   "name": "get",
-  "arguments": {
-    "file": "#a1b2c3"
-  }
+  "arguments": { "file": "#a1b2c3" }
 }
 ```
 
-### 5. multi_get
+#### 6. multi_get
 
 Retrieve multiple documents by glob pattern or comma-separated list.
 
@@ -108,17 +125,7 @@ Retrieve multiple documents by glob pattern or comma-separated list.
 
 **Returns**: Array of document resources.
 
-**Example tool call**:
-```json
-{
-  "name": "multi_get",
-  "arguments": {
-    "pattern": "myproject/src/*.rs"
-  }
-}
-```
-
-### 6. status
+#### 7. status
 
 Show index status and collection information.
 
@@ -126,13 +133,109 @@ Show index status and collection information.
 
 **Returns**: Statistics about indexed documents, collections, and embedding status.
 
-**Example tool call**:
+### Collection Management Tools
+
+#### 8. collection_add
+
+Add a new collection to index.
+
+**Parameters**:
+- `name` (string, required) - Collection name
+- `path` (string, required) - Directory path or URL
+- `pattern` (string, optional) - Glob pattern (default: `**/*.md`)
+- `provider` (string, optional) - Provider type: file, github, url, pdf, sql
+- `config` (string, optional) - JSON provider config
+
+#### 9. collection_remove
+
+Remove a collection and its documents.
+
+**Parameters**:
+- `name` (string, required) - Collection name to remove
+
+#### 10. collection_update
+
+Reindex a collection (scan for new/changed documents).
+
+**Parameters**:
+- `name` (string, required) - Collection name to reindex
+
+### Metadata Tools
+
+#### 11. metadata_add
+
+Add custom user metadata to a document.
+
+**Parameters**:
+- `docid` (string, required) - Document ID (e.g., `#a1b2c3`)
+- `metadata` (object, required) - Key-value metadata pairs
+
+**Example**:
 ```json
 {
-  "name": "status",
-  "arguments": {}
+  "name": "metadata_add",
+  "arguments": {
+    "docid": "#e192a2",
+    "metadata": { "author": "Alice", "difficulty": 3 }
+  }
 }
 ```
+
+#### 12. metadata_get
+
+Get custom user metadata from a document.
+
+**Parameters**:
+- `docid` (string, required) - Document ID
+
+#### 13. metadata_query
+
+Query documents by custom user metadata.
+
+**Parameters**:
+- `field` (string, required) - Metadata field name
+- `operator` (string, required) - One of: `eq`, `contains`, `gt`, `lt`, `has`, `exists`
+- `value` (string, optional) - Value to compare against
+- `limit` (integer, optional) - Maximum results (default: 20)
+
+**Example**:
+```json
+{
+  "name": "metadata_query",
+  "arguments": { "field": "author", "operator": "eq", "value": "Alice" }
+}
+```
+
+### Chunk Navigation Tools
+
+#### 14. search_chunks
+
+Search for specific code chunks (functions, methods, classes).
+
+**Parameters**:
+- `query` (string, required) - Search query
+- `limit` (integer, optional) - Maximum results (default: 10)
+- `minScore` (number, optional) - Minimum relevance score
+- `collection` (string, optional) - Filter by collection
+- `label` (string, optional) - Filter by label (format: `key:value`)
+
+**Returns**: Matching chunks with type, breadcrumb, line ranges, and labels.
+
+#### 15. get_chunk
+
+Retrieve a specific code chunk by its hash, including all metadata.
+
+**Parameters**:
+- `chunk_hash` (string, required) - Chunk hash
+- `include_context` (boolean, optional) - Include surrounding chunks (default: false)
+
+#### 16. navigate_chunks
+
+Navigate to previous or next chunk within the same document.
+
+**Parameters**:
+- `chunk_hash` (string, required) - Starting chunk hash
+- `direction` (string, required) - `prev` or `next`
 
 ## Integration with Claude Desktop
 
@@ -184,6 +287,37 @@ Edit `%APPDATA%\Claude\claude_desktop_config.json`:
 ```
 
 After editing the config, restart Claude Desktop. The Agentroot tools will appear in Claude's tool palette.
+
+## Integration with Claude Code
+
+Add to your `.claude/settings.json` or project-level `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "agentroot": {
+      "command": "agentroot",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+To use a custom database path:
+
+```json
+{
+  "mcpServers": {
+    "agentroot": {
+      "command": "agentroot",
+      "args": ["mcp"],
+      "env": {
+        "AGENTROOT_DB": "/path/to/index.sqlite"
+      }
+    }
+  }
+}
+```
 
 ## Integration with Continue.dev
 
@@ -254,7 +388,7 @@ AI assistants discover available tools via `tools/list`:
 }
 ```
 
-Response includes all six tools with their schemas.
+Response includes all 16 tools with their schemas.
 
 ### Tool Invocation
 
@@ -359,13 +493,9 @@ Do not index sensitive files (passwords, API keys, credentials) if using MCP int
 
 Current limitations of the MCP server:
 
-1. **Vector search not fully implemented** - `vsearch` returns an error if embeddings aren't available
-2. **Hybrid search falls back to BM25** - `query` currently uses only BM25
-3. **No subscription support** - Resources don't support real-time updates
-4. **No prompt templates** - Only basic prompt definitions
-5. **No batch operations** - Tools must be called individually
-
-These limitations may be addressed in future versions.
+1. **Vector/hybrid search requires embeddings** - `vsearch` and `query` need `agentroot embed` to have been run first; they fall back to BM25 otherwise
+2. **No subscription support** - Resources don't support real-time updates
+3. **No batch operations** - Tools must be called individually
 
 ## Troubleshooting
 
@@ -408,7 +538,7 @@ These limitations may be addressed in future versions.
 
 ## Further Reading
 
+- [Integration Guide](integration-guide.md) for SDK, CLI, and MCP integration
 - [MCP Specification](https://spec.modelcontextprotocol.io/)
-- [Claude Desktop MCP Integration](https://docs.anthropic.com/claude/docs/mcp)
 - [Getting Started Guide](getting-started.md) for indexing basics
 - [CLI Reference](cli-reference.md) for command details
