@@ -413,32 +413,33 @@ pub fn fallback_workflow(query: &str, has_embeddings: bool) -> Workflow {
     let is_code_query = query.contains("::")
         || query.contains("->")
         || query.contains("fn ")
+        || query.contains("func ")
         || query.contains("impl ")
         || query.contains("class ")
         || query.contains("def ")
         || query.contains("struct ")
-        || is_pascal_or_snake_case(query);
+        || is_code_identifier(query);
 
+    let q = query.to_string();
     let steps = if !has_embeddings && is_code_query {
-        // Technical query without embeddings: chunk BM25
         vec![WorkflowStep::Bm25ChunkSearch {
-            query: query.to_string(),
+            query: q,
             limit: 20,
         }]
     } else if !has_embeddings {
         vec![WorkflowStep::Bm25Search {
-            query: query.to_string(),
+            query: q,
             limit: 20,
         }]
     } else if is_code_query {
-        // Technical query with embeddings: chunk BM25 + document BM25, merged
+        // Code query with embeddings: chunk BM25 + document BM25, merged
         vec![
             WorkflowStep::Bm25ChunkSearch {
-                query: query.to_string(),
+                query: q.clone(),
                 limit: 20,
             },
             WorkflowStep::Bm25Search {
-                query: query.to_string(),
+                query: q,
                 limit: 20,
             },
             WorkflowStep::Merge {
@@ -449,12 +450,12 @@ pub fn fallback_workflow(query: &str, has_embeddings: bool) -> Workflow {
         ]
     } else if is_nl {
         vec![WorkflowStep::VectorSearch {
-            query: query.to_string(),
+            query: q,
             limit: 20,
         }]
     } else {
         vec![WorkflowStep::HybridSearch {
-            query: query.to_string(),
+            query: q,
             limit: 20,
             use_expansion: false,
             use_reranking: false,
@@ -469,20 +470,26 @@ pub fn fallback_workflow(query: &str, has_embeddings: bool) -> Workflow {
     }
 }
 
-/// Check if the query contains PascalCase or snake_case identifiers
-fn is_pascal_or_snake_case(query: &str) -> bool {
+/// Check if the query contains code identifiers (PascalCase, camelCase, snake_case)
+fn is_code_identifier(query: &str) -> bool {
     query.split_whitespace().any(|word| {
-        // snake_case: contains underscore with alphanumeric
+        if word.len() < 2 {
+            return false;
+        }
+        // snake_case: contains underscore with alphanumeric chars
         if word.contains('_') && word.chars().all(|c| c.is_alphanumeric() || c == '_') {
             return true;
         }
-        // PascalCase: starts with uppercase, has at least one lowercase after
-        let chars: Vec<char> = word.chars().collect();
-        if chars.len() >= 2
-            && chars[0].is_uppercase()
-            && chars.iter().skip(1).any(|c| c.is_lowercase())
-            && chars.iter().skip(1).any(|c| c.is_uppercase())
-        {
+        let mut chars = word.chars();
+        let first = chars.next().unwrap();
+        let rest_has_lower = word[1..].chars().any(|c| c.is_lowercase());
+        let rest_has_upper = word[1..].chars().any(|c| c.is_uppercase());
+        // PascalCase: starts uppercase, has both lower and upper after (e.g. WorkflowStep)
+        if first.is_uppercase() && rest_has_lower && rest_has_upper {
+            return true;
+        }
+        // camelCase: starts lowercase, has at least one uppercase after (e.g. getString)
+        if first.is_lowercase() && rest_has_upper {
             return true;
         }
         false
@@ -635,13 +642,41 @@ mod tests {
     }
 
     #[test]
-    fn test_is_pascal_or_snake_case() {
-        assert!(is_pascal_or_snake_case("search_chunks"));
-        assert!(is_pascal_or_snake_case("WorkflowStep"));
-        assert!(is_pascal_or_snake_case("HttpReranker"));
-        assert!(!is_pascal_or_snake_case("search"));
-        assert!(!is_pascal_or_snake_case("how to search"));
-        assert!(!is_pascal_or_snake_case("MCP")); // all caps is not PascalCase
+    fn test_is_code_identifier() {
+        // snake_case
+        assert!(is_code_identifier("search_chunks"));
+        assert!(is_code_identifier("search_chunks_bm25"));
+        // PascalCase
+        assert!(is_code_identifier("WorkflowStep"));
+        assert!(is_code_identifier("HttpReranker"));
+        // camelCase
+        assert!(is_code_identifier("getString"));
+        assert!(is_code_identifier("searchChunks"));
+        assert!(is_code_identifier("getElementById"));
+        // NOT code identifiers
+        assert!(!is_code_identifier("search"));
+        assert!(!is_code_identifier("how to search"));
+        assert!(!is_code_identifier("MCP")); // all caps, not PascalCase
+        assert!(!is_code_identifier("a")); // too short
+    }
+
+    #[test]
+    fn test_fallback_workflow_camel_case_query() {
+        let workflow = fallback_workflow("getElementById", false);
+        assert!(matches!(&workflow.steps[0], WorkflowStep::Bm25ChunkSearch { .. }));
+    }
+
+    #[test]
+    fn test_fallback_workflow_go_func_query() {
+        let workflow = fallback_workflow("func HandleRequest", false);
+        assert!(matches!(&workflow.steps[0], WorkflowStep::Bm25ChunkSearch { .. }));
+    }
+
+    #[test]
+    fn test_fallback_workflow_code_wins_over_nl() {
+        // When query has both NL and code signals, code wins (more specific)
+        let workflow = fallback_workflow("how does impl Display work", true);
+        assert!(matches!(&workflow.steps[0], WorkflowStep::Bm25ChunkSearch { .. }));
     }
 
     #[test]

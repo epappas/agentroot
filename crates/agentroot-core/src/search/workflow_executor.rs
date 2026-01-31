@@ -365,12 +365,21 @@ async fn execute_step(
 
         WorkflowStep::Deduplicate => {
             let initial_count = context.results.len();
-            let mut seen = HashMap::new();
+            let mut seen = std::collections::HashSet::new();
             let mut deduped = Vec::new();
 
             for result in context.results {
-                if !seen.contains_key(&result.hash) {
-                    seen.insert(result.hash.clone(), true);
+                // Use chunk_hash for chunk results, document hash for documents
+                let key = if result.is_chunk {
+                    result
+                        .chunk_hash
+                        .as_deref()
+                        .unwrap_or(&result.hash)
+                        .to_string()
+                } else {
+                    result.hash.clone()
+                };
+                if seen.insert(key) {
                     deduped.push(result);
                 }
             }
@@ -760,13 +769,11 @@ fn merge_results_rrf(results: &[SearchResult]) -> Vec<SearchResult> {
 
 /// Merge results by interleaving (round-robin)
 fn merge_results_interleave(results: &[SearchResult]) -> Vec<SearchResult> {
-    // Group by hash to deduplicate
-    let mut seen = HashMap::new();
+    let mut seen = std::collections::HashSet::new();
     let mut deduped = Vec::new();
 
     for result in results {
-        if !seen.contains_key(&result.hash) {
-            seen.insert(result.hash.clone(), true);
+        if seen.insert(result.hash.clone()) {
             deduped.push(result.clone());
         }
     }
@@ -776,12 +783,11 @@ fn merge_results_interleave(results: &[SearchResult]) -> Vec<SearchResult> {
 
 /// Merge results by appending (preserve order, deduplicate)
 fn merge_results_append(results: &[SearchResult]) -> Vec<SearchResult> {
-    let mut seen = HashMap::new();
+    let mut seen = std::collections::HashSet::new();
     let mut merged = Vec::new();
 
     for result in results {
-        if !seen.contains_key(&result.hash) {
-            seen.insert(result.hash.clone(), true);
+        if seen.insert(result.hash.clone()) {
             merged.push(result.clone());
         }
     }
