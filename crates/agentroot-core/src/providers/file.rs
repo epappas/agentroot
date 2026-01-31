@@ -109,6 +109,11 @@ impl SourceProvider for FileProvider {
 }
 
 fn should_skip(entry: &DirEntry, exclude_dirs: &[String], exclude_hidden: bool) -> bool {
+    // Never skip the root directory (depth 0) - it's the user-configured base path
+    if entry.depth() == 0 {
+        return false;
+    }
+
     let name = entry.file_name().to_string_lossy();
 
     if exclude_hidden && name.starts_with('.') {

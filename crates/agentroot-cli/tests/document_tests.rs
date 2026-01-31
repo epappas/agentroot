@@ -49,7 +49,9 @@ fn setup_indexed_collection() -> (TempDir, TempDir) {
         .arg("add")
         .arg(test_dir.path())
         .arg("--name")
-        .arg("testproject");
+        .arg("testproject")
+        .arg("--mask")
+        .arg("**/*");
     add_cmd.assert().success();
 
     let mut update_cmd = agentroot_cmd();

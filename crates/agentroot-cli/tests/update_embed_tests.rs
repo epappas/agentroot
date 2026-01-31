@@ -60,29 +60,25 @@ fn test_update_specific_collection() {
 
     let mut cmd = agentroot_cmd();
     cmd.env("AGENTROOT_DB", db_path.to_str().unwrap())
-        .arg("update")
-        .arg("--collection")
-        .arg("testcollection");
+        .arg("update");
 
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("Indexed").or(predicate::str::contains("testcollection")));
+        .stdout(predicate::str::contains("testcollection").or(predicate::str::contains("files")));
 }
 
 #[test]
-fn test_update_nonexistent_collection() {
-    let (_test_dir, db_dir) = setup_collection();
+fn test_update_no_collections() {
+    let db_dir = TempDir::new().unwrap();
     let db_path = db_dir.path().join("test.sqlite");
 
     let mut cmd = agentroot_cmd();
     cmd.env("AGENTROOT_DB", db_path.to_str().unwrap())
-        .arg("update")
-        .arg("--collection")
-        .arg("nonexistent");
+        .arg("update");
 
-    cmd.assert().failure().stderr(
-        predicate::str::contains("not found").or(predicate::str::contains("No collection")),
-    );
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("No collections"));
 }
 
 #[test]
@@ -186,8 +182,8 @@ fn test_status_after_update() {
     status_cmd
         .assert()
         .success()
-        .stdout(predicate::str::contains("testcollection"))
-        .stdout(predicate::str::contains("documents"));
+        .stdout(predicate::str::is_match("Collections:\\s+1").unwrap())
+        .stdout(predicate::str::is_match("Documents:\\s+3").unwrap());
 }
 
 #[test]
@@ -221,7 +217,7 @@ fn test_status_empty_database() {
     cmd.env("AGENTROOT_DB", db_path.to_str().unwrap())
         .arg("status");
 
-    cmd.assert().success().stdout(
-        predicate::str::contains("No collections").or(predicate::str::contains("0 collections")),
-    );
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::is_match("Collections:\\s+0").unwrap());
 }

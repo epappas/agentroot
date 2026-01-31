@@ -184,5 +184,5 @@ fn test_status_shows_collections() {
 
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("Collections: 1"));
+        .stdout(predicate::str::is_match("Collections:\\s+1").unwrap());
 }

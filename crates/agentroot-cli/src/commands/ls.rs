@@ -21,6 +21,14 @@ pub async fn run(args: LsArgs, db: &Database, format: OutputFormat) -> Result<()
         }
         Some(path) => {
             let docs = db.list_documents_by_prefix(&path)?;
+
+            if docs.is_empty() && !path.contains('/') {
+                let collections = db.list_collections()?;
+                if !collections.iter().any(|c| c.name == path) {
+                    anyhow::bail!("Collection not found: {}", path);
+                }
+            }
+
             match format {
                 OutputFormat::Json => {
                     println!("{}", serde_json::to_string_pretty(&docs)?);
