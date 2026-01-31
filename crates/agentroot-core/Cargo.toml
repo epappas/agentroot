@@ -129,4 +129,18 @@ path = "../../examples/test_glossary_search.rs"
 name = "glossary_benchmark"
 path = "../../examples/glossary_benchmark.rs"
 
+[[example]]
+name = "user_metadata"
+path = "../../examples/user_metadata.rs"
 
+[[example]]
+name = "chunk_navigation"
+path = "../../examples/chunk_navigation.rs"
+
+[[example]]
+name = "workflow_search"
+path = "../../examples/workflow_search.rs"
+
+[[example]]
+name = "vector_hybrid_search"
+path = "../../examples/vector_hybrid_search.rs"
