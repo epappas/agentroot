@@ -76,7 +76,11 @@ impl HttpStrategyAnalyzer {
     }
 
     /// Analyze query and recommend search strategy
-    pub async fn analyze(&self, query: &str, language_context: Option<&str>) -> Result<StrategyAnalysis> {
+    pub async fn analyze(
+        &self,
+        query: &str,
+        language_context: Option<&str>,
+    ) -> Result<StrategyAnalysis> {
         let prompt = build_strategy_prompt(query, language_context);
 
         let messages = vec![
@@ -160,8 +164,7 @@ Output ONLY this JSON (no markdown, no explanation):
   "reasoning": "brief explanation",
   "is_multilingual": true | false
 }}"#,
-        query,
-        context_info
+        query, context_info
     )
 }
 
@@ -206,7 +209,7 @@ pub fn heuristic_strategy(query: &str, has_embeddings: bool) -> StrategyAnalysis
 
     let is_nl = is_natural_language_heuristic(query);
     let has_tech = has_technical_terms_heuristic(query);
-    
+
     // Decide granularity based on query pattern (no hardcoded keywords)
     let granularity = if has_tech {
         // Technical query likely looking for specific code

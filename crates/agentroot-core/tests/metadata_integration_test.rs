@@ -286,6 +286,7 @@ async fn test_end_to_end_metadata_generation() {
         provider: None,
         metadata_filters: Vec::new(),
         full_content: false,
+        ..Default::default()
     };
 
     // Search for common words to get all documents
@@ -392,6 +393,7 @@ async fn test_metadata_improves_search_quality() {
         provider: None,
         metadata_filters: Vec::new(),
         full_content: false,
+        ..Default::default()
     };
 
     // Search for "Rust programming beginners"
@@ -487,6 +489,7 @@ async fn test_metadata_fields_in_search_results() {
         provider: None,
         metadata_filters: Vec::new(),
         full_content: false,
+        ..Default::default()
     };
 
     let results = db.search_fts("Rust", &search_opts).unwrap();
@@ -582,6 +585,7 @@ async fn test_metadata_cache_functionality() {
         provider: None,
         metadata_filters: Vec::new(),
         full_content: false,
+        ..Default::default()
     };
 
     let docs = db.search_fts("test OR document", &search_opts).unwrap();

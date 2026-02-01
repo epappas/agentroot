@@ -9,7 +9,7 @@ pub struct Database {
     pub(crate) conn: Connection,
 }
 
-const SCHEMA_VERSION: i32 = 9;
+const SCHEMA_VERSION: i32 = 10;
 
 const CREATE_TABLES: &str = r#"
 -- Content storage (content-addressable by SHA-256 hash)
@@ -272,6 +272,10 @@ impl Database {
 
         if current < 9 {
             self.migrate_to_v9()?;
+        }
+
+        if current < 10 {
+            self.migrate_to_v10()?;
         }
 
         Ok(())
@@ -972,6 +976,117 @@ impl Database {
 
         Ok(())
     }
+
+    fn migrate_to_v10(&self) -> Result<()> {
+        // Directory index table
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS directories (
+                path TEXT PRIMARY KEY,
+                collection TEXT NOT NULL,
+                depth INTEGER NOT NULL,
+                file_count INTEGER NOT NULL DEFAULT 0,
+                child_dir_count INTEGER NOT NULL DEFAULT 0,
+                summary TEXT,
+                dominant_language TEXT,
+                dominant_category TEXT,
+                concepts TEXT,
+                updated_at TEXT NOT NULL
+            )",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_directories_collection ON directories(collection)",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_directories_depth ON directories(depth)",
+            [],
+        )?;
+
+        // Directory FTS index
+        self.conn.execute(
+            "CREATE VIRTUAL TABLE IF NOT EXISTS directories_fts USING fts5(
+                path,
+                summary,
+                concepts,
+                tokenize='porter unicode61'
+            )",
+            [],
+        )?;
+
+        // Directory FTS triggers
+        self.conn.execute_batch(
+            "CREATE TRIGGER IF NOT EXISTS directories_ai AFTER INSERT ON directories BEGIN
+                INSERT INTO directories_fts(rowid, path, summary, concepts)
+                VALUES (new.rowid, new.path, COALESCE(new.summary, ''), COALESCE(new.concepts, ''));
+            END;
+            CREATE TRIGGER IF NOT EXISTS directories_au AFTER UPDATE ON directories BEGIN
+                DELETE FROM directories_fts WHERE rowid = old.rowid;
+                INSERT INTO directories_fts(rowid, path, summary, concepts)
+                VALUES (new.rowid, new.path, COALESCE(new.summary, ''), COALESCE(new.concepts, ''));
+            END;
+            CREATE TRIGGER IF NOT EXISTS directories_ad AFTER DELETE ON directories BEGIN
+                DELETE FROM directories_fts WHERE rowid = old.rowid;
+            END;",
+        )?;
+
+        // Session tables
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS sessions (
+                id TEXT PRIMARY KEY,
+                created_at TEXT NOT NULL,
+                last_active_at TEXT NOT NULL,
+                ttl_seconds INTEGER NOT NULL DEFAULT 3600,
+                context TEXT
+            )",
+            [],
+        )?;
+
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS session_queries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+                query TEXT NOT NULL,
+                result_count INTEGER NOT NULL,
+                top_results TEXT,
+                created_at TEXT NOT NULL
+            )",
+            [],
+        )?;
+
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS session_seen (
+                session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+                document_hash TEXT NOT NULL,
+                chunk_hash TEXT NOT NULL DEFAULT '',
+                detail_level TEXT NOT NULL DEFAULT 'L1',
+                seen_at TEXT NOT NULL,
+                PRIMARY KEY (session_id, document_hash, chunk_hash)
+            )",
+            [],
+        )?;
+
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_session_queries_session ON session_queries(session_id)",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_session_seen_session ON session_seen(session_id)",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_sessions_last_active ON sessions(last_active_at)",
+            [],
+        )?;
+
+        // Update schema version
+        self.conn.execute(
+            "INSERT OR REPLACE INTO schema_version (version) VALUES (?1)",
+            params![10],
+        )?;
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -1018,7 +1133,7 @@ mod tests {
 
         db.initialize().unwrap();
 
-        assert_eq!(db.schema_version().unwrap(), Some(9));
+        assert_eq!(db.schema_version().unwrap(), Some(10));
 
         let has_provider_type: bool = db.conn.query_row(
             "SELECT COUNT(*) > 0 FROM pragma_table_info('collections') WHERE name = 'provider_type'",
@@ -1095,7 +1210,7 @@ mod tests {
 
         db.initialize().unwrap();
 
-        assert_eq!(db.schema_version().unwrap(), Some(9));
+        assert_eq!(db.schema_version().unwrap(), Some(10));
 
         let metadata_columns = vec![
             "llm_summary",
@@ -1186,7 +1301,7 @@ mod tests {
 
         db.initialize().unwrap();
 
-        assert_eq!(db.schema_version().unwrap(), Some(9));
+        assert_eq!(db.schema_version().unwrap(), Some(10));
 
         let has_user_metadata: bool = db
             .conn

@@ -179,8 +179,9 @@ fn parse_chunk_metadata_response(response: &str) -> Result<ChunkMetadata> {
     };
 
     // Parse JSON
-    let metadata: ChunkMetadata = serde_json::from_str(json_str)
-        .map_err(|e| crate::error::AgentRootError::Llm(format!("Failed to parse chunk metadata JSON: {}", e)))?;
+    let metadata: ChunkMetadata = serde_json::from_str(json_str).map_err(|e| {
+        crate::error::AgentRootError::Llm(format!("Failed to parse chunk metadata JSON: {}", e))
+    })?;
 
     Ok(metadata)
 }
@@ -244,7 +245,10 @@ mod tests {
             "Validates user email addresses using regex"
         );
         assert_eq!(metadata.concepts.len(), 3);
-        assert_eq!(metadata.labels.get("operation"), Some(&"validation".to_string()));
+        assert_eq!(
+            metadata.labels.get("operation"),
+            Some(&"validation".to_string())
+        );
     }
 
     #[test]

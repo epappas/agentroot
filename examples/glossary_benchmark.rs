@@ -11,11 +11,11 @@
 //!   export AGENTROOT_LLM_MODEL="Qwen/Qwen2.5-7B-Instruct"
 //!   cargo run --release --example glossary_benchmark
 
-use agentroot_core::db::{hash_content, Database};
-use agentroot_core::llm::{MetadataContext, MetadataGenerator, VLLMClient};
 use agentroot_core::config::LLMServiceConfig;
+use agentroot_core::db::{hash_content, Database};
+use agentroot_core::llm::{MergeStrategy, Workflow, WorkflowStep};
+use agentroot_core::llm::{MetadataContext, MetadataGenerator, VLLMClient};
 use agentroot_core::search::{execute_workflow, SearchOptions, SearchSource};
-use agentroot_core::llm::{Workflow, WorkflowStep, MergeStrategy};
 use std::collections::HashSet;
 use std::env;
 use std::fs;
@@ -58,8 +58,8 @@ async fn main() {
         }
     };
 
-    let llm_model = env::var("AGENTROOT_LLM_MODEL")
-        .unwrap_or_else(|_| "Qwen/Qwen2.5-7B-Instruct".to_string());
+    let llm_model =
+        env::var("AGENTROOT_LLM_MODEL").unwrap_or_else(|_| "Qwen/Qwen2.5-7B-Instruct".to_string());
 
     println!("📋 Configuration:");
     println!("  LLM: {}", llm_model);
@@ -84,10 +84,11 @@ async fn main() {
     let db = Database::open_in_memory().unwrap();
     db.initialize().unwrap();
     db.ensure_vec_table(128).unwrap();
-    db.add_collection("agentroot", ".", "**/*.md", "file", None).unwrap();
+    db.add_collection("agentroot", ".", "**/*.md", "file", None)
+        .unwrap();
 
     let mut docs_to_index = Vec::new();
-    
+
     // Add core documentation
     for doc in &["README.md", "AGENTS.md", "CHANGELOG.md", "CONTRIBUTING.md"] {
         if Path::new(doc).exists() {
@@ -108,7 +109,7 @@ async fn main() {
                     let path = entry.path().display().to_string();
                     docs_to_index.push((
                         Box::leak(path.clone().into_boxed_str()) as &'static str,
-                        format!("Doc: {}", entry.file_name().to_string_lossy())
+                        format!("Doc: {}", entry.file_name().to_string_lossy()),
                     ));
                 }
             }
@@ -148,7 +149,10 @@ async fn main() {
 
         let context = MetadataContext::new("file".to_string(), "agentroot".to_string())
             .with_extension("md".to_string())
-            .with_timestamps(chrono::Utc::now().to_rfc3339(), chrono::Utc::now().to_rfc3339());
+            .with_timestamps(
+                chrono::Utc::now().to_rfc3339(),
+                chrono::Utc::now().to_rfc3339(),
+            );
 
         let metadata = match generator.generate_metadata(&truncated, &context).await {
             Ok(m) => m,
@@ -164,25 +168,36 @@ async fn main() {
 
         db.insert_doc(
             &agentroot_core::db::DocumentInsert::new(
-                "agentroot", path, &metadata.semantic_title, &hash,
-                &chrono::Utc::now().to_rfc3339(), &chrono::Utc::now().to_rfc3339()
-            ).with_llm_metadata_strings(
-                &metadata.summary, &metadata.semantic_title,
+                "agentroot",
+                path,
+                &metadata.semantic_title,
+                &hash,
+                &chrono::Utc::now().to_rfc3339(),
+                &chrono::Utc::now().to_rfc3339(),
+            )
+            .with_llm_metadata_strings(
+                &metadata.summary,
+                &metadata.semantic_title,
                 &serde_json::to_string(&metadata.keywords).unwrap(),
-                &metadata.category, &metadata.intent,
+                &metadata.category,
+                &metadata.intent,
                 &serde_json::to_string(&metadata.concepts).unwrap(),
                 &metadata.difficulty,
                 &serde_json::to_string(&metadata.suggested_queries).unwrap(),
-                &llm_model, &chrono::Utc::now().to_rfc3339()
-            )
-        ).unwrap();
+                &llm_model,
+                &chrono::Utc::now().to_rfc3339(),
+            ),
+        )
+        .unwrap();
 
         let chunk_hash = blake3::hash(content.as_bytes()).to_hex().to_string();
-        db.insert_chunk_embedding(&hash, 0, 0, &chunk_hash, "test", &vec![0.1; 128]).unwrap();
+        db.insert_chunk_embedding(&hash, 0, 0, &chunk_hash, "test", &vec![0.1; 128])
+            .unwrap();
 
         for concept in &metadata.extracted_concepts {
             let cid = db.upsert_concept(&concept.term).unwrap();
-            db.link_concept_to_chunk(cid, &chunk_hash, &hash, &concept.snippet).unwrap();
+            db.link_concept_to_chunk(cid, &chunk_hash, &hash, &concept.snippet)
+                .unwrap();
             db.update_concept_stats(cid).unwrap();
         }
 
@@ -195,7 +210,10 @@ async fn main() {
     println!("  ✓ Created {} concept links", concept_links);
 
     if indexed < 5 {
-        eprintln!("\n⚠ Warning: Only {} documents indexed. Need 10+ for meaningful results.\n", indexed);
+        eprintln!(
+            "\n⚠ Warning: Only {} documents indexed. Need 10+ for meaningful results.\n",
+            indexed
+        );
     }
 
     println!("\n▶ Phase 2: Benchmark Queries");
@@ -216,7 +234,8 @@ async fn main() {
         },
         BenchmarkQuery {
             query: "provider",
-            description: "Architecture term mapping to 'provider system', 'URLProvider', 'PDFProvider'",
+            description:
+                "Architecture term mapping to 'provider system', 'URLProvider', 'PDFProvider'",
             expected_docs: vec!["AGENTS.md", "CHANGELOG.md", "docs/providers.md"],
             query_type: "Architecture Term",
         },
@@ -253,9 +272,18 @@ async fn main() {
 
         let glossary_workflow = Workflow {
             steps: vec![
-                WorkflowStep::Bm25Search { query: test.query.to_string(), limit: 10 },
-                WorkflowStep::GlossarySearch { query: test.query.to_string(), limit: 10, min_confidence: 0.3 },
-                WorkflowStep::Merge { strategy: MergeStrategy::Append },
+                WorkflowStep::Bm25Search {
+                    query: test.query.to_string(),
+                    limit: 10,
+                },
+                WorkflowStep::GlossarySearch {
+                    query: test.query.to_string(),
+                    limit: 10,
+                    min_confidence: 0.3,
+                },
+                WorkflowStep::Merge {
+                    strategy: MergeStrategy::Append,
+                },
                 WorkflowStep::Deduplicate,
             ],
             reasoning: "With Glossary".to_string(),
@@ -264,12 +292,22 @@ async fn main() {
         };
 
         let options = SearchOptions::default();
-        
-        let baseline_results = execute_workflow(&db, &baseline_workflow, test.query, &options).await.unwrap();
-        let glossary_results = execute_workflow(&db, &glossary_workflow, test.query, &options).await.unwrap();
 
-        let baseline_docs: HashSet<_> = baseline_results.iter().map(|r| r.filepath.as_str()).collect();
-        let glossary_docs: HashSet<_> = glossary_results.iter().map(|r| r.filepath.as_str()).collect();
+        let baseline_results = execute_workflow(&db, &baseline_workflow, test.query, &options)
+            .await
+            .unwrap();
+        let glossary_results = execute_workflow(&db, &glossary_workflow, test.query, &options)
+            .await
+            .unwrap();
+
+        let baseline_docs: HashSet<_> = baseline_results
+            .iter()
+            .map(|r| r.filepath.as_str())
+            .collect();
+        let glossary_docs: HashSet<_> = glossary_results
+            .iter()
+            .map(|r| r.filepath.as_str())
+            .collect();
         let expected: HashSet<_> = test.expected_docs.iter().copied().collect();
 
         let baseline_hits = baseline_docs.intersection(&expected).count();
@@ -281,10 +319,18 @@ async fn main() {
         let new_docs = glossary_docs.difference(&baseline_docs).count();
         let improvement = ((glossary_recall - baseline_recall) / baseline_recall.max(0.01)) * 100.0;
 
-        println!("    Baseline: {}/{} docs (recall: {:.1}%)",
-            baseline_results.len(), baseline_hits, baseline_recall * 100.0);
-        println!("    With Glossary: {}/{} docs (recall: {:.1}%)",
-            glossary_results.len(), glossary_hits, glossary_recall * 100.0);
+        println!(
+            "    Baseline: {}/{} docs (recall: {:.1}%)",
+            baseline_results.len(),
+            baseline_hits,
+            baseline_recall * 100.0
+        );
+        println!(
+            "    With Glossary: {}/{} docs (recall: {:.1}%)",
+            glossary_results.len(),
+            glossary_hits,
+            glossary_recall * 100.0
+        );
         println!("    New docs discovered: {}", new_docs);
         println!("    Improvement: {:.1}%\n", improvement);
 
@@ -305,10 +351,13 @@ async fn main() {
     println!("║                    BENCHMARK SUMMARY                          ║");
     println!("╚═══════════════════════════════════════════════════════════════╝\n");
 
-    let avg_baseline_recall = all_results.iter().map(|r| r.baseline_recall).sum::<f64>() / all_results.len() as f64;
-    let avg_glossary_recall = all_results.iter().map(|r| r.glossary_recall).sum::<f64>() / all_results.len() as f64;
+    let avg_baseline_recall =
+        all_results.iter().map(|r| r.baseline_recall).sum::<f64>() / all_results.len() as f64;
+    let avg_glossary_recall =
+        all_results.iter().map(|r| r.glossary_recall).sum::<f64>() / all_results.len() as f64;
     let total_new_docs = all_results.iter().map(|r| r.new_docs_found).sum::<usize>();
-    let avg_improvement = all_results.iter().map(|r| r.improvement).sum::<f64>() / all_results.len() as f64;
+    let avg_improvement =
+        all_results.iter().map(|r| r.improvement).sum::<f64>() / all_results.len() as f64;
 
     println!("  📊 Overall Metrics:");
     println!("    Documents Indexed: {}", indexed);
@@ -316,13 +365,22 @@ async fn main() {
     println!("    Queries Tested: {}\n", all_results.len());
 
     println!("  📈 Recall Performance:");
-    println!("    Baseline (BM25 only): {:.1}%", avg_baseline_recall * 100.0);
+    println!(
+        "    Baseline (BM25 only): {:.1}%",
+        avg_baseline_recall * 100.0
+    );
     println!("    With Glossary: {:.1}%", avg_glossary_recall * 100.0);
-    println!("    Absolute Gain: +{:.1} percentage points\n", (avg_glossary_recall - avg_baseline_recall) * 100.0);
+    println!(
+        "    Absolute Gain: +{:.1} percentage points\n",
+        (avg_glossary_recall - avg_baseline_recall) * 100.0
+    );
 
     println!("  🔍 Discovery:");
     println!("    Total new documents found: {}", total_new_docs);
-    println!("    Avg new docs per query: {:.1}\n", total_new_docs as f64 / all_results.len() as f64);
+    println!(
+        "    Avg new docs per query: {:.1}\n",
+        total_new_docs as f64 / all_results.len() as f64
+    );
 
     println!("  💯 Improvement:");
     println!("    Average improvement: {:.1}%\n", avg_improvement);
@@ -332,7 +390,8 @@ async fn main() {
     println!("  │ Query                   │ Baseline │ Glossary │ Improve  │");
     println!("  ├─────────────────────────┼──────────┼──────────┼──────────┤");
     for result in &all_results {
-        println!("  │ {:<23} │ {:>6.1}%  │ {:>6.1}%  │ {:>6.1}% │",
+        println!(
+            "  │ {:<23} │ {:>6.1}%  │ {:>6.1}%  │ {:>6.1}% │",
             &result.query[..result.query.len().min(23)],
             result.baseline_recall * 100.0,
             result.glossary_recall * 100.0,

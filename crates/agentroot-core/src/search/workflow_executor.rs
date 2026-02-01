@@ -46,11 +46,8 @@ pub async fn execute_workflow(
     }
 
     // Apply final limit from SearchOptions
-    let final_results: Vec<SearchResult> = context
-        .results
-        .into_iter()
-        .take(options.limit)
-        .collect();
+    let final_results: Vec<SearchResult> =
+        context.results.into_iter().take(options.limit).collect();
 
     Ok(final_results)
 }
@@ -481,7 +478,7 @@ async fn execute_step(
         } => {
             // Search concepts using FTS
             let concepts = db.search_concepts(query, *limit)?;
-            
+
             if concepts.is_empty() {
                 tracing::debug!("GlossarySearch: No concepts found for query '{}'", query);
             } else {
@@ -500,10 +497,17 @@ async fn execute_step(
             for concept in concepts {
                 // Get chunks for each concept
                 let chunk_infos = db.get_chunks_for_concept(concept.id)?;
-                eprintln!("[DEBUG]   Concept '{}' has {} chunks", concept.term, chunk_infos.len());
+                eprintln!(
+                    "[DEBUG]   Concept '{}' has {} chunks",
+                    concept.term,
+                    chunk_infos.len()
+                );
 
                 for chunk_info in chunk_infos {
-                    eprintln!("[DEBUG]     Querying doc with hash: {}", &chunk_info.document_hash[..16]);
+                    eprintln!(
+                        "[DEBUG]     Querying doc with hash: {}",
+                        &chunk_info.document_hash[..16]
+                    );
                     // Query document metadata directly from database
                     let doc_query = db.conn.query_row(
                         "SELECT d.collection, d.modified_at, d.llm_summary, d.llm_title, d.llm_keywords, d.llm_category, d.llm_difficulty
@@ -524,46 +528,57 @@ async fn execute_step(
                     );
 
                     match doc_query {
-                        Ok((collection_name, modified_at, llm_summary, llm_title, llm_keywords_json, llm_category, llm_difficulty)) => {
-                            eprintln!("[DEBUG]       Document found! path={}", chunk_info.document_path);
-                        // Parse keywords JSON if present
-                        let llm_keywords = llm_keywords_json
-                            .and_then(|json| serde_json::from_str::<Vec<String>>(&json).ok());
-
-                        let result = SearchResult {
-                            filepath: chunk_info.document_path.clone(),
-                            display_path: chunk_info.document_path.clone(),
-                            title: chunk_info.document_title.clone(),
-                            hash: chunk_info.document_hash.clone(),
+                        Ok((
                             collection_name,
                             modified_at,
-                            body: Some(chunk_info.snippet.clone()),
-                            body_length: chunk_info.snippet.len(),
-                            docid: format!("#chunk-{}", &chunk_info.chunk_hash[..8]),
-                            context: Some(format!("Found via concept: {}", concept.term)),
-                            score: *min_confidence,
-                            source: SearchSource::Glossary,
-                            chunk_pos: None,
                             llm_summary,
                             llm_title,
-                            llm_keywords,
+                            llm_keywords_json,
                             llm_category,
                             llm_difficulty,
-                            user_metadata: None,
-                            // Chunk fields (glossary already provides chunk info)
-                            is_chunk: true,
-                            chunk_hash: Some(chunk_info.chunk_hash.clone()),
-                            chunk_type: None,
-                            chunk_breadcrumb: None,
-                            chunk_start_line: None,
-                            chunk_end_line: None,
-                            chunk_language: None,
-                            chunk_summary: None,
-                            chunk_purpose: None,
-                            chunk_concepts: Vec::new(),
-                            chunk_labels: std::collections::HashMap::new(),
-                        };
-                        glossary_results.push(result);
+                        )) => {
+                            eprintln!(
+                                "[DEBUG]       Document found! path={}",
+                                chunk_info.document_path
+                            );
+                            // Parse keywords JSON if present
+                            let llm_keywords = llm_keywords_json
+                                .and_then(|json| serde_json::from_str::<Vec<String>>(&json).ok());
+
+                            let result = SearchResult {
+                                filepath: chunk_info.document_path.clone(),
+                                display_path: chunk_info.document_path.clone(),
+                                title: chunk_info.document_title.clone(),
+                                hash: chunk_info.document_hash.clone(),
+                                collection_name,
+                                modified_at,
+                                body: Some(chunk_info.snippet.clone()),
+                                body_length: chunk_info.snippet.len(),
+                                docid: format!("#chunk-{}", &chunk_info.chunk_hash[..8]),
+                                context: Some(format!("Found via concept: {}", concept.term)),
+                                score: *min_confidence,
+                                source: SearchSource::Glossary,
+                                chunk_pos: None,
+                                llm_summary,
+                                llm_title,
+                                llm_keywords,
+                                llm_category,
+                                llm_difficulty,
+                                user_metadata: None,
+                                // Chunk fields (glossary already provides chunk info)
+                                is_chunk: true,
+                                chunk_hash: Some(chunk_info.chunk_hash.clone()),
+                                chunk_type: None,
+                                chunk_breadcrumb: None,
+                                chunk_start_line: None,
+                                chunk_end_line: None,
+                                chunk_language: None,
+                                chunk_summary: None,
+                                chunk_purpose: None,
+                                chunk_concepts: Vec::new(),
+                                chunk_labels: std::collections::HashMap::new(),
+                            };
+                            glossary_results.push(result);
                         }
                         Err(e) => {
                             tracing::warn!(
@@ -688,21 +703,30 @@ fn parse_temporal_expression(expr: Option<&str>) -> Result<Option<DateTime<Utc>>
                     Utc,
                 )));
             } else {
-                tracing::warn!("Failed to parse number from temporal expression: '{}'", expr);
+                tracing::warn!(
+                    "Failed to parse number from temporal expression: '{}'",
+                    expr
+                );
                 return Ok(None);
             }
         } else if expr_lower.contains("week") {
             if let Some(num) = extract_number(&expr_lower) {
                 return Ok(Some(now - Duration::weeks(num)));
             } else {
-                tracing::warn!("Failed to parse number from temporal expression: '{}'", expr);
+                tracing::warn!(
+                    "Failed to parse number from temporal expression: '{}'",
+                    expr
+                );
                 return Ok(None);
             }
         } else if expr_lower.contains("day") {
             if let Some(num) = extract_number(&expr_lower) {
                 return Ok(Some(now - Duration::days(num)));
             } else {
-                tracing::warn!("Failed to parse number from temporal expression: '{}'", expr);
+                tracing::warn!(
+                    "Failed to parse number from temporal expression: '{}'",
+                    expr
+                );
                 return Ok(None);
             }
         } else if expr_lower.contains("year") {
@@ -716,7 +740,10 @@ fn parse_temporal_expression(expr: Option<&str>) -> Result<Option<DateTime<Utc>>
                 };
                 return Ok(Some(now - Duration::days(years)));
             } else {
-                tracing::warn!("Failed to parse number from temporal expression: '{}'", expr);
+                tracing::warn!(
+                    "Failed to parse number from temporal expression: '{}'",
+                    expr
+                );
                 return Ok(None);
             }
         } else {

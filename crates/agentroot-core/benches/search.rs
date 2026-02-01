@@ -101,7 +101,8 @@ fn bench_bm25_search(c: &mut Criterion) {
                 collection: None,
                 provider: None,
                 full_content: false,
-        metadata_filters: Vec::new()
+                metadata_filters: Vec::new(),
+                ..Default::default()
             };
 
             b.iter(|| {
@@ -127,7 +128,8 @@ fn bench_search_with_limits(c: &mut Criterion) {
                 collection: None,
                 provider: None,
                 full_content: false,
-        metadata_filters: Vec::new()
+                metadata_filters: Vec::new(),
+                ..Default::default()
             };
 
             b.iter(|| {
@@ -150,7 +152,8 @@ fn bench_search_with_collection_filter(c: &mut Criterion) {
             collection: Some("docs".to_string()),
             provider: None,
             full_content: false,
-        metadata_filters: Vec::new()
+            metadata_filters: Vec::new(),
+            ..Default::default()
         };
 
         b.iter(|| {
@@ -166,7 +169,8 @@ fn bench_search_with_collection_filter(c: &mut Criterion) {
             collection: None,
             provider: None,
             full_content: false,
-        metadata_filters: Vec::new()
+            metadata_filters: Vec::new(),
+            ..Default::default()
         };
 
         b.iter(|| {
@@ -192,7 +196,8 @@ fn bench_search_with_min_score(c: &mut Criterion) {
                     collection: None,
                     provider: None,
                     full_content: false,
-        metadata_filters: Vec::new()
+                    metadata_filters: Vec::new(),
+                    ..Default::default()
                 };
 
                 b.iter(|| {
@@ -216,7 +221,8 @@ fn bench_search_full_content(c: &mut Criterion) {
             collection: None,
             provider: None,
             full_content: false,
-        metadata_filters: Vec::new()
+            metadata_filters: Vec::new(),
+            ..Default::default()
         };
 
         b.iter(|| {
@@ -232,7 +238,8 @@ fn bench_search_full_content(c: &mut Criterion) {
             collection: None,
             provider: None,
             full_content: true,
-        metadata_filters: Vec::new()
+            metadata_filters: Vec::new(),
+            ..Default::default()
         };
 
         b.iter(|| {

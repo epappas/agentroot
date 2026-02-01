@@ -46,7 +46,9 @@ impl Database {
         // Fetch document details for top candidates
         let mut results = Vec::new();
         for (hash_seq, score) in top_candidates {
-            if let Some(result) = self.get_search_result_for_hash_seq(&hash_seq, score, query, options)? {
+            if let Some(result) =
+                self.get_search_result_for_hash_seq(&hash_seq, score, query, options)?
+            {
                 results.push(result);
             }
         }
@@ -196,13 +198,13 @@ impl Database {
                 let query_lower = query.to_lowercase();
                 let title_lower = title.to_lowercase();
                 let path_lower = path.to_lowercase();
-                
+
                 // Extract query terms (split on whitespace and common delimiters)
                 let query_terms: Vec<&str> = query_lower
                     .split(|c: char| c.is_whitespace() || c == '?' || c == '!')
                     .filter(|s| !s.is_empty() && s.len() >= 2) // Keep acronyms and short terms
                     .collect();
-                
+
                 // Check for title/filename matches with graduated boosting
                 let mut title_boost = 1.0;
                 for term in &query_terms {
@@ -211,12 +213,12 @@ impl Database {
                         title_boost *= 10.0; // VERY strong boost for filename match
                         break; // One match is enough for max boost
                     }
-                    // Strong boost if term appears in title  
+                    // Strong boost if term appears in title
                     else if title_lower.contains(term) {
                         title_boost *= 4.0; // Strong boost for title match
                     }
                 }
-                
+
                 boosted_score *= title_boost;
 
                 // Extract snippet from document body
@@ -315,7 +317,9 @@ impl Database {
                 continue;
             }
 
-            if let Some(result) = self.get_chunk_search_result(&chunk_hash, score, query, options)? {
+            if let Some(result) =
+                self.get_chunk_search_result(&chunk_hash, score, query, options)?
+            {
                 results.push(result);
             }
         }
@@ -380,7 +384,10 @@ impl Database {
 
                 let labels_json: Option<String> = row.get(17)?;
                 let labels = labels_json
-                    .and_then(|json| serde_json::from_str::<std::collections::HashMap<String, String>>(&json).ok())
+                    .and_then(|json| {
+                        serde_json::from_str::<std::collections::HashMap<String, String>>(&json)
+                            .ok()
+                    })
                     .unwrap_or_default();
 
                 // Extract snippet from chunk body

@@ -126,6 +126,7 @@ fn main() -> agentroot_core::Result<()> {
             provider: None,
             full_content: false,
             metadata_filters: Vec::new(),
+            ..Default::default()
         };
 
         let results = db.search_fts("fn main", &options)?;

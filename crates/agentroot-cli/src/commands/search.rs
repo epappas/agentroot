@@ -23,7 +23,10 @@ pub async fn run_bm25(args: SearchArgs, db: &Database, format: OutputFormat) -> 
         Err(e) => {
             // LLM not available or failed → graceful fallback to unified search
             // Unified search uses heuristics to choose BM25/vector/hybrid
-            tracing::debug!("Orchestrated search unavailable ({}), falling back to unified search", e);
+            tracing::debug!(
+                "Orchestrated search unavailable ({}), falling back to unified search",
+                e
+            );
             unified_search(db, &query, &options).await?
         }
     };
@@ -137,6 +140,7 @@ fn build_options(args: &SearchArgs) -> SearchOptions {
         provider: None,
         full_content: args.full,
         metadata_filters: Vec::new(),
+        ..Default::default()
     }
 }
 

@@ -1,9 +1,73 @@
 //! MCP tool definitions and handlers
 
 use crate::protocol::*;
-use agentroot_core::{Database, SearchOptions};
+use agentroot_core::{Database, DetailLevel, SearchOptions};
 use anyhow::Result;
 use serde_json::Value;
+use tracing::warn;
+
+// Common detail and session parameters for search tool schemas
+fn detail_param() -> Value {
+    serde_json::json!({
+        "type": "string",
+        "enum": ["L0", "L1", "L2"],
+        "default": "L1",
+        "description": "Context detail level. L0=abstract (~100 tokens), L1=overview (~2K tokens), L2=full content."
+    })
+}
+
+fn session_id_param() -> Value {
+    serde_json::json!({
+        "type": "string",
+        "description": "Optional session ID for multi-turn context tracking (from session_start)"
+    })
+}
+
+fn parse_detail(args: &Value) -> DetailLevel {
+    DetailLevel::from_str_opt(args.get("detail").and_then(|v| v.as_str()))
+}
+
+fn parse_session_id(args: &Value) -> Option<String> {
+    args.get("session_id")
+        .and_then(|v| v.as_str())
+        .map(String::from)
+}
+
+fn apply_session_and_project(
+    db: &Database,
+    results: &mut Vec<agentroot_core::SearchResult>,
+    detail: DetailLevel,
+    session_id: Option<&str>,
+    query: &str,
+) {
+    // Apply session awareness (demote already-seen results)
+    if let Some(sid) = session_id {
+        if let Err(e) =
+            agentroot_core::search::session_aware::apply_session_awareness(db, results, sid)
+        {
+            warn!(session_id = sid, error = %e, "session awareness failed");
+        }
+    }
+
+    // Project results to detail level
+    for r in results.iter_mut() {
+        r.project(detail);
+    }
+
+    // Log session results (best-effort)
+    if let Some(sid) = session_id {
+        let detail_str = match detail {
+            DetailLevel::L0 => "L0",
+            DetailLevel::L1 => "L1",
+            DetailLevel::L2 => "L2",
+        };
+        if let Err(e) = agentroot_core::search::session_aware::log_session_results(
+            db, sid, query, results, detail_str,
+        ) {
+            warn!(session_id = sid, error = %e, "session logging failed");
+        }
+    }
+}
 
 pub fn search_tool_definition() -> ToolDefinition {
     ToolDefinition {
@@ -45,7 +109,9 @@ pub fn search_tool_definition() -> ToolDefinition {
                 "concept": {
                     "type": "string",
                     "description": "Filter by concept/topic"
-                }
+                },
+                "detail": detail_param(),
+                "session_id": session_id_param()
             },
             "required": ["query"]
         }),
@@ -92,7 +158,9 @@ pub fn vsearch_tool_definition() -> ToolDefinition {
                 "concept": {
                     "type": "string",
                     "description": "Filter by concept/topic"
-                }
+                },
+                "detail": detail_param(),
+                "session_id": session_id_param()
             },
             "required": ["query"]
         }),
@@ -134,7 +202,9 @@ pub fn query_tool_definition() -> ToolDefinition {
                 "concept": {
                     "type": "string",
                     "description": "Filter by concept/topic"
-                }
+                },
+                "detail": detail_param(),
+                "session_id": session_id_param()
             },
             "required": ["query"]
         }),
@@ -165,7 +235,9 @@ pub fn smart_search_tool_definition() -> ToolDefinition {
                 "collection": {
                     "type": "string",
                     "description": "Filter by collection name"
-                }
+                },
+                "detail": detail_param(),
+                "session_id": session_id_param()
             },
             "required": ["query"]
         }),
@@ -319,6 +391,9 @@ pub async fn handle_search(db: &Database, args: Value) -> Result<ToolResult> {
         .and_then(|v| v.as_str())
         .ok_or_else(|| anyhow::anyhow!("Missing query"))?;
 
+    let detail = parse_detail(&args);
+    let session_id = parse_session_id(&args);
+
     let options = SearchOptions {
         limit: args.get("limit").and_then(|v| v.as_u64()).unwrap_or(20) as usize,
         min_score: args.get("minScore").and_then(|v| v.as_f64()).unwrap_or(0.0),
@@ -330,8 +405,11 @@ pub async fn handle_search(db: &Database, args: Value) -> Result<ToolResult> {
             .get("provider")
             .and_then(|v| v.as_str())
             .map(String::from),
-        full_content: false,
+        full_content: detail.is_full_content(),
+        detail,
+        session_id: session_id.clone(),
         metadata_filters: Vec::new(),
+        ..Default::default()
     };
 
     let mut results = db.search_fts(query, &options)?;
@@ -362,6 +440,8 @@ pub async fn handle_search(db: &Database, args: Value) -> Result<ToolResult> {
             matches_category && matches_difficulty && matches_concept
         });
     }
+
+    apply_session_and_project(db, &mut results, detail, session_id.as_deref(), query);
 
     let summary = format!("Found {} results for \"{}\"", results.len(), query);
     let structured: Vec<Value> = results
@@ -424,6 +504,9 @@ pub async fn handle_vsearch(db: &Database, args: Value) -> Result<ToolResult> {
         .and_then(|v| v.as_str())
         .ok_or_else(|| anyhow::anyhow!("Missing query"))?;
 
+    let detail = parse_detail(&args);
+    let session_id = parse_session_id(&args);
+
     let options = SearchOptions {
         limit: args.get("limit").and_then(|v| v.as_u64()).unwrap_or(20) as usize,
         min_score: args.get("minScore").and_then(|v| v.as_f64()).unwrap_or(0.3),
@@ -435,8 +518,11 @@ pub async fn handle_vsearch(db: &Database, args: Value) -> Result<ToolResult> {
             .get("provider")
             .and_then(|v| v.as_str())
             .map(String::from),
-        full_content: false,
+        full_content: detail.is_full_content(),
+        detail,
+        session_id: session_id.clone(),
         metadata_filters: Vec::new(),
+        ..Default::default()
     };
 
     // Try HTTP embedder first, fallback to local
@@ -485,6 +571,8 @@ pub async fn handle_vsearch(db: &Database, args: Value) -> Result<ToolResult> {
             matches_category && matches_difficulty && matches_concept
         });
     }
+
+    apply_session_and_project(db, &mut results, detail, session_id.as_deref(), query);
 
     let summary = format!("Found {} results for \"{}\"", results.len(), query);
     let structured: Vec<Value> = results
@@ -541,6 +629,9 @@ pub async fn handle_query(db: &Database, args: Value) -> Result<ToolResult> {
         .and_then(|v| v.as_str())
         .ok_or_else(|| anyhow::anyhow!("Missing query"))?;
 
+    let detail = parse_detail(&args);
+    let session_id = parse_session_id(&args);
+
     let options = SearchOptions {
         limit: args.get("limit").and_then(|v| v.as_u64()).unwrap_or(20) as usize,
         min_score: 0.0,
@@ -552,8 +643,11 @@ pub async fn handle_query(db: &Database, args: Value) -> Result<ToolResult> {
             .get("provider")
             .and_then(|v| v.as_str())
             .map(String::from),
-        full_content: false,
+        full_content: detail.is_full_content(),
+        detail,
+        session_id: session_id.clone(),
         metadata_filters: Vec::new(),
+        ..Default::default()
     };
 
     // Try HTTP embedder, fallback to BM25-only if not configured
@@ -603,6 +697,8 @@ pub async fn handle_query(db: &Database, args: Value) -> Result<ToolResult> {
             matches_category && matches_difficulty && matches_concept
         });
     }
+
+    apply_session_and_project(db, &mut final_results, detail, session_id.as_deref(), query);
 
     let summary = format!(
         "Found {} results for \"{}\" (hybrid search)",
@@ -659,6 +755,9 @@ pub async fn handle_smart_search(db: &Database, args: Value) -> Result<ToolResul
         .and_then(|v| v.as_str())
         .ok_or_else(|| anyhow::anyhow!("Missing query"))?;
 
+    let detail = parse_detail(&args);
+    let session_id = parse_session_id(&args);
+
     let options = SearchOptions {
         limit: args.get("limit").and_then(|v| v.as_u64()).unwrap_or(20) as usize,
         min_score: args.get("minScore").and_then(|v| v.as_f64()).unwrap_or(0.0),
@@ -667,12 +766,17 @@ pub async fn handle_smart_search(db: &Database, args: Value) -> Result<ToolResul
             .and_then(|v| v.as_str())
             .map(String::from),
         provider: None,
-        full_content: false,
+        full_content: detail.is_full_content(),
+        detail,
+        session_id: session_id.clone(),
         metadata_filters: Vec::new(),
+        ..Default::default()
     };
 
     // Use smart_search which handles parsing and fallbacks
-    let results = agentroot_core::smart_search(db, query, &options).await?;
+    let mut results = agentroot_core::smart_search(db, query, &options).await?;
+
+    apply_session_and_project(db, &mut results, detail, session_id.as_deref(), query);
 
     let summary = format!(
         "Found {} results for \"{}\" (smart search)",
@@ -1135,7 +1239,9 @@ pub fn search_chunks_tool_definition() -> ToolDefinition {
                 "label": {
                     "type": "string",
                     "description": "Filter by chunk label (format: key:value, e.g., 'layer:service')"
-                }
+                },
+                "detail": detail_param(),
+                "session_id": session_id_param()
             },
             "required": ["query"]
         }),
@@ -1192,6 +1298,9 @@ pub async fn handle_search_chunks(db: &Database, args: Value) -> Result<ToolResu
         .and_then(|v| v.as_str())
         .ok_or_else(|| anyhow::anyhow!("Missing query"))?;
 
+    let detail = parse_detail(&args);
+    let session_id = parse_session_id(&args);
+
     let mut options = SearchOptions {
         limit: args.get("limit").and_then(|v| v.as_u64()).unwrap_or(20) as usize,
         min_score: args.get("minScore").and_then(|v| v.as_f64()).unwrap_or(0.0),
@@ -1200,16 +1309,23 @@ pub async fn handle_search_chunks(db: &Database, args: Value) -> Result<ToolResu
             .and_then(|v| v.as_str())
             .map(String::from),
         provider: None,
-        full_content: true,
+        full_content: detail.is_full_content(),
+        detail,
+        session_id: session_id.clone(),
         metadata_filters: Vec::new(),
+        ..Default::default()
     };
 
     // Handle label filter
     if let Some(label) = args.get("label").and_then(|v| v.as_str()) {
-        options.metadata_filters.push(("label".to_string(), label.to_string()));
+        options
+            .metadata_filters
+            .push(("label".to_string(), label.to_string()));
     }
 
-    let results = db.search_chunks_bm25(query, &options)?;
+    let mut results = db.search_chunks_bm25(query, &options)?;
+
+    apply_session_and_project(db, &mut results, detail, session_id.as_deref(), query);
 
     let summary = format!("Found {} chunk(s) for \"{}\"", results.len(), query);
     let structured: Vec<Value> = results
@@ -1220,8 +1336,8 @@ pub async fn handle_search_chunks(db: &Database, args: Value) -> Result<ToolResu
                 "file": r.display_path,
                 "breadcrumb": r.chunk_breadcrumb.as_ref().unwrap_or(&"".to_string()),
                 "type": r.chunk_type.as_ref().unwrap_or(&"".to_string()),
-                "lines": format!("{}-{}", 
-                    r.chunk_start_line.unwrap_or(0), 
+                "lines": format!("{}-{}",
+                    r.chunk_start_line.unwrap_or(0),
                     r.chunk_end_line.unwrap_or(0)
                 ),
                 "score": (r.score * 100.0).round() / 100.0
@@ -1299,23 +1415,27 @@ pub async fn handle_get_chunk(db: &Database, args: Value) -> Result<ToolResult> 
     let mut context_text = String::new();
     if include_context {
         let (prev, next) = db.get_surrounding_chunks(chunk_hash)?;
-        
+
         if let Some(prev_chunk) = prev {
             result_json["previous_chunk"] = serde_json::json!({
                 "hash": prev_chunk.hash,
                 "breadcrumb": prev_chunk.breadcrumb.as_ref().unwrap_or(&"".to_string())
             });
-            context_text.push_str(&format!("\n[Previous: {}]", 
-                prev_chunk.breadcrumb.as_ref().unwrap_or(&"".to_string())));
+            context_text.push_str(&format!(
+                "\n[Previous: {}]",
+                prev_chunk.breadcrumb.as_ref().unwrap_or(&"".to_string())
+            ));
         }
-        
+
         if let Some(next_chunk) = next {
             result_json["next_chunk"] = serde_json::json!({
                 "hash": next_chunk.hash,
                 "breadcrumb": next_chunk.breadcrumb.as_ref().unwrap_or(&"".to_string())
             });
-            context_text.push_str(&format!("\n[Next: {}]", 
-                next_chunk.breadcrumb.as_ref().unwrap_or(&"".to_string())));
+            context_text.push_str(&format!(
+                "\n[Next: {}]",
+                next_chunk.breadcrumb.as_ref().unwrap_or(&"".to_string())
+            ));
         }
     }
 
@@ -1369,8 +1489,15 @@ pub async fn handle_navigate_chunks(db: &Database, args: Value) -> Result<ToolRe
 
     let summary = format!(
         "{} chunk: {} ({})\nLines: {}-{}",
-        if direction == "previous" { "Previous" } else { "Next" },
-        target_chunk.breadcrumb.as_ref().unwrap_or(&"Unknown".to_string()),
+        if direction == "previous" {
+            "Previous"
+        } else {
+            "Next"
+        },
+        target_chunk
+            .breadcrumb
+            .as_ref()
+            .unwrap_or(&"Unknown".to_string()),
         target_chunk.chunk_type.as_ref().unwrap_or(&"".to_string()),
         target_chunk.start_line,
         target_chunk.end_line
@@ -1449,6 +1576,591 @@ pub async fn handle_metadata_query(db: &Database, args: Value) -> Result<ToolRes
         structured_content: Some(serde_json::json!({
             "count": docids.len(),
             "documents": docids
+        })),
+        is_error: None,
+    })
+}
+
+// ============================================================================
+// Session Tools
+// ============================================================================
+
+pub fn session_start_tool_definition() -> ToolDefinition {
+    ToolDefinition {
+        name: "session_start".to_string(),
+        description: "Start a new search session for multi-turn context tracking. Returns a session_id to pass to subsequent search calls.".to_string(),
+        input_schema: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "ttl_seconds": {
+                    "type": "integer",
+                    "description": "Session time-to-live in seconds (default: 3600)",
+                    "default": 3600
+                }
+            }
+        }),
+    }
+}
+
+pub fn session_context_tool_definition() -> ToolDefinition {
+    ToolDefinition {
+        name: "session_context".to_string(),
+        description: "Get or set session context key-value pairs, and view past queries."
+            .to_string(),
+        input_schema: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "session_id": {
+                    "type": "string",
+                    "description": "Session ID from session_start"
+                },
+                "action": {
+                    "type": "string",
+                    "enum": ["get", "set"],
+                    "description": "Action: 'get' returns context and query history, 'set' updates a context key"
+                },
+                "key": {
+                    "type": "string",
+                    "description": "Context key (required for 'set' action)"
+                },
+                "value": {
+                    "type": "string",
+                    "description": "Context value (required for 'set' action)"
+                }
+            },
+            "required": ["session_id", "action"]
+        }),
+    }
+}
+
+pub fn session_end_tool_definition() -> ToolDefinition {
+    ToolDefinition {
+        name: "session_end".to_string(),
+        description: "End a search session and clean up resources.".to_string(),
+        input_schema: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "session_id": {
+                    "type": "string",
+                    "description": "Session ID to end"
+                }
+            },
+            "required": ["session_id"]
+        }),
+    }
+}
+
+pub async fn handle_session_start(db: &Database, args: Value) -> Result<ToolResult> {
+    let ttl = args
+        .get("ttl_seconds")
+        .and_then(|v| v.as_i64())
+        .or(Some(3600));
+
+    let session_id = db.create_session(ttl)?;
+
+    Ok(ToolResult {
+        content: vec![Content::Text {
+            text: format!("Session started: {}", session_id),
+        }],
+        structured_content: Some(serde_json::json!({
+            "session_id": session_id,
+            "ttl_seconds": ttl
+        })),
+        is_error: None,
+    })
+}
+
+pub async fn handle_session_context(db: &Database, args: Value) -> Result<ToolResult> {
+    let session_id = args
+        .get("session_id")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing session_id"))?;
+
+    let action = args
+        .get("action")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing action"))?;
+
+    match action {
+        "get" => {
+            let session = db
+                .get_session(session_id)?
+                .ok_or_else(|| anyhow::anyhow!("Session not found: {}", session_id))?;
+            let queries = db.get_session_queries(session_id)?;
+            let seen = db.get_seen_hashes(session_id)?;
+
+            let queries_json: Vec<Value> = queries
+                .iter()
+                .map(|q| {
+                    serde_json::json!({
+                        "query": q.query,
+                        "result_count": q.result_count,
+                        "created_at": q.created_at
+                    })
+                })
+                .collect();
+
+            Ok(ToolResult {
+                content: vec![Content::Text {
+                    text: format!(
+                        "Session {}: {} queries, {} seen documents",
+                        session_id,
+                        queries.len(),
+                        seen.len()
+                    ),
+                }],
+                structured_content: Some(serde_json::json!({
+                    "session_id": session_id,
+                    "created_at": session.created_at,
+                    "last_active_at": session.last_active_at,
+                    "ttl_seconds": session.ttl_seconds,
+                    "context": session.context,
+                    "queries": queries_json,
+                    "seen_count": seen.len()
+                })),
+                is_error: None,
+            })
+        }
+        "set" => {
+            let key = args
+                .get("key")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| anyhow::anyhow!("Missing key for 'set' action"))?;
+            let value = args
+                .get("value")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| anyhow::anyhow!("Missing value for 'set' action"))?;
+
+            db.set_session_context(session_id, key, value)?;
+
+            Ok(ToolResult {
+                content: vec![Content::Text {
+                    text: format!("Set {}={} on session {}", key, value, session_id),
+                }],
+                structured_content: Some(serde_json::json!({
+                    "session_id": session_id,
+                    "key": key,
+                    "value": value
+                })),
+                is_error: None,
+            })
+        }
+        _ => Err(anyhow::anyhow!(
+            "Invalid action: {}. Use 'get' or 'set'",
+            action
+        )),
+    }
+}
+
+pub async fn handle_session_end(db: &Database, args: Value) -> Result<ToolResult> {
+    let session_id = args
+        .get("session_id")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing session_id"))?;
+
+    db.delete_session(session_id)?;
+
+    Ok(ToolResult {
+        content: vec![Content::Text {
+            text: format!("Session ended: {}", session_id),
+        }],
+        structured_content: Some(serde_json::json!({
+            "session_id": session_id,
+            "ended": true
+        })),
+        is_error: None,
+    })
+}
+
+// ============================================================================
+// Directory Browsing Tools
+// ============================================================================
+
+pub fn browse_directory_tool_definition() -> ToolDefinition {
+    ToolDefinition {
+        name: "browse_directory".to_string(),
+        description: "Browse the directory structure of indexed collections. Shows files, subdirectories, and metadata for a given path.".to_string(),
+        input_schema: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "collection": {
+                    "type": "string",
+                    "description": "Collection name to browse"
+                },
+                "path": {
+                    "type": "string",
+                    "description": "Directory path within the collection (empty for root)"
+                },
+                "max_depth": {
+                    "type": "integer",
+                    "description": "Maximum depth of subdirectories to return (default: 2)",
+                    "default": 2
+                }
+            },
+            "required": ["collection"]
+        }),
+    }
+}
+
+pub fn search_directories_tool_definition() -> ToolDefinition {
+    ToolDefinition {
+        name: "search_directories".to_string(),
+        description: "Search directories by name, concepts, or content using full-text search."
+            .to_string(),
+        input_schema: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search query for directories"
+                },
+                "collection": {
+                    "type": "string",
+                    "description": "Filter by collection name"
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum results (default: 10)",
+                    "default": 10
+                }
+            },
+            "required": ["query"]
+        }),
+    }
+}
+
+pub async fn handle_browse_directory(db: &Database, args: Value) -> Result<ToolResult> {
+    let collection = args
+        .get("collection")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing collection"))?;
+
+    let path = args.get("path").and_then(|v| v.as_str());
+    let max_depth = args.get("max_depth").and_then(|v| v.as_u64()).unwrap_or(2) as usize;
+
+    let dirs = db.list_directories(collection, path, Some(max_depth))?;
+
+    let summary = format!(
+        "Found {} directories in {}/{}",
+        dirs.len(),
+        collection,
+        path.unwrap_or("")
+    );
+
+    let structured: Vec<Value> = dirs
+        .iter()
+        .map(|d| {
+            let mut dir_json = serde_json::json!({
+                "path": d.path,
+                "depth": d.depth,
+                "file_count": d.file_count,
+                "child_dir_count": d.child_dir_count
+            });
+            if let Some(lang) = &d.dominant_language {
+                dir_json["language"] = Value::String(lang.clone());
+            }
+            if let Some(cat) = &d.dominant_category {
+                dir_json["category"] = Value::String(cat.clone());
+            }
+            if let Some(summary) = &d.summary {
+                dir_json["summary"] = Value::String(summary.clone());
+            }
+            if !d.concepts.is_empty() {
+                dir_json["concepts"] = serde_json::to_value(&d.concepts).unwrap();
+            }
+            dir_json
+        })
+        .collect();
+
+    Ok(ToolResult {
+        content: vec![Content::Text { text: summary }],
+        structured_content: Some(serde_json::json!({ "directories": structured })),
+        is_error: None,
+    })
+}
+
+pub async fn handle_search_directories(db: &Database, args: Value) -> Result<ToolResult> {
+    let query = args
+        .get("query")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing query"))?;
+
+    let collection = args.get("collection").and_then(|v| v.as_str());
+    let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(10) as usize;
+
+    let dirs = db.search_directories_fts(query, collection, limit)?;
+
+    let summary = format!("Found {} directories matching \"{}\"", dirs.len(), query);
+
+    let structured: Vec<Value> = dirs
+        .iter()
+        .map(|d| {
+            let mut dir_json = serde_json::json!({
+                "path": d.path,
+                "collection": d.collection,
+                "file_count": d.file_count,
+                "child_dir_count": d.child_dir_count
+            });
+            if let Some(lang) = &d.dominant_language {
+                dir_json["language"] = Value::String(lang.clone());
+            }
+            if let Some(cat) = &d.dominant_category {
+                dir_json["category"] = Value::String(cat.clone());
+            }
+            if let Some(summary) = &d.summary {
+                dir_json["summary"] = Value::String(summary.clone());
+            }
+            if !d.concepts.is_empty() {
+                dir_json["concepts"] = serde_json::to_value(&d.concepts).unwrap();
+            }
+            dir_json
+        })
+        .collect();
+
+    Ok(ToolResult {
+        content: vec![Content::Text { text: summary }],
+        structured_content: Some(serde_json::json!({ "directories": structured })),
+        is_error: None,
+    })
+}
+
+// ============================================================================
+// Batch & Explore Tools
+// ============================================================================
+
+pub fn batch_search_tool_definition() -> ToolDefinition {
+    ToolDefinition {
+        name: "batch_search".to_string(),
+        description: "Execute multiple search queries in a single call. Each query runs independently with its own parameters.".to_string(),
+        input_schema: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "queries": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "query": {
+                                "type": "string",
+                                "description": "Search query"
+                            },
+                            "limit": {
+                                "type": "integer",
+                                "description": "Maximum results for this query (default: 5)",
+                                "default": 5
+                            },
+                            "collection": {
+                                "type": "string",
+                                "description": "Filter by collection"
+                            }
+                        },
+                        "required": ["query"]
+                    },
+                    "description": "Array of search queries to execute"
+                },
+                "detail": detail_param(),
+                "session_id": session_id_param()
+            },
+            "required": ["queries"]
+        }),
+    }
+}
+
+pub fn explore_tool_definition() -> ToolDefinition {
+    ToolDefinition {
+        name: "explore".to_string(),
+        description: "Explore the knowledge base starting from a search query. Returns results plus suggestions for related directories, concepts, and follow-up queries.".to_string(),
+        input_schema: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search query to explore from"
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum results (default: 10)",
+                    "default": 10
+                },
+                "collection": {
+                    "type": "string",
+                    "description": "Filter by collection"
+                },
+                "detail": detail_param(),
+                "session_id": session_id_param()
+            },
+            "required": ["query"]
+        }),
+    }
+}
+
+pub async fn handle_batch_search(db: &Database, args: Value) -> Result<ToolResult> {
+    let queries = args
+        .get("queries")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| anyhow::anyhow!("Missing queries array"))?;
+
+    let detail = parse_detail(&args);
+    let session_id = parse_session_id(&args);
+
+    let mut all_results: Vec<Value> = Vec::new();
+
+    for query_obj in queries {
+        let query = query_obj
+            .get("query")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        if query.is_empty() {
+            continue;
+        }
+
+        let limit = query_obj.get("limit").and_then(|v| v.as_u64()).unwrap_or(5) as usize;
+        let collection = query_obj
+            .get("collection")
+            .and_then(|v| v.as_str())
+            .map(String::from);
+
+        let options = SearchOptions {
+            limit,
+            min_score: 0.0,
+            collection,
+            provider: None,
+            full_content: detail.is_full_content(),
+            detail,
+            session_id: session_id.clone(),
+            metadata_filters: Vec::new(),
+            ..Default::default()
+        };
+
+        let mut results = db.search_fts(query, &options)?;
+        apply_session_and_project(db, &mut results, detail, session_id.as_deref(), query);
+
+        let results_json: Vec<Value> = results
+            .iter()
+            .map(|r| {
+                let mut rj = serde_json::json!({
+                    "docid": format!("#{}", r.docid),
+                    "file": r.display_path,
+                    "title": r.title,
+                    "score": (r.score * 100.0).round() / 100.0
+                });
+                if let Some(s) = &r.llm_summary {
+                    rj["summary"] = Value::String(s.clone());
+                }
+                rj
+            })
+            .collect();
+
+        all_results.push(serde_json::json!({
+            "query": query,
+            "count": results_json.len(),
+            "results": results_json
+        }));
+    }
+
+    let total: usize = all_results
+        .iter()
+        .filter_map(|r| r.get("count").and_then(|c| c.as_u64()))
+        .sum::<u64>() as usize;
+
+    Ok(ToolResult {
+        content: vec![Content::Text {
+            text: format!(
+                "Batch search: {} queries, {} total results",
+                all_results.len(),
+                total
+            ),
+        }],
+        structured_content: Some(serde_json::json!({ "batches": all_results })),
+        is_error: None,
+    })
+}
+
+pub async fn handle_explore(db: &Database, args: Value) -> Result<ToolResult> {
+    let query = args
+        .get("query")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing query"))?;
+
+    let detail = parse_detail(&args);
+    let session_id = parse_session_id(&args);
+
+    let options = SearchOptions {
+        limit: args.get("limit").and_then(|v| v.as_u64()).unwrap_or(10) as usize,
+        min_score: 0.0,
+        collection: args
+            .get("collection")
+            .and_then(|v| v.as_str())
+            .map(String::from),
+        provider: None,
+        full_content: detail.is_full_content(),
+        detail,
+        session_id: session_id.clone(),
+        metadata_filters: Vec::new(),
+        ..Default::default()
+    };
+
+    let mut results = db.search_fts(query, &options)?;
+    apply_session_and_project(db, &mut results, detail, session_id.as_deref(), query);
+
+    let suggestions = agentroot_core::search::suggestions::compute_suggestions(
+        db,
+        &results,
+        query,
+        session_id.as_deref(),
+    )?;
+
+    let results_json: Vec<Value> = results
+        .iter()
+        .map(|r| {
+            let mut rj = serde_json::json!({
+                "docid": format!("#{}", r.docid),
+                "file": r.display_path,
+                "title": r.title,
+                "score": (r.score * 100.0).round() / 100.0
+            });
+            if let Some(s) = &r.llm_summary {
+                rj["summary"] = Value::String(s.clone());
+            }
+            if let Some(cat) = &r.llm_category {
+                rj["category"] = Value::String(cat.clone());
+            }
+            rj
+        })
+        .collect();
+
+    let mut summary_parts = vec![format!("Found {} results for \"{}\"", results.len(), query)];
+    if !suggestions.related_directories.is_empty() {
+        summary_parts.push(format!(
+            "Related dirs: {}",
+            suggestions.related_directories.join(", ")
+        ));
+    }
+    if !suggestions.refinement_queries.is_empty() {
+        summary_parts.push(format!(
+            "Try also: {}",
+            suggestions.refinement_queries.join(", ")
+        ));
+    }
+    if suggestions.unseen_related > 0 {
+        summary_parts.push(format!(
+            "{} unseen related documents",
+            suggestions.unseen_related
+        ));
+    }
+
+    Ok(ToolResult {
+        content: vec![Content::Text {
+            text: summary_parts.join("\n"),
+        }],
+        structured_content: Some(serde_json::json!({
+            "results": results_json,
+            "suggestions": {
+                "related_directories": suggestions.related_directories,
+                "related_concepts": suggestions.related_concepts,
+                "refinement_queries": suggestions.refinement_queries,
+                "unseen_related": suggestions.unseen_related
+            }
         })),
         is_error: None,
     })

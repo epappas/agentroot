@@ -67,7 +67,10 @@ pub async fn unified_search(
 
     // Try LLM-based strategy selection first
     let analysis = match HttpStrategyAnalyzer::from_env() {
-        Ok(analyzer) => match analyzer.analyze(search_terms, language_context.as_deref()).await {
+        Ok(analyzer) => match analyzer
+            .analyze(search_terms, language_context.as_deref())
+            .await
+        {
             Ok(analysis) => {
                 tracing::info!(
                     "LLM Strategy: {:?}, Granularity: {:?} (confidence: {:.2}, reasoning: {})",
@@ -110,13 +113,8 @@ pub async fn unified_search(
     };
 
     // Execute search based on strategy and granularity
-    let results = execute_intelligent_search(
-        db,
-        search_terms,
-        &analysis,
-        &enhanced_options,
-    )
-    .await?;
+    let results =
+        execute_intelligent_search(db, search_terms, &analysis, &enhanced_options).await?;
 
     // Apply temporal filtering if detected
     let results = if let Some(ref pq) = parsed_query {
@@ -321,7 +319,7 @@ fn apply_metadata_filters(
 fn extract_language_from_pattern(pattern: &str) -> Option<String> {
     // Match patterns like "**/*.rs", "*.py", "**/*.{ts,tsx}"
     // Extract the extension(s) after the last dot
-    
+
     if let Some(ext_part) = pattern.split("*.").last() {
         // Handle simple extension: "*.rs" -> "rs"
         if !ext_part.contains('{') && !ext_part.contains(',') {
@@ -331,19 +329,15 @@ fn extract_language_from_pattern(pattern: &str) -> Option<String> {
                 return Some(capitalize_extension(ext));
             }
         }
-        
+
         // Handle multiple extensions: "*.{ts,tsx}" -> use first one
         if ext_part.contains('{') {
-            if let Some(first_ext) = ext_part
-                .trim_start_matches('{')
-                .split(',')
-                .next()
-            {
+            if let Some(first_ext) = ext_part.trim_start_matches('{').split(',').next() {
                 return Some(capitalize_extension(first_ext.trim()));
             }
         }
     }
-    
+
     None
 }
 
@@ -353,7 +347,7 @@ fn capitalize_extension(ext: &str) -> String {
     // Common extension to language name mappings for display
     match ext {
         "rs" => "Rust",
-        "py" => "Python", 
+        "py" => "Python",
         "js" => "JavaScript",
         "ts" => "TypeScript",
         "go" => "Go",
@@ -372,5 +366,6 @@ fn capitalize_extension(ext: &str) -> String {
                 None => ext.to_string(),
             };
         }
-    }.to_string()
+    }
+    .to_string()
 }

@@ -13,9 +13,21 @@ use chrono::Utc;
 
 // 15-term vocabulary for synthetic embeddings
 const VOCAB: &[&str] = &[
-    "rust", "python", "async", "web", "database",
-    "search", "vector", "error", "test", "performance",
-    "memory", "concurrent", "api", "query", "index",
+    "rust",
+    "python",
+    "async",
+    "web",
+    "database",
+    "search",
+    "vector",
+    "error",
+    "test",
+    "performance",
+    "memory",
+    "concurrent",
+    "api",
+    "query",
+    "index",
 ];
 const DIM: usize = 15;
 
@@ -77,6 +89,7 @@ fn main() -> agentroot_core::Result<()> {
         full_content: false,
         provider: None,
         metadata_filters: vec![],
+        ..Default::default()
     };
 
     // 1. Pure BM25 search
@@ -146,17 +159,20 @@ fn print_ranked(label: &str, results: &[SearchResult]) {
         return;
     }
     for (i, r) in results.iter().enumerate() {
-        println!("  {}. {} -- {} (score: {:.4})", i + 1, r.display_path, r.title, r.score);
+        println!(
+            "  {}. {} -- {} (score: {:.4})",
+            i + 1,
+            r.display_path,
+            r.title,
+            r.score
+        );
     }
     println!();
 }
 
 const RRF_K: f64 = 60.0;
 
-fn rrf_fuse<'a>(
-    bm25: &[SearchResult],
-    vec_scored: &[(f32, &'a str, &str)],
-) -> Vec<(f64, &'a str)> {
+fn rrf_fuse<'a>(bm25: &[SearchResult], vec_scored: &[(f32, &'a str, &str)]) -> Vec<(f64, &'a str)> {
     let mut scores: std::collections::HashMap<&str, f64> = std::collections::HashMap::new();
 
     // BM25 results: match on the raw path portion of display_path

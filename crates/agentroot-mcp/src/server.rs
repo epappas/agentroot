@@ -115,6 +115,16 @@ impl<'a> McpServer<'a> {
             tools::search_chunks_tool_definition(),
             tools::get_chunk_tool_definition(),
             tools::navigate_chunks_tool_definition(),
+            // Session tools
+            tools::session_start_tool_definition(),
+            tools::session_context_tool_definition(),
+            tools::session_end_tool_definition(),
+            // Directory browsing tools
+            tools::browse_directory_tool_definition(),
+            tools::search_directories_tool_definition(),
+            // Batch & explore tools
+            tools::batch_search_tool_definition(),
+            tools::explore_tool_definition(),
         ];
 
         JsonRpcResponse::success(request.id.clone(), serde_json::json!({ "tools": tools }))
@@ -151,6 +161,16 @@ impl<'a> McpServer<'a> {
             "search_chunks" => tools::handle_search_chunks(self.db, arguments).await,
             "get_chunk" => tools::handle_get_chunk(self.db, arguments).await,
             "navigate_chunks" => tools::handle_navigate_chunks(self.db, arguments).await,
+            // Session tools
+            "session_start" => tools::handle_session_start(self.db, arguments).await,
+            "session_context" => tools::handle_session_context(self.db, arguments).await,
+            "session_end" => tools::handle_session_end(self.db, arguments).await,
+            // Directory browsing tools
+            "browse_directory" => tools::handle_browse_directory(self.db, arguments).await,
+            "search_directories" => tools::handle_search_directories(self.db, arguments).await,
+            // Batch & explore tools
+            "batch_search" => tools::handle_batch_search(self.db, arguments).await,
+            "explore" => tools::handle_explore(self.db, arguments).await,
             _ => Err(anyhow::anyhow!("Unknown tool: {}", name)),
         };
 

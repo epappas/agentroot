@@ -19,7 +19,7 @@ async fn test_chunks_created_for_documents() {
 
     // Get a sample document from agentroot-src collection
     let docs = db.get_documents_in_collection("agentroot-src").unwrap();
-    
+
     if docs.is_empty() {
         println!("⚠️  No documents in agentroot-src collection. Run indexing first.");
         return;
@@ -33,7 +33,7 @@ async fn test_chunks_created_for_documents() {
 
     for doc in docs.iter().take(10) {
         let chunks = db.get_chunks_for_document(&doc.hash).unwrap();
-        
+
         if !chunks.is_empty() {
             docs_with_chunks += 1;
             total_chunks += chunks.len();
@@ -54,9 +54,16 @@ async fn test_chunks_created_for_documents() {
 
             // Show first chunk details
             if let Some(first_chunk) = chunks.first() {
-                println!("    First chunk: {} ({})", 
-                    first_chunk.breadcrumb.as_ref().unwrap_or(&"<no breadcrumb>".to_string()),
-                    first_chunk.chunk_type.as_ref().unwrap_or(&"<no type>".to_string())
+                println!(
+                    "    First chunk: {} ({})",
+                    first_chunk
+                        .breadcrumb
+                        .as_ref()
+                        .unwrap_or(&"<no breadcrumb>".to_string()),
+                    first_chunk
+                        .chunk_type
+                        .as_ref()
+                        .unwrap_or(&"<no type>".to_string())
                 );
                 if let Some(summary) = &first_chunk.llm_summary {
                     println!("    Summary: {}", summary);
@@ -69,11 +76,18 @@ async fn test_chunks_created_for_documents() {
     }
 
     println!("\n📈 Chunk Statistics:");
-    println!("  Documents with chunks: {}/{}", docs_with_chunks, docs.len().min(10));
+    println!(
+        "  Documents with chunks: {}/{}",
+        docs_with_chunks,
+        docs.len().min(10)
+    );
     println!("  Total chunks: {}", total_chunks);
     println!("  Chunks with metadata: {}", chunks_with_metadata);
 
-    assert!(docs_with_chunks > 0, "At least some documents should have chunks");
+    assert!(
+        docs_with_chunks > 0,
+        "At least some documents should have chunks"
+    );
 }
 
 #[tokio::test]
@@ -82,13 +96,7 @@ async fn test_chunk_search_quality() {
     let db = Database::open(&db).unwrap();
     db.initialize().unwrap();
 
-    let test_queries = vec![
-        "search",
-        "database",
-        "embed",
-        "metadata",
-        "collection",
-    ];
+    let test_queries = vec!["search", "database", "embed", "metadata", "collection"];
 
     println!("\n🔍 Testing Chunk Search Quality\n");
 
@@ -100,10 +108,11 @@ async fn test_chunk_search_quality() {
             provider: None,
             full_content: true,
             metadata_filters: Vec::new(),
+            ..Default::default()
         };
 
         let chunk_results = db.search_chunks_bm25(query, &options).unwrap();
-        
+
         println!("Query: \"{}\"", query);
         println!("  Chunks found: {}", chunk_results.len());
 
@@ -111,7 +120,10 @@ async fn test_chunk_search_quality() {
             println!(
                 "  {}. {} (score: {:.2})",
                 i + 1,
-                result.chunk_breadcrumb.as_ref().unwrap_or(&"<no breadcrumb>".to_string()),
+                result
+                    .chunk_breadcrumb
+                    .as_ref()
+                    .unwrap_or(&"<no breadcrumb>".to_string()),
                 result.score
             );
             println!(
@@ -142,6 +154,7 @@ async fn test_chunk_vs_document_search() {
         provider: None,
         full_content: false,
         metadata_filters: Vec::new(),
+        ..Default::default()
     };
 
     println!("\n⚖️  Comparing Chunk vs Document Search\n");
@@ -152,7 +165,12 @@ async fn test_chunk_vs_document_search() {
     println!("\n📄 Document-level search:");
     println!("  Results: {}", doc_results.len());
     for (i, result) in doc_results.iter().take(3).enumerate() {
-        println!("  {}. {} (score: {:.2})", i + 1, result.display_path, result.score);
+        println!(
+            "  {}. {} (score: {:.2})",
+            i + 1,
+            result.display_path,
+            result.score
+        );
     }
 
     // Chunk-level search
@@ -163,11 +181,15 @@ async fn test_chunk_vs_document_search() {
         println!(
             "  {}. {} @ {} (score: {:.2})",
             i + 1,
-            result.chunk_breadcrumb.as_ref().unwrap_or(&"<no breadcrumb>".to_string()),
+            result
+                .chunk_breadcrumb
+                .as_ref()
+                .unwrap_or(&"<no breadcrumb>".to_string()),
             result.display_path,
             result.score
         );
-        println!("     Lines: {}-{}", 
+        println!(
+            "     Lines: {}-{}",
             result.chunk_start_line.unwrap_or(0),
             result.chunk_end_line.unwrap_or(0)
         );
@@ -176,8 +198,13 @@ async fn test_chunk_vs_document_search() {
     println!("\n💡 Analysis:");
     println!("  Document results: {}", doc_results.len());
     println!("  Chunk results: {}", chunk_results.len());
-    println!("  Precision improvement: {}x more granular", 
-        if doc_results.is_empty() { 1.0 } else { chunk_results.len() as f64 / doc_results.len() as f64 }
+    println!(
+        "  Precision improvement: {}x more granular",
+        if doc_results.is_empty() {
+            1.0
+        } else {
+            chunk_results.len() as f64 / doc_results.len() as f64
+        }
     );
 }
 
@@ -194,6 +221,7 @@ async fn test_chunk_metadata_quality() {
         provider: None,
         full_content: true,
         metadata_filters: Vec::new(),
+        ..Default::default()
     };
 
     let results = db.search_chunks_bm25("Database", &options).unwrap();
@@ -207,35 +235,45 @@ async fn test_chunk_metadata_quality() {
     let mut with_labels = 0;
 
     for result in results.iter().take(5) {
-        println!("Chunk: {}", result.chunk_breadcrumb.as_ref().unwrap_or(&"<no breadcrumb>".to_string()));
-        
+        println!(
+            "Chunk: {}",
+            result
+                .chunk_breadcrumb
+                .as_ref()
+                .unwrap_or(&"<no breadcrumb>".to_string())
+        );
+
         if let Some(summary) = &result.chunk_summary {
             with_summary += 1;
             println!("  Summary: {}", summary);
         }
-        
+
         if let Some(purpose) = &result.chunk_purpose {
             with_purpose += 1;
             println!("  Purpose: {}", purpose);
         }
-        
+
         if !result.chunk_concepts.is_empty() {
             with_concepts += 1;
             println!("  Concepts: {:?}", result.chunk_concepts);
         }
-        
+
         if !result.chunk_labels.is_empty() {
             with_labels += 1;
             println!("  Labels: {:?}", result.chunk_labels);
         }
-        
+
         println!();
     }
 
     println!("📊 Metadata Coverage:");
     println!("  With summary: {}/{}", with_summary, results.len().min(5));
     println!("  With purpose: {}/{}", with_purpose, results.len().min(5));
-    println!("  With concepts: {}/{}", with_concepts, results.len().min(5));
+    println!(
+        "  With concepts: {}/{}",
+        with_concepts,
+        results.len().min(5)
+    );
     println!("  With labels: {}/{}", with_labels, results.len().min(5));
 }
 
@@ -255,10 +293,11 @@ async fn test_label_filtering() {
         provider: None,
         full_content: false,
         metadata_filters: Vec::new(),
+        ..Default::default()
     };
 
     let all_results = db.search_chunks_bm25("fn", &all_chunks_options).unwrap();
-    
+
     let mut label_counts = std::collections::HashMap::new();
     for result in &all_results {
         for (key, value) in &result.chunk_labels {
@@ -275,17 +314,23 @@ async fn test_label_filtering() {
     // Test filtering by a specific label if any exist
     if let Some((label, _)) = label_counts.iter().next() {
         let mut filtered_options = all_chunks_options.clone();
-        filtered_options.metadata_filters.push(("label".to_string(), label.clone()));
+        filtered_options
+            .metadata_filters
+            .push(("label".to_string(), label.clone()));
         filtered_options.limit = 5;
 
         let filtered_results = db.search_chunks_bm25("", &filtered_options).unwrap();
-        
+
         println!("\nFiltering by label '{}':", label);
         println!("  Results: {}", filtered_results.len());
-        
+
         for result in filtered_results.iter().take(3) {
-            println!("  - {} @ {}", 
-                result.chunk_breadcrumb.as_ref().unwrap_or(&"<no breadcrumb>".to_string()),
+            println!(
+                "  - {} @ {}",
+                result
+                    .chunk_breadcrumb
+                    .as_ref()
+                    .unwrap_or(&"<no breadcrumb>".to_string()),
                 result.display_path
             );
         }
@@ -304,36 +349,48 @@ async fn test_chunk_navigation() {
 
     // Get a document with multiple chunks
     let docs = db.get_documents_in_collection("agentroot-src").unwrap();
-    
+
     for doc in docs.iter().take(5) {
         let chunks = db.get_chunks_for_document(&doc.hash).unwrap();
-        
+
         if chunks.len() >= 3 {
             println!("Document: {} ({} chunks)", doc.path, chunks.len());
-            
+
             // Test navigation from middle chunk
             if let Some(middle_chunk) = chunks.get(1) {
                 let (prev, next) = db.get_surrounding_chunks(&middle_chunk.hash).unwrap();
-                
+
                 if let Some(ref prev_chunk) = prev {
-                    println!("  Previous: {}", 
-                        prev_chunk.breadcrumb.as_ref().unwrap_or(&"<no breadcrumb>".to_string())
+                    println!(
+                        "  Previous: {}",
+                        prev_chunk
+                            .breadcrumb
+                            .as_ref()
+                            .unwrap_or(&"<no breadcrumb>".to_string())
                     );
                 }
-                
-                println!("  Current:  {}", 
-                    middle_chunk.breadcrumb.as_ref().unwrap_or(&"<no breadcrumb>".to_string())
+
+                println!(
+                    "  Current:  {}",
+                    middle_chunk
+                        .breadcrumb
+                        .as_ref()
+                        .unwrap_or(&"<no breadcrumb>".to_string())
                 );
-                
+
                 if let Some(ref next_chunk) = next {
-                    println!("  Next:     {}", 
-                        next_chunk.breadcrumb.as_ref().unwrap_or(&"<no breadcrumb>".to_string())
+                    println!(
+                        "  Next:     {}",
+                        next_chunk
+                            .breadcrumb
+                            .as_ref()
+                            .unwrap_or(&"<no breadcrumb>".to_string())
                     );
                 }
-                
+
                 assert!(prev.is_some(), "Should have previous chunk");
                 assert!(next.is_some(), "Should have next chunk");
-                
+
                 println!("  ✓ Navigation working correctly\n");
                 break;
             }
@@ -357,6 +414,7 @@ async fn test_performance_metrics() {
         provider: None,
         full_content: false,
         metadata_filters: Vec::new(),
+        ..Default::default()
     };
 
     // Document search timing
@@ -378,10 +436,12 @@ async fn test_performance_metrics() {
     println!("  Time: {:?}", chunk_duration);
 
     println!("\nPerformance comparison:");
-    println!("  Speedup: {:.2}x", 
+    println!(
+        "  Speedup: {:.2}x",
         doc_duration.as_secs_f64() / chunk_duration.as_secs_f64().max(0.001)
     );
-    println!("  Granularity: {:.2}x more results", 
+    println!(
+        "  Granularity: {:.2}x more results",
         chunk_results.len() as f64 / doc_results.len().max(1) as f64
     );
 }
@@ -396,7 +456,7 @@ async fn test_concept_linking() {
 
     // Check if concepts are linked to chunks
     let concepts = db.list_concepts().unwrap();
-    
+
     if concepts.is_empty() {
         println!("⚠️  No concepts found. Glossary may not be generated yet.");
         return;
@@ -407,11 +467,11 @@ async fn test_concept_linking() {
     // Test a few concepts
     for concept in concepts.iter().take(5) {
         let chunk_links = db.get_chunks_for_concept(concept.id).unwrap();
-        
+
         if !chunk_links.is_empty() {
             println!("\nConcept: \"{}\"", concept.term);
             println!("  Linked to {} chunks", chunk_links.len());
-            
+
             for link in chunk_links.iter().take(3) {
                 println!("  - Chunk: {}", link.chunk_hash);
                 println!("    Snippet: {}", link.snippet);

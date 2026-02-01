@@ -20,8 +20,8 @@ pub mod search;
 
 pub use config::{CollectionConfig, Config, LLMServiceConfig};
 pub use db::{Database, MetadataBuilder, MetadataFilter, MetadataValue, UserMetadata};
-pub use graph::{compute_pagerank, extract_links};
 pub use error::{AgentRootError, Error, Result};
+pub use graph::{compute_pagerank, extract_links};
 pub use index::{chunk_semantic, ChunkType, SemanticChunk, SemanticChunker};
 pub use llm::{
     ChatMessage, DocumentMetadata, Embedder, HttpEmbedder, HttpMetadataGenerator,
@@ -34,8 +34,8 @@ pub use providers::{
     ProviderRegistry, SQLProvider, SourceItem, SourceProvider, URLProvider,
 };
 pub use search::{
-    orchestrated_search, parse_metadata_filters, smart_search, unified_search, SearchOptions,
-    SearchResult, SearchSource,
+    orchestrated_search, parse_metadata_filters, smart_search, unified_search, DetailLevel,
+    SearchOptions, SearchResult, SearchSource,
 };
 
 /// Virtual path prefix for agentroot URIs

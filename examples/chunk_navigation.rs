@@ -58,8 +58,20 @@ mod tests {
 
     let doc_hash = hash_content(source_code);
     db.insert_content(&doc_hash, source_code)?;
-    db.insert_document("source", "src/config.rs", "Config Module", &doc_hash, &now, &now, "file", None)?;
-    println!("Inserted document: src/config.rs (hash: {}...)\n", &doc_hash[..12]);
+    db.insert_document(
+        "source",
+        "src/config.rs",
+        "Config Module",
+        &doc_hash,
+        &now,
+        &now,
+        "file",
+        None,
+    )?;
+    println!(
+        "Inserted document: src/config.rs (hash: {}...)\n",
+        &doc_hash[..12]
+    );
 
     // Insert semantic chunks
     struct ChunkDef {
@@ -119,19 +131,35 @@ mod tests {
 
     for (seq, chunk) in chunks.iter().enumerate() {
         let chunk_hash = hash_content(chunk.content);
-        let labels: HashMap<String, String> = chunk.labels.iter()
+        let labels: HashMap<String, String> = chunk
+            .labels
+            .iter()
             .map(|(k, v)| (k.to_string(), v.to_string()))
             .collect();
         let concepts: Vec<String> = chunk.concepts.iter().map(|s| s.to_string()).collect();
 
         db.insert_chunk(
-            &chunk_hash, &doc_hash, seq as i32, 0,
-            chunk.content, Some(chunk.chunk_type), Some(chunk.breadcrumb),
-            chunk.start_line, chunk.end_line, Some("rust"),
-            Some(&format!("{} chunk for {}", chunk.chunk_type, chunk.breadcrumb)),
+            &chunk_hash,
+            &doc_hash,
+            seq as i32,
+            0,
+            chunk.content,
+            Some(chunk.chunk_type),
+            Some(chunk.breadcrumb),
+            chunk.start_line,
+            chunk.end_line,
+            Some("rust"),
+            Some(&format!(
+                "{} chunk for {}",
+                chunk.chunk_type, chunk.breadcrumb
+            )),
             Some(&format!("Defines {}", chunk.breadcrumb)),
-            &concepts, &labels, &[],
-            None, None, &now,
+            &concepts,
+            &labels,
+            &[],
+            None,
+            None,
+            &now,
         )?;
     }
     println!("Inserted {} chunks\n", chunks.len());
@@ -140,11 +168,13 @@ mod tests {
     println!("--- All chunks for document ---");
     let all = db.get_chunks_for_document(&doc_hash)?;
     for c in &all {
-        println!("  seq={} type={:<10} breadcrumb={:<25} lines {}-{}",
+        println!(
+            "  seq={} type={:<10} breadcrumb={:<25} lines {}-{}",
             c.seq,
             c.chunk_type.as_deref().unwrap_or("?"),
             c.breadcrumb.as_deref().unwrap_or("?"),
-            c.start_line, c.end_line,
+            c.start_line,
+            c.end_line,
         );
     }
 
@@ -152,10 +182,12 @@ mod tests {
     println!("\n--- FTS search: 'validate port workers' ---");
     let fts_results = db.search_chunks_fts("validate port workers", 5)?;
     for c in &fts_results {
-        println!("  [{}] {} (lines {}-{})",
+        println!(
+            "  [{}] {} (lines {}-{})",
             c.chunk_type.as_deref().unwrap_or("?"),
             c.breadcrumb.as_deref().unwrap_or("?"),
-            c.start_line, c.end_line,
+            c.start_line,
+            c.end_line,
         );
     }
 
@@ -163,17 +195,26 @@ mod tests {
     println!("\n--- Label search: layer=service ---");
     let label_results = db.search_chunks_by_label("layer", "service")?;
     for c in &label_results {
-        println!("  [{}] {} -- {}",
+        println!(
+            "  [{}] {} -- {}",
             c.chunk_type.as_deref().unwrap_or("?"),
             c.breadcrumb.as_deref().unwrap_or("?"),
-            c.llm_labels.iter().map(|(k, v)| format!("{}:{}", k, v)).collect::<Vec<_>>().join(", "),
+            c.llm_labels
+                .iter()
+                .map(|(k, v)| format!("{}:{}", k, v))
+                .collect::<Vec<_>>()
+                .join(", "),
         );
     }
 
     println!("\n--- Label search: operation=validation ---");
     let val_results = db.search_chunks_by_label("operation", "validation")?;
     for c in &val_results {
-        println!("  [{}] {}", c.chunk_type.as_deref().unwrap_or("?"), c.breadcrumb.as_deref().unwrap_or("?"));
+        println!(
+            "  [{}] {}",
+            c.chunk_type.as_deref().unwrap_or("?"),
+            c.breadcrumb.as_deref().unwrap_or("?")
+        );
     }
 
     // 4. get_surrounding_chunks
@@ -181,16 +222,29 @@ mod tests {
     if let Some(target) = fts_results.first() {
         let (prev, next) = db.get_surrounding_chunks(&target.hash)?;
         if let Some(p) = &prev {
-            println!("  PREV: [{}] {} (lines {}-{})", p.chunk_type.as_deref().unwrap_or("?"),
-                p.breadcrumb.as_deref().unwrap_or("?"), p.start_line, p.end_line);
+            println!(
+                "  PREV: [{}] {} (lines {}-{})",
+                p.chunk_type.as_deref().unwrap_or("?"),
+                p.breadcrumb.as_deref().unwrap_or("?"),
+                p.start_line,
+                p.end_line
+            );
         }
-        println!("  THIS: [{}] {} (lines {}-{})",
+        println!(
+            "  THIS: [{}] {} (lines {}-{})",
             target.chunk_type.as_deref().unwrap_or("?"),
             target.breadcrumb.as_deref().unwrap_or("?"),
-            target.start_line, target.end_line);
+            target.start_line,
+            target.end_line
+        );
         if let Some(n) = &next {
-            println!("  NEXT: [{}] {} (lines {}-{})", n.chunk_type.as_deref().unwrap_or("?"),
-                n.breadcrumb.as_deref().unwrap_or("?"), n.start_line, n.end_line);
+            println!(
+                "  NEXT: [{}] {} (lines {}-{})",
+                n.chunk_type.as_deref().unwrap_or("?"),
+                n.breadcrumb.as_deref().unwrap_or("?"),
+                n.start_line,
+                n.end_line
+            );
         }
     }
 

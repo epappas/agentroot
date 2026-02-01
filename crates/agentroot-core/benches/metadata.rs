@@ -142,7 +142,8 @@ fn bench_search_with_metadata(c: &mut Criterion) {
         collection: Some("bench".to_string()),
         provider: None,
         full_content: false,
-        metadata_filters: Vec::new()
+        metadata_filters: Vec::new(),
+        ..Default::default()
     };
 
     c.bench_function("search_with_metadata_20docs", |b| {
@@ -348,7 +349,8 @@ fn bench_search_relevance_impact(c: &mut Criterion) {
         collection: Some("bench".to_string()),
         provider: None,
         full_content: false,
-        metadata_filters: Vec::new()
+        metadata_filters: Vec::new(),
+        ..Default::default()
     };
 
     // Benchmark search quality

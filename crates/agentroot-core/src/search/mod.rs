@@ -6,10 +6,14 @@
 //! - Hybrid search with RRF fusion
 
 mod bm25;
+pub mod directory_boost;
 mod hybrid;
 mod orchestrated;
+pub mod session_aware;
 mod smart;
 mod snippet;
+pub mod suggestions;
+pub mod tiered;
 mod unified;
 mod vector;
 mod workflow_executor;
@@ -18,6 +22,7 @@ pub use hybrid::*;
 pub use orchestrated::orchestrated_search;
 pub use smart::smart_search;
 pub use snippet::*;
+pub use tiered::DetailLevel;
 pub use unified::unified_search;
 pub use workflow_executor::execute_workflow;
 
@@ -32,10 +37,14 @@ pub struct SearchOptions {
     pub collection: Option<String>,
     /// Filter by provider type (e.g., "file", "github")
     pub provider: Option<String>,
-    /// Include full document content
+    /// Include full document content (derived from detail level)
     pub full_content: bool,
     /// Metadata filters (field, value) e.g., ("category", "tutorial")
     pub metadata_filters: Vec<(String, String)>,
+    /// Context detail level (L0=abstract, L1=overview, L2=full)
+    pub detail: DetailLevel,
+    /// Optional session ID for multi-turn context tracking
+    pub session_id: Option<String>,
 }
 
 impl Default for SearchOptions {
@@ -47,6 +56,8 @@ impl Default for SearchOptions {
             provider: None,
             full_content: false,
             metadata_filters: Vec::new(),
+            detail: DetailLevel::default(),
+            session_id: None,
         }
     }
 }
@@ -76,7 +87,7 @@ pub struct SearchResult {
     pub llm_category: Option<String>,
     pub llm_difficulty: Option<String>,
     pub user_metadata: Option<UserMetadata>,
-    
+
     // Chunk-level fields (when result is a chunk)
     pub is_chunk: bool,
     pub chunk_hash: Option<String>,
@@ -102,11 +113,10 @@ pub enum SearchSource {
 
 /// Common English stop words to remove from natural language queries
 const STOP_WORDS: &[&str] = &[
-    "a", "an", "and", "are", "as", "at", "be", "by", "for", "from",
-    "has", "have", "he", "in", "is", "it", "its", "of", "on", "that",
-    "the", "to", "was", "will", "with", "does", "do", "did", "can",
-    "could", "should", "would", "what", "where", "when", "why", "how",
-    "who", "which", "this", "these", "those", "there", "here",
+    "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "has", "have", "he", "in",
+    "is", "it", "its", "of", "on", "that", "the", "to", "was", "will", "with", "does", "do", "did",
+    "can", "could", "should", "would", "what", "where", "when", "why", "how", "who", "which",
+    "this", "these", "those", "there", "here",
 ];
 
 /// Sanitize query for FTS5 to prevent syntax errors
@@ -115,19 +125,19 @@ pub fn sanitize_fts5_query(query: &str) -> String {
     if query.trim().is_empty() {
         return query.to_string();
     }
-    
+
     // First, remove FTS5 special operator characters
     let cleaned = query
-        .replace('?', "")       // Remove question marks
-        .replace('!', "")       // Remove exclamation
-        .replace('^', "")        // Remove caret
-        .replace('(', "")        // Remove unbalanced parens
+        .replace('?', "") // Remove question marks
+        .replace('!', "") // Remove exclamation
+        .replace('^', "") // Remove caret
+        .replace('(', "") // Remove unbalanced parens
         .replace(')', "")
-        .replace('[', "")        // Remove brackets
+        .replace('[', "") // Remove brackets
         .replace(']', "")
-        .replace('{', "")        // Remove braces
+        .replace('{', "") // Remove braces
         .replace('}', "");
-    
+
     // Split into words and filter out stop words
     let words: Vec<&str> = cleaned
         .split_whitespace()
@@ -137,11 +147,11 @@ pub fn sanitize_fts5_query(query: &str) -> String {
             !STOP_WORDS.contains(&lower.as_str()) || word.contains(':')
         })
         .collect();
-    
+
     if words.is_empty() {
         return String::new();
     }
-    
+
     // Keep AND logic (default) for better precision
     // Natural language queries like "does agentroot have mcp?" become "agentroot mcp"
     words.join(" ")

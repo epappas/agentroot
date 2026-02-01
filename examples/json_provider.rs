@@ -311,6 +311,7 @@ async fn main() -> agentroot_core::Result<()> {
         provider: None,
         full_content: true,
         metadata_filters: Vec::new(),
+        ..Default::default()
     };
     let results = db.search_fts("POST", &options)?;
 
@@ -328,6 +329,7 @@ async fn main() -> agentroot_core::Result<()> {
         provider: None,
         full_content: true,
         metadata_filters: Vec::new(),
+        ..Default::default()
     };
     let results = db.search_fts("database", &options)?;
 
@@ -345,6 +347,7 @@ async fn main() -> agentroot_core::Result<()> {
         provider: None,
         full_content: true,
         metadata_filters: Vec::new(),
+        ..Default::default()
     };
     let results = db.search_fts("Alice", &options)?;
 

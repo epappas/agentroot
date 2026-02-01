@@ -406,9 +406,8 @@ fn parse_workflow_response(response: &str) -> Result<Workflow> {
 /// Fallback workflow when LLM unavailable
 pub fn fallback_workflow(query: &str, has_embeddings: bool) -> Workflow {
     let query_lower = query.to_lowercase();
-    let is_nl = query_lower.contains("how")
-        || query_lower.contains("what")
-        || query_lower.contains("why");
+    let is_nl =
+        query_lower.contains("how") || query_lower.contains("what") || query_lower.contains("why");
 
     let is_code_query = query.contains("::")
         || query.contains("->")
@@ -594,18 +593,30 @@ mod tests {
 
         let workflow = parse_workflow_response(json).unwrap();
         assert_eq!(workflow.steps.len(), 5);
-        assert!(matches!(&workflow.steps[0], WorkflowStep::Bm25ChunkSearch { .. }));
-        assert!(matches!(&workflow.steps[1], WorkflowStep::Bm25Search { .. }));
+        assert!(matches!(
+            &workflow.steps[0],
+            WorkflowStep::Bm25ChunkSearch { .. }
+        ));
+        assert!(matches!(
+            &workflow.steps[1],
+            WorkflowStep::Bm25Search { .. }
+        ));
         assert!(matches!(&workflow.steps[2], WorkflowStep::Merge { .. }));
         assert!(matches!(&workflow.steps[3], WorkflowStep::Deduplicate));
-        assert!(matches!(&workflow.steps[4], WorkflowStep::Limit { count: 20 }));
+        assert!(matches!(
+            &workflow.steps[4],
+            WorkflowStep::Limit { count: 20 }
+        ));
     }
 
     #[test]
     fn test_fallback_workflow_code_query_no_embeddings() {
         let workflow = fallback_workflow("SourceProvider::list_items", false);
         assert_eq!(workflow.steps.len(), 1);
-        assert!(matches!(&workflow.steps[0], WorkflowStep::Bm25ChunkSearch { .. }));
+        assert!(matches!(
+            &workflow.steps[0],
+            WorkflowStep::Bm25ChunkSearch { .. }
+        ));
     }
 
     #[test]
@@ -613,32 +624,50 @@ mod tests {
         let workflow = fallback_workflow("fn search_chunks", true);
         // Should produce chunk + doc + merge + dedup + limit
         assert!(workflow.steps.len() >= 3);
-        assert!(matches!(&workflow.steps[0], WorkflowStep::Bm25ChunkSearch { .. }));
-        assert!(matches!(&workflow.steps[1], WorkflowStep::Bm25Search { .. }));
+        assert!(matches!(
+            &workflow.steps[0],
+            WorkflowStep::Bm25ChunkSearch { .. }
+        ));
+        assert!(matches!(
+            &workflow.steps[1],
+            WorkflowStep::Bm25Search { .. }
+        ));
     }
 
     #[test]
     fn test_fallback_workflow_snake_case_query() {
         let workflow = fallback_workflow("search_chunks_bm25", false);
-        assert!(matches!(&workflow.steps[0], WorkflowStep::Bm25ChunkSearch { .. }));
+        assert!(matches!(
+            &workflow.steps[0],
+            WorkflowStep::Bm25ChunkSearch { .. }
+        ));
     }
 
     #[test]
     fn test_fallback_workflow_pascal_case_query() {
         let workflow = fallback_workflow("WorkflowStep", false);
-        assert!(matches!(&workflow.steps[0], WorkflowStep::Bm25ChunkSearch { .. }));
+        assert!(matches!(
+            &workflow.steps[0],
+            WorkflowStep::Bm25ChunkSearch { .. }
+        ));
     }
 
     #[test]
     fn test_fallback_workflow_natural_language() {
         let workflow = fallback_workflow("how to implement search", true);
-        assert!(matches!(&workflow.steps[0], WorkflowStep::VectorSearch { .. }));
+        assert!(matches!(
+            &workflow.steps[0],
+            WorkflowStep::VectorSearch { .. }
+        ));
     }
 
     #[test]
     fn test_fallback_workflow_generic_query() {
         let workflow = fallback_workflow("search providers", true);
-        assert!(matches!(&workflow.steps[0], WorkflowStep::HybridSearch { .. }));
+        assert!(matches!(
+            &workflow.steps[0],
+            WorkflowStep::HybridSearch { .. }
+        ));
     }
 
     #[test]
@@ -663,20 +692,29 @@ mod tests {
     #[test]
     fn test_fallback_workflow_camel_case_query() {
         let workflow = fallback_workflow("getElementById", false);
-        assert!(matches!(&workflow.steps[0], WorkflowStep::Bm25ChunkSearch { .. }));
+        assert!(matches!(
+            &workflow.steps[0],
+            WorkflowStep::Bm25ChunkSearch { .. }
+        ));
     }
 
     #[test]
     fn test_fallback_workflow_go_func_query() {
         let workflow = fallback_workflow("func HandleRequest", false);
-        assert!(matches!(&workflow.steps[0], WorkflowStep::Bm25ChunkSearch { .. }));
+        assert!(matches!(
+            &workflow.steps[0],
+            WorkflowStep::Bm25ChunkSearch { .. }
+        ));
     }
 
     #[test]
     fn test_fallback_workflow_code_wins_over_nl() {
         // When query has both NL and code signals, code wins (more specific)
         let workflow = fallback_workflow("how does impl Display work", true);
-        assert!(matches!(&workflow.steps[0], WorkflowStep::Bm25ChunkSearch { .. }));
+        assert!(matches!(
+            &workflow.steps[0],
+            WorkflowStep::Bm25ChunkSearch { .. }
+        ));
     }
 
     #[test]

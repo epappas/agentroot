@@ -18,11 +18,11 @@
 //! Usage:
 //!   cargo run --release --example glossary_validation
 
-use agentroot_core::db::{hash_content, Database};
-use agentroot_core::llm::{MetadataContext, MetadataGenerator, VLLMClient};
 use agentroot_core::config::LLMServiceConfig;
+use agentroot_core::db::{hash_content, Database};
+use agentroot_core::llm::{MergeStrategy, Workflow, WorkflowStep};
+use agentroot_core::llm::{MetadataContext, MetadataGenerator, VLLMClient};
 use agentroot_core::search::{execute_workflow, SearchOptions, SearchSource};
-use agentroot_core::llm::{Workflow, WorkflowStep, MergeStrategy};
 use std::collections::HashSet;
 use std::env;
 use std::fs;
@@ -54,8 +54,8 @@ async fn main() {
         }
     };
 
-    let llm_model = env::var("AGENTROOT_LLM_MODEL")
-        .unwrap_or_else(|_| "Qwen/Qwen2.5-7B-Instruct".to_string());
+    let llm_model =
+        env::var("AGENTROOT_LLM_MODEL").unwrap_or_else(|_| "Qwen/Qwen2.5-7B-Instruct".to_string());
 
     println!("📋 Configuration:");
     println!("  LLM URL: {}", llm_url);
@@ -140,7 +140,10 @@ async fn main() {
         print!("    Generating metadata with LLM... ");
         std::io::Write::flush(&mut std::io::stdout()).unwrap();
 
-        let metadata = match generator.generate_metadata(&truncated_content, &context).await {
+        let metadata = match generator
+            .generate_metadata(&truncated_content, &context)
+            .await
+        {
             Ok(m) => {
                 println!("✓");
                 m
@@ -153,17 +156,28 @@ async fn main() {
             }
         };
 
-        println!("    Extracted {} concepts:", metadata.extracted_concepts.len());
+        println!(
+            "    Extracted {} concepts:",
+            metadata.extracted_concepts.len()
+        );
         for (i, concept) in metadata.extracted_concepts.iter().enumerate().take(5) {
             let snippet_preview = if concept.snippet.len() > 50 {
                 format!("{}...", &concept.snippet[..50])
             } else {
                 concept.snippet.clone()
             };
-            println!("      {}. {} (\"{}\")", i + 1, concept.term, snippet_preview);
+            println!(
+                "      {}. {} (\"{}\")",
+                i + 1,
+                concept.term,
+                snippet_preview
+            );
         }
         if metadata.extracted_concepts.len() > 5 {
-            println!("      ... and {} more", metadata.extracted_concepts.len() - 5);
+            println!(
+                "      ... and {} more",
+                metadata.extracted_concepts.len() - 5
+            );
         }
 
         db.insert_doc(
@@ -192,26 +206,14 @@ async fn main() {
 
         // Create proper chunk hash using blake3 (64-char hex string)
         let chunk_hash = blake3::hash(content.as_bytes()).to_hex().to_string();
-        
-        db.insert_chunk_embedding(
-            &hash,
-            0,
-            0,
-            &chunk_hash,
-            "test-model",
-            &vec![0.1; 128],
-        )
-        .unwrap();
+
+        db.insert_chunk_embedding(&hash, 0, 0, &chunk_hash, "test-model", &vec![0.1; 128])
+            .unwrap();
 
         for concept in &metadata.extracted_concepts {
             let concept_id = db.upsert_concept(&concept.term).unwrap();
-            db.link_concept_to_chunk(
-                concept_id,
-                &chunk_hash,
-                &hash,
-                &concept.snippet,
-            )
-            .unwrap();
+            db.link_concept_to_chunk(concept_id, &chunk_hash, &hash, &concept.snippet)
+                .unwrap();
             db.update_concept_stats(concept_id).unwrap();
         }
 
@@ -230,7 +232,7 @@ async fn main() {
 
     // DEBUG: Test concept searching and chunk linkage
     println!("\n  🔍 DEBUG: Testing concept search and document query...");
-    
+
     let test_searches = vec!["semantic", "provider"];
     for test_q in &test_searches {
         let concepts = db.search_concepts(test_q, 10).unwrap();
@@ -333,8 +335,14 @@ async fn main() {
             .collect();
 
         println!("\n    📊 Results:");
-        println!("      Baseline (BM25 only): {} documents", results_baseline.len());
-        println!("      With Glossary: {} documents", results_with_glossary.len());
+        println!(
+            "      Baseline (BM25 only): {} documents",
+            results_baseline.len()
+        );
+        println!(
+            "      With Glossary: {} documents",
+            results_with_glossary.len()
+        );
         println!("      Glossary-only results: {}", glossary_docs.len());
 
         if !glossary_docs.is_empty() {
@@ -389,9 +397,18 @@ async fn main() {
     println!("\n▶ Phase 4: Final Report");
     println!("\n  📊 Overall Metrics:");
     println!("    Total queries tested: {}", queries_run);
-    println!("    Avg baseline results: {:.1}", total_baseline_results as f64 / queries_run as f64);
-    println!("    Avg glossary results: {:.1}", total_glossary_results as f64 / queries_run as f64);
-    println!("    Avg recall improvement: {:.1}%", total_recall_improvement / queries_run as f64);
+    println!(
+        "    Avg baseline results: {:.1}",
+        total_baseline_results as f64 / queries_run as f64
+    );
+    println!(
+        "    Avg glossary results: {:.1}",
+        total_glossary_results as f64 / queries_run as f64
+    );
+    println!(
+        "    Avg recall improvement: {:.1}%",
+        total_recall_improvement / queries_run as f64
+    );
 
     let avg_recall = total_recall_improvement / queries_run as f64;
 

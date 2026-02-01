@@ -220,6 +220,7 @@ rustc main.rs
         provider: None,
         full_content: false,
         metadata_filters: Vec::new(),
+        ..Default::default()
     };
 
     let results = db.search_fts("Rust programming", &search_opts)?;

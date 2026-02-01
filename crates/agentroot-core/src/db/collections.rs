@@ -385,7 +385,10 @@ impl Database {
 
         // If no chunks, we can't link concepts
         if chunk_hashes.is_empty() {
-            tracing::debug!("No chunks found for document {}, skipping concept linking", doc_hash);
+            tracing::debug!(
+                "No chunks found for document {}, skipping concept linking",
+                doc_hash
+            );
             return Ok(());
         }
 
@@ -397,12 +400,7 @@ impl Database {
             // Link concept to all chunks of this document
             // (Concepts are document-level, not chunk-specific)
             for (_, chunk_hash) in &chunk_hashes {
-                self.link_concept_to_chunk(
-                    concept_id,
-                    chunk_hash,
-                    doc_hash,
-                    &extracted.snippet,
-                )?;
+                self.link_concept_to_chunk(concept_id, chunk_hash, doc_hash, &extracted.snippet)?;
             }
 
             // Update concept statistics
@@ -450,14 +448,7 @@ impl Database {
         let metadata_list: Option<Vec<ChunkMetadata>> = if let Some(client) = chunk_generator {
             let language = Language::from_path(Path::new(path)).map(|l| l.as_str());
 
-            match generate_batch_chunk_metadata(
-                &semantic_chunks,
-                path,
-                language,
-                client,
-            )
-            .await
-            {
+            match generate_batch_chunk_metadata(&semantic_chunks, path, language, client).await {
                 Ok(meta) => Some(meta),
                 Err(e) => {
                     tracing::warn!("Failed to generate chunk metadata for {}: {}", path, e);
@@ -473,7 +464,9 @@ impl Database {
             let chunk_hash = chunk.chunk_hash.clone();
 
             // Get metadata for this chunk if available
-            let chunk_meta = metadata_list.as_ref().and_then(|list: &Vec<ChunkMetadata>| list.get(seq));
+            let chunk_meta = metadata_list
+                .as_ref()
+                .and_then(|list: &Vec<ChunkMetadata>| list.get(seq));
 
             // Extract metadata fields
             let (summary, purpose, concepts, labels, model_name) = if let Some(meta) = chunk_meta {
@@ -506,7 +499,11 @@ impl Database {
                 labels,
                 &vec![], // related_to - can be populated later via semantic analysis
                 model_name,
-                if chunk_meta.is_some() { Some(&now) } else { None },
+                if chunk_meta.is_some() {
+                    Some(&now)
+                } else {
+                    None
+                },
                 &now,
             )?;
 
@@ -594,8 +591,13 @@ impl Database {
 
                         // Process chunks with LLM metadata
                         let llm_client = generator.and_then(|g| g.llm_client());
-                        self.process_chunks_with_metadata(&item.hash, &item.content, &item.uri, llm_client)
-                            .await?;
+                        self.process_chunks_with_metadata(
+                            &item.hash,
+                            &item.content,
+                            &item.uri,
+                            llm_client,
+                        )
+                        .await?;
 
                         // Extract and link concepts to chunks
                         self.extract_and_link_concepts(&item.hash, &metadata)?;
@@ -603,8 +605,13 @@ impl Database {
                         self.update_document(existing.id, &item.title, &item.hash, &now)?;
 
                         // Still create chunks without LLM metadata
-                        self.process_chunks_with_metadata(&item.hash, &item.content, &item.uri, None)
-                            .await?;
+                        self.process_chunks_with_metadata(
+                            &item.hash,
+                            &item.content,
+                            &item.uri,
+                            None,
+                        )
+                        .await?;
                     }
                     updated += 1;
                 }
@@ -635,8 +642,13 @@ impl Database {
 
                     // Process chunks with LLM metadata
                     let llm_client = generator.and_then(|g| g.llm_client());
-                    self.process_chunks_with_metadata(&item.hash, &item.content, &item.uri, llm_client)
-                        .await?;
+                    self.process_chunks_with_metadata(
+                        &item.hash,
+                        &item.content,
+                        &item.uri,
+                        llm_client,
+                    )
+                    .await?;
 
                     // Extract and link concepts to chunks
                     self.extract_and_link_concepts(&item.hash, &metadata)?;

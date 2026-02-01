@@ -45,7 +45,11 @@ fn main() -> agentroot_core::Result<()> {
         .tags("topics", vec!["memory", "ownership", "borrowing"])
         .integer("difficulty", 2)
         .boolean("has_code_samples", true)
-        .enum_value("level", "intermediate", vec!["beginner".into(), "intermediate".into(), "advanced".into()])?
+        .enum_value(
+            "level",
+            "intermediate",
+            vec!["beginner".into(), "intermediate".into(), "advanced".into()],
+        )?
         .quantitative("read_minutes", 8.0, "min")
         .datetime_now("indexed_at")
         .json("extra", serde_json::json!({"series": "core-concepts"}))
@@ -56,7 +60,11 @@ fn main() -> agentroot_core::Result<()> {
         .tags("topics", vec!["async", "concurrency", "tokio"])
         .integer("difficulty", 3)
         .boolean("has_code_samples", true)
-        .qualitative("complexity", "high", vec!["low".into(), "medium".into(), "high".into()])?
+        .qualitative(
+            "complexity",
+            "high",
+            vec!["low".into(), "medium".into(), "high".into()],
+        )?
         .build();
 
     let meta2 = MetadataBuilder::new()
@@ -99,7 +107,10 @@ fn main() -> agentroot_core::Result<()> {
         println!("  author: {:?}", retrieved.get("author"));
         println!("  topics: {:?}", retrieved.get("topics"));
         println!("  difficulty: {:?}", retrieved.get("difficulty"));
-        println!("  has_code_samples: {:?}", retrieved.get("has_code_samples"));
+        println!(
+            "  has_code_samples: {:?}",
+            retrieved.get("has_code_samples")
+        );
     }
 
     // Filter: difficulty > 2
@@ -156,15 +167,22 @@ fn main() -> agentroot_core::Result<()> {
     db.add_metadata(&docids[0], &patch)?;
 
     if let Some(merged) = db.get_metadata(&docids[0])? {
-        println!("  After merge: difficulty={:?}, reviewer={:?}, author={:?}",
-            merged.get("difficulty"), merged.get("reviewer"), merged.get("author"));
+        println!(
+            "  After merge: difficulty={:?}, reviewer={:?}, author={:?}",
+            merged.get("difficulty"),
+            merged.get("reviewer"),
+            merged.get("author")
+        );
     }
 
     // Demonstrate removal
     println!("\n--- Metadata field removal ---");
     db.remove_metadata_fields(&docids[0], &["reviewer".into()])?;
     if let Some(after) = db.get_metadata(&docids[0])? {
-        println!("  reviewer present after removal: {}", after.contains("reviewer"));
+        println!(
+            "  reviewer present after removal: {}",
+            after.contains("reviewer")
+        );
         println!("  author still present: {}", after.contains("author"));
     }
 
@@ -177,6 +195,7 @@ fn main() -> agentroot_core::Result<()> {
         full_content: false,
         provider: None,
         metadata_filters: vec![],
+        ..Default::default()
     };
     let results = db.search_fts("performance", &opts)?;
     for r in &results {

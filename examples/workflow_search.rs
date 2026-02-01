@@ -55,26 +55,49 @@ async fn main() -> agentroot_core::Result<()> {
 
     // Insert chunks for two documents to enable chunk search
     let chunk_data: Vec<(&str, &str, Vec<(&str, &str)>)> = vec![
-        ("BM25 uses term frequency and inverse document frequency for scoring.",
-         "bm25_scoring", vec![("layer", "algorithm"), ("topic", "ranking")]),
-        ("Cosine similarity measures the angle between embedding vectors.",
-         "vector_math", vec![("layer", "algorithm"), ("topic", "similarity")]),
-        ("Reciprocal Rank Fusion merges results from multiple retrieval systems.",
-         "rrf_fusion", vec![("layer", "algorithm"), ("topic", "fusion")]),
+        (
+            "BM25 uses term frequency and inverse document frequency for scoring.",
+            "bm25_scoring",
+            vec![("layer", "algorithm"), ("topic", "ranking")],
+        ),
+        (
+            "Cosine similarity measures the angle between embedding vectors.",
+            "vector_math",
+            vec![("layer", "algorithm"), ("topic", "similarity")],
+        ),
+        (
+            "Reciprocal Rank Fusion merges results from multiple retrieval systems.",
+            "rrf_fusion",
+            vec![("layer", "algorithm"), ("topic", "fusion")],
+        ),
     ];
 
     let ref_hash = hash_content(documents[2].4);
     for (seq, (content, breadcrumb, labels)) in chunk_data.iter().enumerate() {
         let chunk_hash = hash_content(content);
-        let label_map: HashMap<String, String> = labels.iter()
+        let label_map: HashMap<String, String> = labels
+            .iter()
             .map(|(k, v)| (k.to_string(), v.to_string()))
             .collect();
         db.insert_chunk(
-            &chunk_hash, &ref_hash, seq as i32, 0,
-            content, Some("Paragraph"), Some(breadcrumb),
-            (seq as i32) * 5 + 1, (seq as i32) * 5 + 4, None,
-            Some(content), None, &[], &label_map, &[],
-            None, None, &now,
+            &chunk_hash,
+            &ref_hash,
+            seq as i32,
+            0,
+            content,
+            Some("Paragraph"),
+            Some(breadcrumb),
+            (seq as i32) * 5 + 1,
+            (seq as i32) * 5 + 4,
+            None,
+            Some(content),
+            None,
+            &[],
+            &label_map,
+            &[],
+            None,
+            None,
+            &now,
         )?;
     }
     println!("Inserted {} chunks for reference docs\n", chunk_data.len());
@@ -99,9 +122,17 @@ async fn main() -> agentroot_core::Result<()> {
     println!("--- Workflow 2: Doc + Chunk merged (RRF) ---");
     let wf2 = Workflow {
         steps: vec![
-            WorkflowStep::Bm25Search { query: "search ranking algorithm".into(), limit: 10 },
-            WorkflowStep::Bm25ChunkSearch { query: "search ranking algorithm".into(), limit: 10 },
-            WorkflowStep::Merge { strategy: MergeStrategy::Rrf },
+            WorkflowStep::Bm25Search {
+                query: "search ranking algorithm".into(),
+                limit: 10,
+            },
+            WorkflowStep::Bm25ChunkSearch {
+                query: "search ranking algorithm".into(),
+                limit: 10,
+            },
+            WorkflowStep::Merge {
+                strategy: MergeStrategy::Rrf,
+            },
             WorkflowStep::Deduplicate,
             WorkflowStep::Limit { count: 5 },
         ],
@@ -116,7 +147,10 @@ async fn main() -> agentroot_core::Result<()> {
     println!("--- Workflow 3: Filtered by category + difficulty ---");
     let wf3 = Workflow {
         steps: vec![
-            WorkflowStep::Bm25Search { query: "Rust programming".into(), limit: 10 },
+            WorkflowStep::Bm25Search {
+                query: "Rust programming".into(),
+                limit: 10,
+            },
             WorkflowStep::FilterMetadata {
                 category: Some("tutorial".into()),
                 difficulty: None,
@@ -143,8 +177,12 @@ async fn main() -> agentroot_core::Result<()> {
     for q in queries {
         let wf = fallback_workflow(q, false);
         let step_names: Vec<String> = wf.steps.iter().map(|s| format!("{:?}", s)).collect();
-        println!("  \"{}\" -> complexity={}, steps={}",
-            q, wf.complexity, step_names.len());
+        println!(
+            "  \"{}\" -> complexity={}, steps={}",
+            q,
+            wf.complexity,
+            step_names.len()
+        );
         for s in &step_names {
             let short = if s.len() > 60 { &s[..60] } else { s };
             println!("    {}", short);
@@ -163,9 +201,14 @@ fn print_results(query: &str, results: &[agentroot_core::SearchResult]) {
     }
     for (i, r) in results.iter().enumerate() {
         let kind = if r.is_chunk { "chunk" } else { "doc" };
-        println!("  {}. [{}] {} (score: {:.3}) -- {}",
-            i + 1, kind, r.display_path, r.score,
-            r.llm_category.as_deref().unwrap_or("-"));
+        println!(
+            "  {}. [{}] {} (score: {:.3}) -- {}",
+            i + 1,
+            kind,
+            r.display_path,
+            r.score,
+            r.llm_category.as_deref().unwrap_or("-")
+        );
     }
     println!();
 }
