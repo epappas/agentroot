@@ -37,8 +37,6 @@ pub struct SearchOptions {
     pub collection: Option<String>,
     /// Filter by provider type (e.g., "file", "github")
     pub provider: Option<String>,
-    /// Include full document content (derived from detail level)
-    pub full_content: bool,
     /// Metadata filters (field, value) e.g., ("category", "tutorial")
     pub metadata_filters: Vec<(String, String)>,
     /// Context detail level (L0=abstract, L1=overview, L2=full)
@@ -54,7 +52,6 @@ impl Default for SearchOptions {
             min_score: 0.0,
             collection: None,
             provider: None,
-            full_content: false,
             metadata_filters: Vec::new(),
             detail: DetailLevel::default(),
             session_id: None,

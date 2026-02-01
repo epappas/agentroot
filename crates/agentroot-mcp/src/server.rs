@@ -117,7 +117,8 @@ impl<'a> McpServer<'a> {
             tools::navigate_chunks_tool_definition(),
             // Session tools
             tools::session_start_tool_definition(),
-            tools::session_context_tool_definition(),
+            tools::session_get_tool_definition(),
+            tools::session_set_tool_definition(),
             tools::session_end_tool_definition(),
             // Directory browsing tools
             tools::browse_directory_tool_definition(),
@@ -163,7 +164,8 @@ impl<'a> McpServer<'a> {
             "navigate_chunks" => tools::handle_navigate_chunks(self.db, arguments).await,
             // Session tools
             "session_start" => tools::handle_session_start(self.db, arguments).await,
-            "session_context" => tools::handle_session_context(self.db, arguments).await,
+            "session_get" => tools::handle_session_get(self.db, arguments).await,
+            "session_set" => tools::handle_session_set(self.db, arguments).await,
             "session_end" => tools::handle_session_end(self.db, arguments).await,
             // Directory browsing tools
             "browse_directory" => tools::handle_browse_directory(self.db, arguments).await,

@@ -227,7 +227,7 @@ See examples/ directory for complete configuration samples.
         min_score: 0.0,
         collection: Some("demo".to_string()),
         provider: None,
-        full_content: false,
+
         metadata_filters: Vec::new(),
         ..Default::default()
     };

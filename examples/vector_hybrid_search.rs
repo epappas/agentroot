@@ -86,7 +86,7 @@ fn main() -> agentroot_core::Result<()> {
         limit: 6,
         min_score: 0.0,
         collection: Some("kb".into()),
-        full_content: false,
+
         provider: None,
         metadata_filters: vec![],
         ..Default::default()

@@ -285,7 +285,7 @@ async fn test_end_to_end_metadata_generation() {
         collection: Some(collection_name.to_string()),
         provider: None,
         metadata_filters: Vec::new(),
-        full_content: false,
+
         ..Default::default()
     };
 
@@ -392,7 +392,7 @@ async fn test_metadata_improves_search_quality() {
         collection: Some(collection_name.to_string()),
         provider: None,
         metadata_filters: Vec::new(),
-        full_content: false,
+
         ..Default::default()
     };
 
@@ -488,7 +488,7 @@ async fn test_metadata_fields_in_search_results() {
         collection: Some(collection_name.to_string()),
         provider: None,
         metadata_filters: Vec::new(),
-        full_content: false,
+
         ..Default::default()
     };
 
@@ -584,7 +584,7 @@ async fn test_metadata_cache_functionality() {
         collection: Some(collection_name.to_string()),
         provider: None,
         metadata_filters: Vec::new(),
-        full_content: false,
+
         ..Default::default()
     };
 

@@ -69,6 +69,35 @@ fn apply_session_and_project(
     }
 }
 
+fn result_to_json(r: &agentroot_core::SearchResult) -> Value {
+    let mut j = serde_json::json!({
+        "docid": format!("#{}", r.docid),
+        "file": r.display_path,
+        "title": r.title,
+        "score": (r.score * 100.0).round() / 100.0
+    });
+    if let Some(s) = &r.llm_summary {
+        j["summary"] = Value::String(s.clone());
+    }
+    if let Some(cat) = &r.llm_category {
+        j["category"] = Value::String(cat.clone());
+    }
+    if let Some(diff) = &r.llm_difficulty {
+        j["difficulty"] = Value::String(diff.clone());
+    }
+    if let Some(kw) = &r.llm_keywords {
+        j["keywords"] = serde_json::to_value(kw).unwrap();
+    }
+    if let Some(meta) = &r.user_metadata {
+        if let Ok(json_str) = meta.to_json() {
+            if let Ok(parsed) = serde_json::from_str::<Value>(&json_str) {
+                j["userMetadata"] = parsed;
+            }
+        }
+    }
+    j
+}
+
 pub fn search_tool_definition() -> ToolDefinition {
     ToolDefinition {
         name: "search".to_string(),
@@ -405,7 +434,7 @@ pub async fn handle_search(db: &Database, args: Value) -> Result<ToolResult> {
             .get("provider")
             .and_then(|v| v.as_str())
             .map(String::from),
-        full_content: detail.is_full_content(),
+
         detail,
         session_id: session_id.clone(),
         metadata_filters: Vec::new(),
@@ -444,42 +473,7 @@ pub async fn handle_search(db: &Database, args: Value) -> Result<ToolResult> {
     apply_session_and_project(db, &mut results, detail, session_id.as_deref(), query);
 
     let summary = format!("Found {} results for \"{}\"", results.len(), query);
-    let structured: Vec<Value> = results
-        .iter()
-        .map(|r| {
-            let mut result_json = serde_json::json!({
-                "docid": format!("#{}", r.docid),
-                "file": r.display_path,
-                "title": r.title,
-                "score": (r.score * 100.0).round() / 100.0
-            });
-
-            // Include LLM metadata if available
-            if let Some(summary) = &r.llm_summary {
-                result_json["summary"] = Value::String(summary.clone());
-            }
-            if let Some(category) = &r.llm_category {
-                result_json["category"] = Value::String(category.clone());
-            }
-            if let Some(difficulty) = &r.llm_difficulty {
-                result_json["difficulty"] = Value::String(difficulty.clone());
-            }
-            if let Some(keywords) = &r.llm_keywords {
-                result_json["keywords"] = serde_json::to_value(keywords).unwrap();
-            }
-
-            // Include user metadata if available
-            if let Some(user_meta) = &r.user_metadata {
-                if let Ok(json_str) = user_meta.to_json() {
-                    if let Ok(parsed) = serde_json::from_str::<Value>(&json_str) {
-                        result_json["userMetadata"] = parsed;
-                    }
-                }
-            }
-
-            result_json
-        })
-        .collect();
+    let structured: Vec<Value> = results.iter().map(result_to_json).collect();
 
     Ok(ToolResult {
         content: vec![Content::Text { text: summary }],
@@ -518,7 +512,7 @@ pub async fn handle_vsearch(db: &Database, args: Value) -> Result<ToolResult> {
             .get("provider")
             .and_then(|v| v.as_str())
             .map(String::from),
-        full_content: detail.is_full_content(),
+
         detail,
         session_id: session_id.clone(),
         metadata_filters: Vec::new(),
@@ -575,42 +569,7 @@ pub async fn handle_vsearch(db: &Database, args: Value) -> Result<ToolResult> {
     apply_session_and_project(db, &mut results, detail, session_id.as_deref(), query);
 
     let summary = format!("Found {} results for \"{}\"", results.len(), query);
-    let structured: Vec<Value> = results
-        .iter()
-        .map(|r| {
-            let mut result_json = serde_json::json!({
-                "docid": format!("#{}", r.docid),
-                "file": r.display_path,
-                "title": r.title,
-                "score": (r.score * 100.0).round() / 100.0
-            });
-
-            // Include LLM metadata if available
-            if let Some(summary) = &r.llm_summary {
-                result_json["summary"] = Value::String(summary.clone());
-            }
-            if let Some(category) = &r.llm_category {
-                result_json["category"] = Value::String(category.clone());
-            }
-            if let Some(difficulty) = &r.llm_difficulty {
-                result_json["difficulty"] = Value::String(difficulty.clone());
-            }
-            if let Some(keywords) = &r.llm_keywords {
-                result_json["keywords"] = serde_json::to_value(keywords).unwrap();
-            }
-
-            // Include user metadata if available
-            if let Some(user_meta) = &r.user_metadata {
-                if let Ok(json_str) = user_meta.to_json() {
-                    if let Ok(parsed) = serde_json::from_str::<Value>(&json_str) {
-                        result_json["userMetadata"] = parsed;
-                    }
-                }
-            }
-
-            result_json
-        })
-        .collect();
+    let structured: Vec<Value> = results.iter().map(result_to_json).collect();
 
     Ok(ToolResult {
         content: vec![Content::Text { text: summary }],
@@ -643,7 +602,7 @@ pub async fn handle_query(db: &Database, args: Value) -> Result<ToolResult> {
             .get("provider")
             .and_then(|v| v.as_str())
             .map(String::from),
-        full_content: detail.is_full_content(),
+
         detail,
         session_id: session_id.clone(),
         metadata_filters: Vec::new(),
@@ -705,42 +664,7 @@ pub async fn handle_query(db: &Database, args: Value) -> Result<ToolResult> {
         final_results.len(),
         query
     );
-    let structured: Vec<Value> = final_results
-        .iter()
-        .map(|r| {
-            let mut result_json = serde_json::json!({
-                "docid": format!("#{}", r.docid),
-                "file": r.display_path,
-                "title": r.title,
-                "score": (r.score * 100.0).round() / 100.0
-            });
-
-            // Include LLM metadata if available
-            if let Some(summary) = &r.llm_summary {
-                result_json["summary"] = Value::String(summary.clone());
-            }
-            if let Some(category) = &r.llm_category {
-                result_json["category"] = Value::String(category.clone());
-            }
-            if let Some(difficulty) = &r.llm_difficulty {
-                result_json["difficulty"] = Value::String(difficulty.clone());
-            }
-            if let Some(keywords) = &r.llm_keywords {
-                result_json["keywords"] = serde_json::to_value(keywords).unwrap();
-            }
-
-            // Include user metadata if available
-            if let Some(user_meta) = &r.user_metadata {
-                if let Ok(json_str) = user_meta.to_json() {
-                    if let Ok(parsed) = serde_json::from_str::<Value>(&json_str) {
-                        result_json["userMetadata"] = parsed;
-                    }
-                }
-            }
-
-            result_json
-        })
-        .collect();
+    let structured: Vec<Value> = final_results.iter().map(result_to_json).collect();
 
     Ok(ToolResult {
         content: vec![Content::Text { text: summary }],
@@ -766,7 +690,7 @@ pub async fn handle_smart_search(db: &Database, args: Value) -> Result<ToolResul
             .and_then(|v| v.as_str())
             .map(String::from),
         provider: None,
-        full_content: detail.is_full_content(),
+
         detail,
         session_id: session_id.clone(),
         metadata_filters: Vec::new(),
@@ -783,42 +707,7 @@ pub async fn handle_smart_search(db: &Database, args: Value) -> Result<ToolResul
         results.len(),
         query
     );
-    let structured: Vec<Value> = results
-        .iter()
-        .map(|r| {
-            let mut result_json = serde_json::json!({
-                "docid": format!("#{}", r.docid),
-                "file": r.display_path,
-                "title": r.title,
-                "score": (r.score * 100.0).round() / 100.0
-            });
-
-            // Include LLM metadata if available
-            if let Some(summary) = &r.llm_summary {
-                result_json["summary"] = Value::String(summary.clone());
-            }
-            if let Some(category) = &r.llm_category {
-                result_json["category"] = Value::String(category.clone());
-            }
-            if let Some(difficulty) = &r.llm_difficulty {
-                result_json["difficulty"] = Value::String(difficulty.clone());
-            }
-            if let Some(keywords) = &r.llm_keywords {
-                result_json["keywords"] = serde_json::to_value(keywords).unwrap();
-            }
-
-            // Include user metadata if available
-            if let Some(user_meta) = &r.user_metadata {
-                if let Ok(json_str) = user_meta.to_json() {
-                    if let Ok(parsed) = serde_json::from_str::<Value>(&json_str) {
-                        result_json["userMetadata"] = parsed;
-                    }
-                }
-            }
-
-            result_json
-        })
-        .collect();
+    let structured: Vec<Value> = results.iter().map(result_to_json).collect();
 
     Ok(ToolResult {
         content: vec![Content::Text { text: summary }],
@@ -1309,7 +1198,7 @@ pub async fn handle_search_chunks(db: &Database, args: Value) -> Result<ToolResu
             .and_then(|v| v.as_str())
             .map(String::from),
         provider: None,
-        full_content: detail.is_full_content(),
+
         detail,
         session_id: session_id.clone(),
         metadata_filters: Vec::new(),
@@ -1602,11 +1491,27 @@ pub fn session_start_tool_definition() -> ToolDefinition {
     }
 }
 
-pub fn session_context_tool_definition() -> ToolDefinition {
+pub fn session_get_tool_definition() -> ToolDefinition {
     ToolDefinition {
-        name: "session_context".to_string(),
-        description: "Get or set session context key-value pairs, and view past queries."
-            .to_string(),
+        name: "session_get".to_string(),
+        description: "Get session context, query history, and seen document count.".to_string(),
+        input_schema: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "session_id": {
+                    "type": "string",
+                    "description": "Session ID from session_start"
+                }
+            },
+            "required": ["session_id"]
+        }),
+    }
+}
+
+pub fn session_set_tool_definition() -> ToolDefinition {
+    ToolDefinition {
+        name: "session_set".to_string(),
+        description: "Set a key-value pair on the session context.".to_string(),
         input_schema: serde_json::json!({
             "type": "object",
             "properties": {
@@ -1614,21 +1519,16 @@ pub fn session_context_tool_definition() -> ToolDefinition {
                     "type": "string",
                     "description": "Session ID from session_start"
                 },
-                "action": {
-                    "type": "string",
-                    "enum": ["get", "set"],
-                    "description": "Action: 'get' returns context and query history, 'set' updates a context key"
-                },
                 "key": {
                     "type": "string",
-                    "description": "Context key (required for 'set' action)"
+                    "description": "Context key to set"
                 },
                 "value": {
                     "type": "string",
-                    "description": "Context value (required for 'set' action)"
+                    "description": "Context value to set"
                 }
             },
-            "required": ["session_id", "action"]
+            "required": ["session_id", "key", "value"]
         }),
     }
 }
@@ -1670,86 +1570,78 @@ pub async fn handle_session_start(db: &Database, args: Value) -> Result<ToolResu
     })
 }
 
-pub async fn handle_session_context(db: &Database, args: Value) -> Result<ToolResult> {
+pub async fn handle_session_get(db: &Database, args: Value) -> Result<ToolResult> {
     let session_id = args
         .get("session_id")
         .and_then(|v| v.as_str())
         .ok_or_else(|| anyhow::anyhow!("Missing session_id"))?;
 
-    let action = args
-        .get("action")
+    let session = db
+        .get_session(session_id)?
+        .ok_or_else(|| anyhow::anyhow!("Session not found: {}", session_id))?;
+    let queries = db.get_session_queries(session_id)?;
+    let seen = db.get_seen_hashes(session_id)?;
+
+    let queries_json: Vec<Value> = queries
+        .iter()
+        .map(|q| {
+            serde_json::json!({
+                "query": q.query,
+                "result_count": q.result_count,
+                "created_at": q.created_at
+            })
+        })
+        .collect();
+
+    Ok(ToolResult {
+        content: vec![Content::Text {
+            text: format!(
+                "Session {}: {} queries, {} seen documents",
+                session_id,
+                queries.len(),
+                seen.len()
+            ),
+        }],
+        structured_content: Some(serde_json::json!({
+            "session_id": session_id,
+            "created_at": session.created_at,
+            "last_active_at": session.last_active_at,
+            "ttl_seconds": session.ttl_seconds,
+            "context": session.context,
+            "queries": queries_json,
+            "seen_count": seen.len()
+        })),
+        is_error: None,
+    })
+}
+
+pub async fn handle_session_set(db: &Database, args: Value) -> Result<ToolResult> {
+    let session_id = args
+        .get("session_id")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| anyhow::anyhow!("Missing action"))?;
+        .ok_or_else(|| anyhow::anyhow!("Missing session_id"))?;
+    let key = args
+        .get("key")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing key"))?;
+    let value = args
+        .get("value")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing value"))?;
 
-    match action {
-        "get" => {
-            let session = db
-                .get_session(session_id)?
-                .ok_or_else(|| anyhow::anyhow!("Session not found: {}", session_id))?;
-            let queries = db.get_session_queries(session_id)?;
-            let seen = db.get_seen_hashes(session_id)?;
+    db.set_session_context(session_id, key, value)?;
 
-            let queries_json: Vec<Value> = queries
-                .iter()
-                .map(|q| {
-                    serde_json::json!({
-                        "query": q.query,
-                        "result_count": q.result_count,
-                        "created_at": q.created_at
-                    })
-                })
-                .collect();
-
-            Ok(ToolResult {
-                content: vec![Content::Text {
-                    text: format!(
-                        "Session {}: {} queries, {} seen documents",
-                        session_id,
-                        queries.len(),
-                        seen.len()
-                    ),
-                }],
-                structured_content: Some(serde_json::json!({
-                    "session_id": session_id,
-                    "created_at": session.created_at,
-                    "last_active_at": session.last_active_at,
-                    "ttl_seconds": session.ttl_seconds,
-                    "context": session.context,
-                    "queries": queries_json,
-                    "seen_count": seen.len()
-                })),
-                is_error: None,
-            })
-        }
-        "set" => {
-            let key = args
-                .get("key")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("Missing key for 'set' action"))?;
-            let value = args
-                .get("value")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("Missing value for 'set' action"))?;
-
-            db.set_session_context(session_id, key, value)?;
-
-            Ok(ToolResult {
-                content: vec![Content::Text {
-                    text: format!("Set {}={} on session {}", key, value, session_id),
-                }],
-                structured_content: Some(serde_json::json!({
-                    "session_id": session_id,
-                    "key": key,
-                    "value": value
-                })),
-                is_error: None,
-            })
-        }
-        _ => Err(anyhow::anyhow!(
-            "Invalid action: {}. Use 'get' or 'set'",
-            action
-        )),
-    }
+    Ok(ToolResult {
+        content: vec![Content::Text {
+            text: format!("Set {}={} on session {}", key, value, session_id),
+        }],
+        structured_content: Some(serde_json::json!({
+            "session_id": session_id,
+            "key": key,
+            "value": value
+        })),
+        is_error: None,
+    })
 }
 
 pub async fn handle_session_end(db: &Database, args: Value) -> Result<ToolResult> {
@@ -2004,6 +1896,7 @@ pub async fn handle_batch_search(db: &Database, args: Value) -> Result<ToolResul
     let session_id = parse_session_id(&args);
 
     let mut all_results: Vec<Value> = Vec::new();
+    let mut seen_docids: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     for query_obj in queries {
         let query = query_obj
@@ -2025,7 +1918,6 @@ pub async fn handle_batch_search(db: &Database, args: Value) -> Result<ToolResul
             min_score: 0.0,
             collection,
             provider: None,
-            full_content: detail.is_full_content(),
             detail,
             session_id: session_id.clone(),
             metadata_filters: Vec::new(),
@@ -2035,21 +1927,8 @@ pub async fn handle_batch_search(db: &Database, args: Value) -> Result<ToolResul
         let mut results = db.search_fts(query, &options)?;
         apply_session_and_project(db, &mut results, detail, session_id.as_deref(), query);
 
-        let results_json: Vec<Value> = results
-            .iter()
-            .map(|r| {
-                let mut rj = serde_json::json!({
-                    "docid": format!("#{}", r.docid),
-                    "file": r.display_path,
-                    "title": r.title,
-                    "score": (r.score * 100.0).round() / 100.0
-                });
-                if let Some(s) = &r.llm_summary {
-                    rj["summary"] = Value::String(s.clone());
-                }
-                rj
-            })
-            .collect();
+        results.retain(|r| seen_docids.insert(r.docid.clone()));
+        let results_json: Vec<Value> = results.iter().map(result_to_json).collect();
 
         all_results.push(serde_json::json!({
             "query": query,
@@ -2093,14 +1972,14 @@ pub async fn handle_explore(db: &Database, args: Value) -> Result<ToolResult> {
             .and_then(|v| v.as_str())
             .map(String::from),
         provider: None,
-        full_content: detail.is_full_content(),
+
         detail,
         session_id: session_id.clone(),
         metadata_filters: Vec::new(),
         ..Default::default()
     };
 
-    let mut results = db.search_fts(query, &options)?;
+    let mut results = agentroot_core::unified_search(db, query, &options).await?;
     apply_session_and_project(db, &mut results, detail, session_id.as_deref(), query);
 
     let suggestions = agentroot_core::search::suggestions::compute_suggestions(
@@ -2110,24 +1989,7 @@ pub async fn handle_explore(db: &Database, args: Value) -> Result<ToolResult> {
         session_id.as_deref(),
     )?;
 
-    let results_json: Vec<Value> = results
-        .iter()
-        .map(|r| {
-            let mut rj = serde_json::json!({
-                "docid": format!("#{}", r.docid),
-                "file": r.display_path,
-                "title": r.title,
-                "score": (r.score * 100.0).round() / 100.0
-            });
-            if let Some(s) = &r.llm_summary {
-                rj["summary"] = Value::String(s.clone());
-            }
-            if let Some(cat) = &r.llm_category {
-                rj["category"] = Value::String(cat.clone());
-            }
-            rj
-        })
-        .collect();
+    let results_json: Vec<Value> = results.iter().map(result_to_json).collect();
 
     let mut summary_parts = vec![format!("Found {} results for \"{}\"", results.len(), query)];
     if !suggestions.related_directories.is_empty() {

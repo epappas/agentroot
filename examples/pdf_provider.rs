@@ -145,7 +145,6 @@ async fn main() -> anyhow::Result<()> {
             min_score: 0.0,
             collection: Some("pdfs".to_string()),
             provider: Some("pdf".to_string()),
-            full_content: false,
         metadata_filters: Vec::new(),
             ..Default::default()
         };

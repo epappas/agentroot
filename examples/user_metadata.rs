@@ -192,7 +192,7 @@ fn main() -> agentroot_core::Result<()> {
         limit: 3,
         min_score: 0.0,
         collection: Some("articles".into()),
-        full_content: false,
+
         provider: None,
         metadata_filters: vec![],
         ..Default::default()

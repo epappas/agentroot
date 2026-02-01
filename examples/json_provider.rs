@@ -309,8 +309,8 @@ async fn main() -> agentroot_core::Result<()> {
         min_score: 0.0,
         collection: Some("api-logs".to_string()),
         provider: None,
-        full_content: true,
         metadata_filters: Vec::new(),
+        detail: agentroot_core::DetailLevel::L2,
         ..Default::default()
     };
     let results = db.search_fts("POST", &options)?;
@@ -327,8 +327,8 @@ async fn main() -> agentroot_core::Result<()> {
         min_score: 0.0,
         collection: Some("config".to_string()),
         provider: None,
-        full_content: true,
         metadata_filters: Vec::new(),
+        detail: agentroot_core::DetailLevel::L2,
         ..Default::default()
     };
     let results = db.search_fts("database", &options)?;
@@ -345,8 +345,8 @@ async fn main() -> agentroot_core::Result<()> {
         min_score: 0.0,
         collection: Some("profiles".to_string()),
         provider: None,
-        full_content: true,
         metadata_filters: Vec::new(),
+        detail: agentroot_core::DetailLevel::L2,
         ..Default::default()
     };
     let results = db.search_fts("Alice", &options)?;

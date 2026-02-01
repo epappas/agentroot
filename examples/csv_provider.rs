@@ -187,8 +187,8 @@ async fn main() -> agentroot_core::Result<()> {
         min_score: 0.0,
         collection: Some("customers".to_string()),
         provider: None,
-        full_content: true,
         metadata_filters: Vec::new(),
+        detail: agentroot_core::DetailLevel::L2,
         ..Default::default()
     };
     let results = db.search_fts("Alice", &options)?;
@@ -210,8 +210,8 @@ async fn main() -> agentroot_core::Result<()> {
         min_score: 0.0,
         collection: Some("sales".to_string()),
         provider: None,
-        full_content: true,
         metadata_filters: Vec::new(),
+        detail: agentroot_core::DetailLevel::L2,
         ..Default::default()
     };
     let results = db.search_fts("Laptop", &options)?;

@@ -123,7 +123,7 @@ impl Database {
                         hash: row.get(3)?,
                         collection_name: row.get(4)?,
                         modified_at: row.get(5)?,
-                        body: if options.full_content {
+                        body: if options.detail.is_full_content() {
                             Some(body)
                         } else {
                             None
@@ -313,7 +313,7 @@ impl Database {
                         hash: doc_hash.clone(),
                         collection_name: row.get(4)?,
                         modified_at: row.get(5)?,
-                        body: if options.full_content {
+                        body: if options.detail.is_full_content() {
                             Some(body)
                         } else {
                             None

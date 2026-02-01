@@ -3,7 +3,7 @@
 use crate::app::{OutputFormat, SearchArgs};
 use crate::output::{format_search_results, FormatOptions};
 use agentroot_core::{
-    smart_search, unified_search, Database, Embedder, HttpEmbedder, HttpQueryExpander,
+    smart_search, unified_search, Database, DetailLevel, Embedder, HttpEmbedder, HttpQueryExpander,
     HttpReranker, QueryExpander, Reranker, SearchOptions,
 };
 use anyhow::Result;
@@ -138,8 +138,12 @@ fn build_options(args: &SearchArgs) -> SearchOptions {
         min_score: args.min_score,
         collection: args.collection.clone(),
         provider: None,
-        full_content: args.full,
         metadata_filters: Vec::new(),
+        detail: if args.full {
+            DetailLevel::L2
+        } else {
+            DetailLevel::L1
+        },
         ..Default::default()
     }
 }

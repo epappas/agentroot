@@ -203,7 +203,7 @@ async fn main() -> anyhow::Result<()> {
         min_score: 0.0,
         collection: Some("articles".to_string()),
         provider: Some("sql".to_string()),
-        full_content: false,
+
         metadata_filters: Vec::new(),
         ..Default::default()
     };

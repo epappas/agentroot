@@ -75,7 +75,7 @@ pub fn process_input(input: &str) -> Result<String, AppError> {
         min_score: 0.0,
         collection: None,
         provider: None,
-        full_content: false,
+
         metadata_filters: Vec::new(),
         ..Default::default()
     };

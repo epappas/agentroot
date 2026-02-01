@@ -106,8 +106,8 @@ async fn test_chunk_search_quality() {
             min_score: 0.0,
             collection: Some("agentroot-src".to_string()),
             provider: None,
-            full_content: true,
             metadata_filters: Vec::new(),
+            detail: agentroot_core::DetailLevel::L2,
             ..Default::default()
         };
 
@@ -152,7 +152,6 @@ async fn test_chunk_vs_document_search() {
         min_score: 0.0,
         collection: Some("agentroot-src".to_string()),
         provider: None,
-        full_content: false,
         metadata_filters: Vec::new(),
         ..Default::default()
     };
@@ -219,8 +218,8 @@ async fn test_chunk_metadata_quality() {
         min_score: 0.0,
         collection: Some("agentroot-src".to_string()),
         provider: None,
-        full_content: true,
         metadata_filters: Vec::new(),
+        detail: agentroot_core::DetailLevel::L2,
         ..Default::default()
     };
 
@@ -291,7 +290,6 @@ async fn test_label_filtering() {
         min_score: 0.0,
         collection: Some("agentroot-src".to_string()),
         provider: None,
-        full_content: false,
         metadata_filters: Vec::new(),
         ..Default::default()
     };
@@ -412,7 +410,6 @@ async fn test_performance_metrics() {
         min_score: 0.0,
         collection: Some("agentroot-src".to_string()),
         provider: None,
-        full_content: false,
         metadata_filters: Vec::new(),
         ..Default::default()
     };

@@ -83,3 +83,116 @@ fn count_unseen_in_directories(
 
     Ok(count)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::search::SearchSource;
+
+    fn make_result(filepath: &str, keywords: Option<Vec<&str>>) -> SearchResult {
+        SearchResult {
+            filepath: filepath.to_string(),
+            display_path: filepath.to_string(),
+            title: "".to_string(),
+            hash: "".to_string(),
+            collection_name: "test".to_string(),
+            modified_at: "".to_string(),
+            body: None,
+            body_length: 0,
+            docid: "".to_string(),
+            context: None,
+            score: 0.5,
+            source: SearchSource::Bm25,
+            chunk_pos: None,
+            llm_summary: None,
+            llm_title: None,
+            llm_keywords: keywords.map(|v| v.into_iter().map(String::from).collect()),
+            llm_category: None,
+            llm_difficulty: None,
+            user_metadata: None,
+            is_chunk: false,
+            chunk_hash: None,
+            chunk_type: None,
+            chunk_breadcrumb: None,
+            chunk_start_line: None,
+            chunk_end_line: None,
+            chunk_language: None,
+            chunk_summary: None,
+            chunk_purpose: None,
+            chunk_concepts: vec![],
+            chunk_labels: std::collections::HashMap::new(),
+        }
+    }
+
+    #[test]
+    fn test_compute_suggestions_directories() {
+        let db = Database::open_in_memory().unwrap();
+        db.initialize().unwrap();
+
+        let results = vec![
+            make_result("agentroot://test/src/auth/login.rs", None),
+            make_result("agentroot://test/src/auth/jwt.rs", None),
+            make_result("agentroot://test/src/db/query.rs", None),
+        ];
+
+        let suggestions = compute_suggestions(&db, &results, "auth", None).unwrap();
+
+        // Directories are deduplicated
+        let dirs: HashSet<&str> = suggestions
+            .related_directories
+            .iter()
+            .map(|s| s.as_str())
+            .collect();
+        assert!(dirs.contains("agentroot://test/src/auth"));
+        assert!(dirs.contains("agentroot://test/src/db"));
+        assert_eq!(dirs.len(), 2);
+    }
+
+    #[test]
+    fn test_compute_suggestions_concepts() {
+        let db = Database::open_in_memory().unwrap();
+        db.initialize().unwrap();
+
+        let results = vec![
+            make_result("agentroot://test/a.rs", Some(vec!["rust", "search"])),
+            make_result("agentroot://test/b.rs", Some(vec!["search", "index"])),
+        ];
+
+        let suggestions = compute_suggestions(&db, &results, "find", None).unwrap();
+
+        let concepts: HashSet<&str> = suggestions
+            .related_concepts
+            .iter()
+            .map(|s| s.as_str())
+            .collect();
+        assert!(concepts.contains("rust"));
+        assert!(concepts.contains("search"));
+        assert!(concepts.contains("index"));
+    }
+
+    #[test]
+    fn test_generate_refinements() {
+        let concepts = vec!["auth".to_string(), "jwt".to_string(), "session".to_string()];
+        let refinements = generate_refinements("login flow", &concepts);
+
+        assert_eq!(refinements.len(), 3);
+        assert!(refinements.contains(&"login flow auth".to_string()));
+        assert!(refinements.contains(&"login flow jwt".to_string()));
+    }
+
+    #[test]
+    fn test_generate_refinements_excludes_query_terms() {
+        let concepts = vec!["auth".to_string(), "login".to_string()];
+        let refinements = generate_refinements("login flow", &concepts);
+
+        // "login" is already in query, filtered out
+        assert_eq!(refinements.len(), 1);
+        assert_eq!(refinements[0], "login flow auth");
+    }
+
+    #[test]
+    fn test_generate_refinements_empty() {
+        let refinements = generate_refinements("test", &[]);
+        assert!(refinements.is_empty());
+    }
+}

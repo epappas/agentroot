@@ -80,8 +80,8 @@ impl App {
             min_score: 0.0,
             collection: self.collection_filter.clone(),
             provider: self.provider_filter.clone(),
-            full_content: true,
             metadata_filters: Vec::new(),
+            detail: agentroot_core::DetailLevel::L2,
             ..Default::default()
         };
 
