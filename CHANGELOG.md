@@ -9,6 +9,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### Long-Term Memory System
+- **Memory Storage** - Persistent memories with FTS5 search and content deduplication
+  - Categories: `preference`, `entity`, `pattern`, `fact`
+  - blake3 content hashing for automatic deduplication (ON CONFLICT upsert)
+  - Access tracking (count, last_accessed_at) for memory reinforcement
+  - 6 unit tests covering CRUD, dedup, FTS search, stats aggregation
+- **LLM Memory Extraction** - Extract memories from search sessions via LLM analysis
+  - Structured prompt for JSON array extraction with category/content/confidence
+  - Graceful degradation on LLM failure (returns empty vec)
+  - 4 unit tests for JSON parsing and validation
+- **5 MCP Memory Tools** - `memory_store`, `memory_search`, `memory_list`, `memory_extract`, `memory_delete`
+
+#### ANN Index (HNSW)
+- **Approximate Nearest Neighbor** - HNSW index via `instant-distance` crate
+  - Automatic build from database embeddings (threshold: 1000+ embeddings)
+  - Cosine distance metric matching existing vector search
+  - Falls back to brute-force for small collections (zero behavior change)
+  - Thread-safe via RwLock for concurrent read access
+  - 3 unit tests (below threshold, build+search, empty index)
+
+#### Embedding Model Versioning
+- **Model column on embeddings table** - Track which model generated each embedding
+  - `get_embedding_stats()` returns per-model embedding counts
+  - Filter embeddings by model name
+  - Schema migration v11 with backward-compatible ALTER TABLE
+
+#### Search Observability
+- **Atomic search statistics** - Lock-free counters for query metrics
+  - Track BM25, vector, hybrid query counts separately
+  - Latency accumulation for average calculation
+  - Cache hit/miss rates and ANN vs brute-force search counts
+  - `SearchStatsSnapshot` for serializable reads
+  - 2 unit tests (record + snapshot, concurrent access)
+
+#### Agentic Extensions
+- **Session Management** - Multi-turn search sessions with UUID-based tracking
+  - Session context (key-value store), query history, seen-document demotion
+  - Configurable TTL (default: 1 hour)
+  - 4 MCP tools: `session_start`, `session_get`, `session_set`, `session_end`
+- **Directory Browsing** - Navigate indexed collection structure
+  - Directory index with document counts, concepts, and metadata
+  - 2 MCP tools: `browse_directory`, `search_directories`
+- **Batch & Explore Tools** - Multi-query and exploration support
+  - `batch_search`: Execute multiple queries in a single call
+  - `explore`: Search with related directories, concepts, and follow-up suggestions
+- **Tiered Detail Levels** - L0 (minimal), L1 (standard), L2 (full content) response detail
+
+#### Schema Migration v11
+- `memories` table with FTS5 full-text index and triggers
+- `model` column on `embeddings` table
+- Guards for on-demand table creation (embeddings may not exist at migration time)
+
+### Changed
+- MCP server now exposes 29 tools (up from 16)
+- `SearchContext` struct combines `AnnIndex` + `SearchStats` for shared search state
+- `search_vec_with_ann()` accepts optional ANN index for accelerated vector search
+- Updated integration guide and MCP server docs to document all 29 tools
+- Moved development analysis notes from root to `docs/internal/`
+
 #### Intelligent Glossary System
 - **Semantic Concept Discovery** - Automatically extract and index key concepts from documents
   - LLM-powered concept extraction during metadata generation (5-10 concepts per document)

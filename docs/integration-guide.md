@@ -281,7 +281,7 @@ agentroot metadata remove "#docid" difficulty
 
 ## 3. MCP Server Integration
 
-The MCP server exposes 16 tools over JSON-RPC (stdin/stdout) for AI assistant integration.
+The MCP server exposes 29 tools over JSON-RPC (stdin/stdout) for AI assistant integration.
 
 ### Starting the Server
 
@@ -363,6 +363,19 @@ If your index lives at a non-default location:
 | `search_chunks` | Search code chunks (functions, classes, etc.) |
 | `get_chunk` | Retrieve a chunk by hash with context |
 | `navigate_chunks` | Navigate to previous/next chunk in a document |
+| `session_start` | Start a multi-turn search session |
+| `session_get` | Get session context and query history |
+| `session_set` | Set key-value context on a session |
+| `session_end` | End a session and clean up |
+| `browse_directory` | Browse directory structure of collections |
+| `search_directories` | Search directories by name or concepts |
+| `batch_search` | Execute multiple queries in one call |
+| `explore` | Search with exploration suggestions |
+| `memory_store` | Store a long-term memory |
+| `memory_search` | Search memories via FTS |
+| `memory_list` | List memories with pagination |
+| `memory_extract` | LLM-extract memories from a session |
+| `memory_delete` | Delete a memory by ID |
 
 ### MCP Tool Examples
 
@@ -431,6 +444,51 @@ If your index lives at a non-default location:
     "chunk_hash": "abc123...",
     "direction": "next"
   }
+}
+```
+
+**Start a session:**
+
+```json
+{
+  "name": "session_start",
+  "arguments": { "ttl_seconds": 3600 }
+}
+```
+
+**Batch search:**
+
+```json
+{
+  "name": "batch_search",
+  "arguments": {
+    "queries": [
+      { "query": "error handling", "limit": 5 },
+      { "query": "authentication", "limit": 5 }
+    ]
+  }
+}
+```
+
+**Store a memory:**
+
+```json
+{
+  "name": "memory_store",
+  "arguments": {
+    "content": "Project uses SQLite with FTS5",
+    "category": "fact",
+    "confidence": 0.95
+  }
+}
+```
+
+**Search memories:**
+
+```json
+{
+  "name": "memory_search",
+  "arguments": { "query": "database", "limit": 10 }
 }
 ```
 

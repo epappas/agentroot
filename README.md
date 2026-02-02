@@ -127,7 +127,12 @@ Hybrid combines both for best results
 - **Smart Cache Invalidation**: Content-addressable chunk hashing achieves 80-90% cache hit rates on re-indexing
 - **Multi-Language Support**: Rust, Python, JavaScript/TypeScript, Go (with fallback for other languages)
 - **Local-First or Cloud**: Run entirely offline with local models, or connect to [Basilica](https://basilica.ai) for GPU-accelerated inference
-- **MCP Server**: Model Context Protocol support for AI assistant integration
+- **MCP Server**: Model Context Protocol support for AI assistant integration (29 tools)
+- **Long-Term Memory**: Persistent memory with FTS search, automatic deduplication, and LLM-powered extraction from sessions
+- **Session Management**: Multi-turn search sessions with context tracking and seen-document demotion
+- **Directory Browsing**: Navigate indexed collection structure, search directories by concepts
+- **ANN Index**: HNSW approximate nearest neighbor search via `instant-distance` for large embedding sets
+- **Observability**: Atomic search statistics (query counts, latencies, cache hit rates)
 
 ### Powered by Basilica
 
@@ -331,7 +336,7 @@ All examples are production-ready, compile cleanly, and demonstrate real functio
 | `multi-get <pattern>` | Get multiple documents | <10ms | - |
 | `ls [collection]` | List files in a collection | <1ms | - |
 | `status` | Show index status | <1ms | - |
-| `mcp` | Start MCP server for AI integration | - | - |
+| `mcp` | Start MCP server (29 tools) for AI integration | - | - |
 
 *First query ~1.5s, cached queries ~150ms (10x faster)
 
@@ -401,6 +406,8 @@ Start MCP server for Claude Desktop or Continue.dev:
 agentroot mcp
 ```
 
+The MCP server provides 29 tools covering search, document retrieval, collection management, metadata, chunk navigation, session management, directory browsing, batch operations, and long-term memory.
+
 See [MCP Server Documentation](docs/mcp-server.md) for integration details.
 
 ## Architecture
@@ -408,14 +415,15 @@ See [MCP Server Documentation](docs/mcp-server.md) for integration details.
 ```
 agentroot/
 ├── agentroot-core/     # Core library
-│   ├── db/             # SQLite database layer
+│   ├── db/             # SQLite database layer (FTS5, vectors, memories, sessions)
 │   ├── index/          # Indexing and chunking
 │   │   └── ast_chunker/  # AST-aware semantic chunking
 │   ├── providers/      # Pluggable content sources
-│   ├── search/         # Search algorithms
-│   └── llm/            # Embedding model integration
+│   ├── search/         # Search algorithms (BM25, vector, hybrid, ANN)
+│   ├── llm/            # LLM integration (embeddings, memory extraction)
+│   └── graph/          # PageRank and link extraction
 ├── agentroot-cli/      # Command-line interface
-├── agentroot-mcp/      # MCP server for AI assistants
+├── agentroot-mcp/      # MCP server (29 tools) for AI assistants
 └── agentroot-tui/      # Terminal UI (experimental)
 ```
 
@@ -428,6 +436,12 @@ agentroot/
 **Hybrid Search**: Reciprocal Rank Fusion combines BM25 (keyword) and vector (semantic) results for optimal quality.
 
 **SQLite Storage**: FTS5 for full-text search, BLOB storage for embeddings, content-addressable deduplication.
+
+**ANN Index**: HNSW approximate nearest neighbor index (via `instant-distance`) accelerates vector search for large collections (1000+ embeddings).
+
+**Memory System**: Persistent long-term memory with FTS search, content deduplication, and LLM-powered extraction from search sessions.
+
+**Session Management**: Multi-turn search sessions track context, query history, and seen documents for progressive exploration.
 
 See [Architecture Documentation](docs/architecture.md) for detailed design.
 

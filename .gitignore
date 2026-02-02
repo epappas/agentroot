@@ -17,3 +17,14 @@ Thumbs.db
 
 # Testing
 *.profraw
+
+# Environment files (may contain secrets)
+agentroot-env.sh
+.env
+
+# Development artifacts and analysis notes
+AB_TEST_RESULTS.md
+CHUNK_SEARCH_STATUS.md
+CHUNK_SEARCH_USAGE.md
+INTELLIGENT_SEARCH_PROGRESS.md
+test_search_comparison.sh

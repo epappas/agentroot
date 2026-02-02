@@ -21,7 +21,7 @@ This starts a server that:
 
 ## Available Tools
 
-The MCP server exposes 16 tools for AI assistants:
+The MCP server exposes 29 tools for AI assistants:
 
 ### Search Tools
 
@@ -237,6 +237,224 @@ Navigate to previous or next chunk within the same document.
 - `chunk_hash` (string, required) - Starting chunk hash
 - `direction` (string, required) - `prev` or `next`
 
+### Session Tools
+
+#### 17. session_start
+
+Start a new search session for multi-turn context tracking. Returns a session_id to pass to subsequent search calls. Sessions enable seen-document demotion and cross-query context.
+
+**Parameters**:
+- `ttl_seconds` (integer, optional) - Session time-to-live in seconds (default: 3600)
+
+**Returns**: Session ID and expiry timestamp.
+
+```json
+{
+  "name": "session_start",
+  "arguments": { "ttl_seconds": 7200 }
+}
+```
+
+#### 18. session_get
+
+Get session context, query history, and seen document count.
+
+**Parameters**:
+- `session_id` (string, required) - Session ID from session_start
+
+**Returns**: Session context key-value pairs, query history, and seen document stats.
+
+#### 19. session_set
+
+Set a key-value pair on the session context.
+
+**Parameters**:
+- `session_id` (string, required) - Session ID from session_start
+- `key` (string, required) - Context key to set
+- `value` (string, required) - Context value to set
+
+```json
+{
+  "name": "session_set",
+  "arguments": {
+    "session_id": "abc-123",
+    "key": "project",
+    "value": "agentroot"
+  }
+}
+```
+
+#### 20. session_end
+
+End a search session and clean up resources.
+
+**Parameters**:
+- `session_id` (string, required) - Session ID to end
+
+### Directory Browsing Tools
+
+#### 21. browse_directory
+
+Browse the directory structure of indexed collections. Shows files, subdirectories, and metadata for a given path.
+
+**Parameters**:
+- `collection` (string, required) - Collection name to browse
+- `path` (string, optional) - Directory path within the collection (empty for root)
+- `max_depth` (integer, optional) - Maximum depth of subdirectories to return (default: 2)
+
+**Returns**: Directory listing with files, subdirectories, document counts, and concepts.
+
+```json
+{
+  "name": "browse_directory",
+  "arguments": {
+    "collection": "myproject",
+    "path": "src/search",
+    "max_depth": 1
+  }
+}
+```
+
+#### 22. search_directories
+
+Search directories by name, concepts, or content using full-text search.
+
+**Parameters**:
+- `query` (string, required) - Search query for directories
+- `collection` (string, optional) - Filter by collection name
+- `limit` (integer, optional) - Maximum results (default: 10)
+
+**Returns**: Matching directories with metadata and document counts.
+
+### Batch & Explore Tools
+
+#### 23. batch_search
+
+Execute multiple search queries in a single call. Each query runs independently with its own parameters.
+
+**Parameters**:
+- `queries` (array, required) - Array of search query objects, each with:
+  - `query` (string, required) - Search query
+  - `limit` (integer, optional) - Maximum results for this query (default: 5)
+  - `collection` (string, optional) - Filter by collection
+- `detail` (string, optional) - Detail level: `L0` (minimal), `L1` (standard), `L2` (full content)
+- `session_id` (string, optional) - Session ID for context tracking
+
+**Returns**: Array of result sets, one per query.
+
+```json
+{
+  "name": "batch_search",
+  "arguments": {
+    "queries": [
+      { "query": "error handling", "limit": 5 },
+      { "query": "authentication", "limit": 5 }
+    ],
+    "detail": "L1"
+  }
+}
+```
+
+#### 24. explore
+
+Explore the knowledge base starting from a search query. Returns results plus suggestions for related directories, concepts, and follow-up queries.
+
+**Parameters**:
+- `query` (string, required) - Search query to explore from
+- `limit` (integer, optional) - Maximum results (default: 10)
+- `collection` (string, optional) - Filter by collection
+- `detail` (string, optional) - Detail level: `L0`, `L1`, `L2`
+- `session_id` (string, optional) - Session ID for context tracking
+
+**Returns**: Search results plus exploration suggestions (related directories, concepts, follow-up queries).
+
+```json
+{
+  "name": "explore",
+  "arguments": {
+    "query": "how does authentication work",
+    "limit": 10
+  }
+}
+```
+
+### Memory Tools
+
+#### 25. memory_store
+
+Store a long-term memory. Duplicate content is automatically deduplicated (confidence is updated to the higher value).
+
+**Parameters**:
+- `content` (string, required) - Memory content to store
+- `category` (string, required) - One of: `preference`, `entity`, `pattern`, `fact`
+- `confidence` (number, optional) - Confidence score 0-1 (default: 1.0)
+- `sessionId` (string, optional) - Session ID to associate with this memory
+- `sourceQuery` (string, optional) - Query that led to this memory
+
+**Returns**: Memory ID.
+
+```json
+{
+  "name": "memory_store",
+  "arguments": {
+    "content": "User prefers Rust for backend services",
+    "category": "preference",
+    "confidence": 0.9
+  }
+}
+```
+
+#### 26. memory_search
+
+Search long-term memories using full-text search.
+
+**Parameters**:
+- `query` (string, required) - Search query for memories
+- `category` (string, optional) - Filter by category (`preference`, `entity`, `pattern`, `fact`)
+- `limit` (integer, optional) - Maximum results (default: 20)
+
+**Returns**: Matching memories with content, category, confidence, and access stats.
+
+```json
+{
+  "name": "memory_search",
+  "arguments": {
+    "query": "rust preferences",
+    "category": "preference",
+    "limit": 10
+  }
+}
+```
+
+#### 27. memory_list
+
+List stored memories with optional category filter and pagination.
+
+**Parameters**:
+- `category` (string, optional) - Filter by category
+- `limit` (integer, optional) - Maximum results (default: 20)
+- `offset` (integer, optional) - Offset for pagination (default: 0)
+
+**Returns**: List of memories ordered by most recently updated.
+
+#### 28. memory_extract
+
+Extract memories from a session using LLM analysis. Requires a configured LLM service.
+
+**Parameters**:
+- `sessionId` (string, required) - Session ID to extract memories from
+
+**Returns**: Array of extracted memories with category, content, and confidence.
+
+#### 29. memory_delete
+
+Delete a memory by ID.
+
+**Parameters**:
+- `id` (string, required) - Memory ID to delete
+
+**Returns**: Confirmation of deletion.
+
 ## Integration with Claude Desktop
 
 To integrate Agentroot with Claude Desktop, add this configuration:
@@ -388,7 +606,7 @@ AI assistants discover available tools via `tools/list`:
 }
 ```
 
-Response includes all 16 tools with their schemas.
+Response includes all 29 tools with their schemas.
 
 ### Tool Invocation
 
@@ -495,7 +713,7 @@ Current limitations of the MCP server:
 
 1. **Vector/hybrid search requires embeddings** - `vsearch` and `query` need `agentroot embed` to have been run first; they fall back to BM25 otherwise
 2. **No subscription support** - Resources don't support real-time updates
-3. **No batch operations** - Tools must be called individually
+3. **Memory extraction requires LLM** - `memory_extract` needs a configured LLM service (vLLM or OpenAI-compatible)
 
 ## Troubleshooting
 
