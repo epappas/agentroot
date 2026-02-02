@@ -9,7 +9,7 @@ pub struct Database {
     pub(crate) conn: Connection,
 }
 
-const SCHEMA_VERSION: i32 = 10;
+const SCHEMA_VERSION: i32 = 11;
 
 const CREATE_TABLES: &str = r#"
 -- Content storage (content-addressable by SHA-256 hash)
@@ -276,6 +276,10 @@ impl Database {
 
         if current < 10 {
             self.migrate_to_v10()?;
+        }
+
+        if current < 11 {
+            self.migrate_to_v11()?;
         }
 
         Ok(())
@@ -1087,6 +1091,96 @@ impl Database {
 
         Ok(())
     }
+
+    fn migrate_to_v11(&self) -> Result<()> {
+        // Memory evolution table
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS memories (
+                id TEXT PRIMARY KEY,
+                session_id TEXT,
+                category TEXT NOT NULL,
+                content TEXT NOT NULL,
+                content_hash TEXT NOT NULL,
+                confidence REAL NOT NULL DEFAULT 1.0,
+                source_query TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                access_count INTEGER NOT NULL DEFAULT 0,
+                last_accessed_at TEXT,
+                UNIQUE(content_hash)
+            )",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_memories_category ON memories(category)",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_memories_session ON memories(session_id)",
+            [],
+        )?;
+
+        // Memory FTS index
+        self.conn.execute(
+            "CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
+                content, category, tokenize='porter unicode61'
+            )",
+            [],
+        )?;
+
+        // Memory FTS triggers
+        self.conn.execute_batch(
+            "CREATE TRIGGER IF NOT EXISTS memories_ai AFTER INSERT ON memories BEGIN
+                INSERT INTO memories_fts(rowid, content, category)
+                VALUES (NEW.rowid, NEW.content, NEW.category);
+            END;
+            CREATE TRIGGER IF NOT EXISTS memories_ad AFTER DELETE ON memories BEGIN
+                DELETE FROM memories_fts WHERE rowid = OLD.rowid;
+            END;
+            CREATE TRIGGER IF NOT EXISTS memories_au AFTER UPDATE ON memories BEGIN
+                DELETE FROM memories_fts WHERE rowid = OLD.rowid;
+                INSERT INTO memories_fts(rowid, content, category)
+                VALUES (NEW.rowid, NEW.content, NEW.category);
+            END;",
+        )?;
+
+        // Add model column to embeddings table for versioning
+        // embeddings table is created on-demand by ensure_vec_table(), may not exist yet
+        let table_exists: bool = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='embeddings'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+
+        if table_exists {
+            let has_model: bool = self
+                .conn
+                .query_row(
+                    "SELECT COUNT(*) > 0 FROM pragma_table_info('embeddings') WHERE name = 'model'",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap_or(false);
+
+            if !has_model {
+                self.conn.execute(
+                    "ALTER TABLE embeddings ADD COLUMN model TEXT NOT NULL DEFAULT ''",
+                    [],
+                )?;
+            }
+        }
+
+        // Update schema version
+        self.conn.execute(
+            "INSERT OR REPLACE INTO schema_version (version) VALUES (?1)",
+            params![11],
+        )?;
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -1133,7 +1227,7 @@ mod tests {
 
         db.initialize().unwrap();
 
-        assert_eq!(db.schema_version().unwrap(), Some(10));
+        assert_eq!(db.schema_version().unwrap(), Some(11));
 
         let has_provider_type: bool = db.conn.query_row(
             "SELECT COUNT(*) > 0 FROM pragma_table_info('collections') WHERE name = 'provider_type'",
@@ -1210,7 +1304,7 @@ mod tests {
 
         db.initialize().unwrap();
 
-        assert_eq!(db.schema_version().unwrap(), Some(10));
+        assert_eq!(db.schema_version().unwrap(), Some(11));
 
         let metadata_columns = vec![
             "llm_summary",
@@ -1301,7 +1395,7 @@ mod tests {
 
         db.initialize().unwrap();
 
-        assert_eq!(db.schema_version().unwrap(), Some(10));
+        assert_eq!(db.schema_version().unwrap(), Some(11));
 
         let has_user_metadata: bool = db
             .conn

@@ -5,6 +5,7 @@
 //! - Vector similarity search via sqlite-vec
 //! - Hybrid search with RRF fusion
 
+pub mod ann_index;
 mod bm25;
 pub mod directory_boost;
 mod hybrid;
@@ -12,19 +13,43 @@ mod orchestrated;
 pub mod session_aware;
 mod smart;
 mod snippet;
+pub mod stats;
 pub mod suggestions;
 pub mod tiered;
 mod unified;
 mod vector;
 mod workflow_executor;
 
+pub use ann_index::AnnIndex;
 pub use hybrid::*;
 pub use orchestrated::orchestrated_search;
 pub use smart::smart_search;
 pub use snippet::*;
+pub use stats::{SearchStats, SearchStatsSnapshot};
 pub use tiered::DetailLevel;
 pub use unified::unified_search;
 pub use workflow_executor::execute_workflow;
+
+/// Shared context for search operations (ANN index + stats)
+pub struct SearchContext {
+    pub ann_index: Option<AnnIndex>,
+    pub stats: SearchStats,
+}
+
+impl SearchContext {
+    pub fn new() -> Self {
+        Self {
+            ann_index: None,
+            stats: SearchStats::new(),
+        }
+    }
+}
+
+impl Default for SearchContext {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 /// Search options
 #[derive(Debug, Clone)]

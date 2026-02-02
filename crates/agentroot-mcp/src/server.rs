@@ -126,6 +126,12 @@ impl<'a> McpServer<'a> {
             // Batch & explore tools
             tools::batch_search_tool_definition(),
             tools::explore_tool_definition(),
+            // Memory tools
+            tools::memory_store_tool_definition(),
+            tools::memory_search_tool_definition(),
+            tools::memory_list_tool_definition(),
+            tools::memory_extract_tool_definition(),
+            tools::memory_delete_tool_definition(),
         ];
 
         JsonRpcResponse::success(request.id.clone(), serde_json::json!({ "tools": tools }))
@@ -173,6 +179,12 @@ impl<'a> McpServer<'a> {
             // Batch & explore tools
             "batch_search" => tools::handle_batch_search(self.db, arguments).await,
             "explore" => tools::handle_explore(self.db, arguments).await,
+            // Memory tools
+            "memory_store" => tools::handle_memory_store(self.db, arguments).await,
+            "memory_search" => tools::handle_memory_search(self.db, arguments).await,
+            "memory_list" => tools::handle_memory_list(self.db, arguments).await,
+            "memory_extract" => tools::handle_memory_extract(self.db, arguments).await,
+            "memory_delete" => tools::handle_memory_delete(self.db, arguments).await,
             _ => Err(anyhow::anyhow!("Unknown tool: {}", name)),
         };
 

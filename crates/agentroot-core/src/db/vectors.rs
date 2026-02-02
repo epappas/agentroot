@@ -24,11 +24,11 @@ impl Database {
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS embeddings (
                 hash_seq TEXT PRIMARY KEY,
-                embedding BLOB NOT NULL
+                embedding BLOB NOT NULL,
+                model TEXT NOT NULL DEFAULT ''
             )",
             [],
         )?;
-        // Note: No index needed on hash_seq - SQLite automatically indexes PRIMARY KEY
         Ok(())
     }
 
@@ -53,8 +53,8 @@ impl Database {
                 params![hash, seq, pos, model, now],
             )?;
             self.conn.execute(
-                "INSERT OR REPLACE INTO embeddings (hash_seq, embedding) VALUES (?1, ?2)",
-                params![hash_seq, embedding_bytes],
+                "INSERT OR REPLACE INTO embeddings (hash_seq, embedding, model) VALUES (?1, ?2, ?3)",
+                params![hash_seq, embedding_bytes, model],
             )?;
             Ok(())
         })();
@@ -251,8 +251,8 @@ impl Database {
                 params![doc_hash, seq, pos, model, chunk_hash, now],
             )?;
             self.conn.execute(
-                "INSERT OR REPLACE INTO embeddings (hash_seq, embedding) VALUES (?1, ?2)",
-                params![hash_seq, embedding_bytes],
+                "INSERT OR REPLACE INTO embeddings (hash_seq, embedding, model) VALUES (?1, ?2, ?3)",
+                params![hash_seq, embedding_bytes, model],
             )?;
             self.conn.execute(
                 "INSERT OR REPLACE INTO chunk_embeddings (chunk_hash, model, embedding, created_at)
@@ -321,6 +321,36 @@ impl Database {
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
             Err(e) => Err(e.into()),
         }
+    }
+
+    /// Get embedding count per model
+    pub fn get_embedding_stats(&self) -> Result<Vec<(String, usize)>> {
+        let table_exists: bool = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='embeddings'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+
+        if !table_exists {
+            return Ok(vec![]);
+        }
+
+        let mut stmt = self
+            .conn
+            .prepare("SELECT model, COUNT(*) FROM embeddings GROUP BY model")?;
+        let results = stmt
+            .query_map([], |row| {
+                let model: String = row.get(0)?;
+                let count: usize = row.get(1)?;
+                Ok((model, count))
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        Ok(results)
     }
 
     /// Count cached chunk embeddings

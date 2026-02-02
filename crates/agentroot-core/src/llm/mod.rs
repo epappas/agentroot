@@ -17,6 +17,7 @@ mod http_metadata_generator;
 mod http_query_expander;
 mod http_query_parser;
 mod http_reranker;
+pub mod memory_extractor;
 mod metadata_generator;
 mod query_parser;
 mod strategy_analyzer;
@@ -32,6 +33,7 @@ pub use http_metadata_generator::HttpMetadataGenerator;
 pub use http_query_expander::HttpQueryExpander;
 pub use http_query_parser::HttpQueryParser;
 pub use http_reranker::HttpReranker;
+pub use memory_extractor::{ExtractedMemory, MemoryExtractor};
 pub use metadata_generator::{
     DocumentMetadata, ExtractedConcept, MetadataContext, MetadataGenerator,
 };

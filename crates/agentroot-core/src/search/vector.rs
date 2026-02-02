@@ -2,6 +2,7 @@
 //!
 //! Computes cosine similarity between query embedding and stored embeddings.
 
+use super::ann_index::AnnIndex;
 use super::{extract_snippet, SearchOptions, SearchResult, SearchSource};
 use crate::db::vectors::cosine_similarity;
 use crate::db::{docid_from_hash, Database};
@@ -17,30 +18,46 @@ impl Database {
         embedder: &dyn Embedder,
         options: &SearchOptions,
     ) -> Result<Vec<SearchResult>> {
+        self.search_vec_with_ann(query, embedder, options, None)
+            .await
+    }
+
+    /// Perform vector similarity search with optional ANN index
+    pub async fn search_vec_with_ann(
+        &self,
+        query: &str,
+        embedder: &dyn Embedder,
+        options: &SearchOptions,
+        ann_index: Option<&AnnIndex>,
+    ) -> Result<Vec<SearchResult>> {
         // Get query embedding
         let query_embedding = embedder.embed(&format_query_for_embedding(query)).await?;
 
-        // Get all stored embeddings (optionally filtered by collection)
-        let stored_embeddings = if let Some(ref coll) = options.collection {
-            self.get_embeddings_for_collection(coll)?
+        // Use ANN index if available and built, otherwise brute-force
+        let fetch_limit = options.limit * 3;
+        let similarities = if let Some(ann) = ann_index.filter(|a| a.is_built()) {
+            ann.search(&query_embedding, fetch_limit)
         } else {
-            self.get_all_embeddings()?
+            // Brute-force: load all embeddings and compute cosine similarity
+            let stored_embeddings = if let Some(ref coll) = options.collection {
+                self.get_embeddings_for_collection(coll)?
+            } else {
+                self.get_all_embeddings()?
+            };
+
+            let mut sims: Vec<(String, f32)> = stored_embeddings
+                .iter()
+                .map(|(hash_seq, embedding)| {
+                    let sim = cosine_similarity(&query_embedding, embedding);
+                    (hash_seq.clone(), sim)
+                })
+                .collect();
+
+            sims.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+            sims
         };
 
-        // Compute similarities
-        let mut similarities: Vec<(String, f32)> = stored_embeddings
-            .iter()
-            .map(|(hash_seq, embedding)| {
-                let sim = cosine_similarity(&query_embedding, embedding);
-                (hash_seq.clone(), sim)
-            })
-            .collect();
-
-        // Sort by similarity (descending)
-        similarities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-
-        // Take top candidates (3x limit for deduplication)
-        let fetch_limit = options.limit * 3;
+        // Take top candidates
         let top_candidates: Vec<_> = similarities.into_iter().take(fetch_limit).collect();
 
         // Fetch document details for top candidates

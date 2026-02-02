@@ -1,6 +1,7 @@
 //! MCP tool definitions and handlers
 
 use crate::protocol::*;
+use agentroot_core::llm::MemoryExtractor;
 use agentroot_core::{Database, DetailLevel, SearchOptions};
 use anyhow::Result;
 use serde_json::Value;
@@ -2026,4 +2027,296 @@ pub async fn handle_explore(db: &Database, args: Value) -> Result<ToolResult> {
         })),
         is_error: None,
     })
+}
+
+// ============================================================================
+// Memory Tools
+// ============================================================================
+
+fn memory_to_json(m: &agentroot_core::MemoryInfo) -> Value {
+    serde_json::json!({
+        "id": m.id,
+        "category": m.category,
+        "content": m.content,
+        "confidence": m.confidence,
+        "session_id": m.session_id,
+        "source_query": m.source_query,
+        "created_at": m.created_at,
+        "updated_at": m.updated_at,
+        "access_count": m.access_count,
+        "last_accessed_at": m.last_accessed_at
+    })
+}
+
+pub fn memory_store_tool_definition() -> ToolDefinition {
+    ToolDefinition {
+        name: "memory_store".to_string(),
+        description: "Store a long-term memory".to_string(),
+        input_schema: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "content": {
+                    "type": "string",
+                    "description": "Memory content to store"
+                },
+                "category": {
+                    "type": "string",
+                    "enum": ["preference", "entity", "pattern", "fact"],
+                    "description": "Memory category"
+                },
+                "confidence": {
+                    "type": "number",
+                    "description": "Confidence score 0-1 (default: 1.0)",
+                    "default": 1.0
+                },
+                "sessionId": {
+                    "type": "string",
+                    "description": "Optional session ID to associate with this memory"
+                },
+                "sourceQuery": {
+                    "type": "string",
+                    "description": "Optional query that led to this memory"
+                }
+            },
+            "required": ["content", "category"]
+        }),
+    }
+}
+
+pub fn memory_search_tool_definition() -> ToolDefinition {
+    ToolDefinition {
+        name: "memory_search".to_string(),
+        description: "Search long-term memories".to_string(),
+        input_schema: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search query for memories"
+                },
+                "category": {
+                    "type": "string",
+                    "description": "Filter by category (preference, entity, pattern, fact)"
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum results (default: 20)",
+                    "default": 20
+                }
+            },
+            "required": ["query"]
+        }),
+    }
+}
+
+pub fn memory_list_tool_definition() -> ToolDefinition {
+    ToolDefinition {
+        name: "memory_list".to_string(),
+        description: "List stored memories".to_string(),
+        input_schema: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string",
+                    "description": "Filter by category (preference, entity, pattern, fact)"
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum results (default: 20)",
+                    "default": 20
+                },
+                "offset": {
+                    "type": "integer",
+                    "description": "Offset for pagination (default: 0)",
+                    "default": 0
+                }
+            }
+        }),
+    }
+}
+
+pub fn memory_extract_tool_definition() -> ToolDefinition {
+    ToolDefinition {
+        name: "memory_extract".to_string(),
+        description: "Extract memories from a session using LLM".to_string(),
+        input_schema: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "sessionId": {
+                    "type": "string",
+                    "description": "Session ID to extract memories from"
+                }
+            },
+            "required": ["sessionId"]
+        }),
+    }
+}
+
+pub fn memory_delete_tool_definition() -> ToolDefinition {
+    ToolDefinition {
+        name: "memory_delete".to_string(),
+        description: "Delete a memory by ID".to_string(),
+        input_schema: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "description": "Memory ID to delete"
+                }
+            },
+            "required": ["id"]
+        }),
+    }
+}
+
+pub async fn handle_memory_store(db: &Database, args: Value) -> Result<ToolResult> {
+    let content = args
+        .get("content")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing content"))?;
+
+    let category = args
+        .get("category")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing category"))?;
+
+    let confidence = args
+        .get("confidence")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(1.0);
+
+    let session_id = args.get("sessionId").and_then(|v| v.as_str());
+    let source_query = args.get("sourceQuery").and_then(|v| v.as_str());
+
+    let id = db.store_memory(session_id, category, content, confidence, source_query)?;
+
+    Ok(ToolResult {
+        content: vec![Content::Text {
+            text: format!("Stored memory: {}", id),
+        }],
+        structured_content: Some(serde_json::json!({
+            "id": id,
+            "category": category,
+            "stored": true
+        })),
+        is_error: None,
+    })
+}
+
+pub async fn handle_memory_search(db: &Database, args: Value) -> Result<ToolResult> {
+    let query = args
+        .get("query")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing query"))?;
+
+    let category = args.get("category").and_then(|v| v.as_str());
+    let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(20) as usize;
+
+    let memories = db.search_memories(query, category, limit)?;
+
+    let summary = format!("Found {} memories for \"{}\"", memories.len(), query);
+    let structured: Vec<Value> = memories.iter().map(memory_to_json).collect();
+
+    Ok(ToolResult {
+        content: vec![Content::Text { text: summary }],
+        structured_content: Some(serde_json::json!({ "memories": structured })),
+        is_error: None,
+    })
+}
+
+pub async fn handle_memory_list(db: &Database, args: Value) -> Result<ToolResult> {
+    let category = args.get("category").and_then(|v| v.as_str());
+    let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(20) as usize;
+    let offset = args.get("offset").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+
+    let memories = db.list_memories(category, limit, offset)?;
+
+    let summary = format!("Listed {} memories", memories.len());
+    let structured: Vec<Value> = memories.iter().map(memory_to_json).collect();
+
+    Ok(ToolResult {
+        content: vec![Content::Text { text: summary }],
+        structured_content: Some(serde_json::json!({ "memories": structured })),
+        is_error: None,
+    })
+}
+
+pub async fn handle_memory_extract(db: &Database, args: Value) -> Result<ToolResult> {
+    let session_id = args
+        .get("sessionId")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing sessionId"))?;
+
+    let queries = db.get_session_queries(session_id)?;
+    let context = db.get_session_context(session_id)?;
+
+    let extractor = MemoryExtractor::from_env()
+        .map_err(|e| anyhow::anyhow!("Failed to create memory extractor: {}", e))?;
+
+    let extracted = extractor.extract_memories(&queries, &context).await;
+
+    let mut stored_ids: Vec<Value> = Vec::new();
+    for mem in &extracted {
+        let id = db.store_memory(
+            Some(session_id),
+            &mem.category,
+            &mem.content,
+            mem.confidence,
+            None,
+        )?;
+        stored_ids.push(serde_json::json!({
+            "id": id,
+            "category": mem.category,
+            "content": mem.content,
+            "confidence": mem.confidence
+        }));
+    }
+
+    let summary = format!(
+        "Extracted and stored {} memories from session {}",
+        stored_ids.len(),
+        session_id
+    );
+
+    Ok(ToolResult {
+        content: vec![Content::Text { text: summary }],
+        structured_content: Some(serde_json::json!({
+            "count": stored_ids.len(),
+            "memories": stored_ids
+        })),
+        is_error: None,
+    })
+}
+
+pub async fn handle_memory_delete(db: &Database, args: Value) -> Result<ToolResult> {
+    let id = args
+        .get("id")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing id"))?;
+
+    let deleted = db.delete_memory(id)?;
+
+    if deleted {
+        Ok(ToolResult {
+            content: vec![Content::Text {
+                text: format!("Deleted memory: {}", id),
+            }],
+            structured_content: Some(serde_json::json!({
+                "id": id,
+                "deleted": true
+            })),
+            is_error: None,
+        })
+    } else {
+        Ok(ToolResult {
+            content: vec![Content::Text {
+                text: format!("Memory not found: {}", id),
+            }],
+            structured_content: Some(serde_json::json!({
+                "id": id,
+                "deleted": false
+            })),
+            is_error: Some(true),
+        })
+    }
 }
