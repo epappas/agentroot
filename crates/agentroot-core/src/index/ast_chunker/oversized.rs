@@ -128,7 +128,10 @@ fn find_safe_boundary(s: &str, index: usize, min_index: usize) -> usize {
 
     let min_index = min_index.min(i);
     let search_window = STRIDE_SIZE * BREAK_SEARCH_PERCENT / 100;
-    let search_start = i.saturating_sub(search_window).max(min_index);
+    let mut search_start = i.saturating_sub(search_window).max(min_index);
+    if search_start < i && !s.is_char_boundary(search_start) {
+        search_start = find_safe_boundary_forward(s, search_start);
+    }
     if search_start >= i {
         return i;
     }
@@ -259,5 +262,33 @@ mod tests {
 
         assert!(result.len() > 1);
         assert!(result.iter().all(|c| !c.text.is_empty()));
+    }
+
+    #[test]
+    fn test_find_safe_boundary_adjusts_non_boundary_search_window_start() {
+        // Regression: search window start could land in the middle of a multi-byte
+        // codepoint and panic on s[search_start..i] slicing.
+        let text = "━🧪".repeat(4000);
+        let min_index = 1;
+        let mut hit = None;
+        let window = STRIDE_SIZE * BREAK_SEARCH_PERCENT / 100;
+
+        for index in 1000..text.len() {
+            let mut i = index;
+            while i > 0 && !text.is_char_boundary(i) {
+                i -= 1;
+            }
+            let candidate = i.saturating_sub(window).max(min_index);
+            if candidate < i && !text.is_char_boundary(candidate) {
+                hit = Some((index, i, candidate));
+                break;
+            }
+        }
+
+        let (index, i, _candidate) = hit.expect("test must find a non-boundary window start");
+        let boundary = find_safe_boundary(&text, index, min_index);
+        assert!(text.is_char_boundary(boundary));
+        assert!(boundary <= i);
+        assert!(boundary >= min_index);
     }
 }
