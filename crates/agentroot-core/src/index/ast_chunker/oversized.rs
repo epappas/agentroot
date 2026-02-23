@@ -27,14 +27,17 @@ pub fn split_oversized_chunk(chunk: SemanticChunk, max_chars: usize) -> Vec<Sema
 
     while start < text.len() {
         let raw_end = (start + STRIDE_SIZE).min(text.len());
-        let end = find_safe_boundary(text, raw_end);
+        let end = find_safe_boundary(text, raw_end, start);
 
         // Guard: ensure end > start to prevent infinite loop
         let end = if end <= start {
-            (start + 1).min(text.len())
+            find_safe_boundary_forward(text, start.saturating_add(1))
         } else {
             end
         };
+        if end <= start {
+            break;
+        }
 
         let stride_text = text[start..end].to_string();
         let breadcrumb = chunk
@@ -92,7 +95,10 @@ pub fn split_oversized_chunk(chunk: SemanticChunk, max_chars: usize) -> Vec<Sema
 
         // Guard: ensure forward progress to prevent infinite loop
         if start <= prev_start {
-            start = prev_start + 1;
+            start = find_safe_boundary_forward(text, prev_start.saturating_add(1));
+            if start <= prev_start {
+                break;
+            }
         }
 
         stride_idx += 1;
@@ -110,7 +116,7 @@ pub fn split_oversized_chunks(chunks: Vec<SemanticChunk>, max_chars: usize) -> V
 }
 
 /// Find a char boundary at or before index, preferring natural break points
-fn find_safe_boundary(s: &str, index: usize) -> usize {
+fn find_safe_boundary(s: &str, index: usize, min_index: usize) -> usize {
     if index >= s.len() {
         return s.len();
     }
@@ -120,7 +126,12 @@ fn find_safe_boundary(s: &str, index: usize) -> usize {
         i -= 1;
     }
 
-    let search_start = i.saturating_sub(i * BREAK_SEARCH_PERCENT / 100);
+    let min_index = min_index.min(i);
+    let search_window = STRIDE_SIZE * BREAK_SEARCH_PERCENT / 100;
+    let mut search_start = i.saturating_sub(search_window).max(min_index);
+    if search_start < i && !s.is_char_boundary(search_start) {
+        search_start = find_safe_boundary_forward(s, search_start);
+    }
     if search_start >= i {
         return i;
     }
@@ -237,5 +248,47 @@ mod tests {
         let chunk = make_chunk(&"x".repeat(1000));
         let result = split_oversized_chunk(chunk, 1000);
         assert_eq!(result.len(), 1);
+    }
+
+    #[test]
+    fn test_unicode_suffix_boundary_recovery() {
+        // Large ascii prefix (with breaks) + long unicode run (no breaks)
+        // previously could trigger non-char-boundary slicing in stride fallback.
+        let mut text = "line\n".repeat(2500);
+        text.push_str(&"🧪".repeat(5000));
+
+        let chunk = make_chunk(&text);
+        let result = split_oversized_chunk(chunk, 1000);
+
+        assert!(result.len() > 1);
+        assert!(result.iter().all(|c| !c.text.is_empty()));
+    }
+
+    #[test]
+    fn test_find_safe_boundary_adjusts_non_boundary_search_window_start() {
+        // Regression: search window start could land in the middle of a multi-byte
+        // codepoint and panic on s[search_start..i] slicing.
+        let text = "━🧪".repeat(4000);
+        let min_index = 1;
+        let mut hit = None;
+        let window = STRIDE_SIZE * BREAK_SEARCH_PERCENT / 100;
+
+        for index in 1000..text.len() {
+            let mut i = index;
+            while i > 0 && !text.is_char_boundary(i) {
+                i -= 1;
+            }
+            let candidate = i.saturating_sub(window).max(min_index);
+            if candidate < i && !text.is_char_boundary(candidate) {
+                hit = Some((index, i, candidate));
+                break;
+            }
+        }
+
+        let (index, i, _candidate) = hit.expect("test must find a non-boundary window start");
+        let boundary = find_safe_boundary(&text, index, min_index);
+        assert!(text.is_char_boundary(boundary));
+        assert!(boundary <= i);
+        assert!(boundary >= min_index);
     }
 }
